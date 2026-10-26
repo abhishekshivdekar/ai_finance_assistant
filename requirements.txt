@@ -5,6 +5,7 @@ langchain-community
 langchain-google-genai
 langchain-huggingface
 langgraph
+langchain-openai
 
 # RAG
 faiss-cpu

@@ -9,9 +9,9 @@ app:
   log_level: INFO
 
 llm:
-  provider: gemini            # gemini | openai
-  model: gemini-2.0-flash     # if Google has retired this name, pick a current Flash model in AI Studio
-  temperature: 0.2
+  provider: openai            # gemini | openai
+  model: gpt-6-luna    # if Google has retired this name, pick a current Flash model in AI Studio
+  temperature: null
   max_retries: 3
 
 embeddings:
