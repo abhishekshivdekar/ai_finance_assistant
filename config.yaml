@@ -1,0 +1,35 @@
+# Central configuration. Code reads values from here, never hard-codes them.
+
+app:
+  name: "AI Finance Assistant"
+  disclaimer: >
+    This assistant provides financial education only. It is not financial,
+    investment, or tax advice. Consult a licensed professional before
+    making financial decisions.
+  log_level: INFO
+
+llm:
+  provider: gemini            # gemini | openai
+  model: gemini-2.0-flash     # if Google has retired this name, pick a current Flash model in AI Studio
+  temperature: 0.2
+  max_retries: 3
+
+embeddings:
+  provider: huggingface
+  model: sentence-transformers/all-MiniLM-L6-v2
+
+rag:
+  knowledge_base_dir: src/data/knowledge_base
+  vector_store_dir: src/rag/vector_store
+  chunk_size: 800
+  chunk_overlap: 120
+  top_k: 4
+
+market_data:
+  provider: yfinance          # yfinance | alpha_vantage
+  cache_ttl_minutes: 30
+  max_retries: 3
+  backoff_seconds: 2
+
+workflow:
+  max_history_turns: 10

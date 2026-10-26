@@ -1,0 +1,28 @@
+# Core LLM / agent framework
+langchain
+langchain-core
+langchain-community
+langchain-google-genai
+langchain-huggingface
+langgraph
+
+# RAG
+faiss-cpu
+sentence-transformers
+
+# Market data
+yfinance
+requests
+
+# UI and charts
+streamlit
+plotly
+pandas
+
+# Config
+pyyaml
+python-dotenv
+
+# Testing
+pytest
+pytest-cov

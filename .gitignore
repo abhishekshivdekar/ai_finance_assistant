@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+logs/*.log
+src/rag/vector_store/*
+!src/rag/vector_store/.gitkeep
