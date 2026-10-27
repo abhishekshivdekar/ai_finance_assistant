@@ -137,6 +137,7 @@ A distinct agent, not a copy of Finance Q&A.
 ```python
 class AgentResult(TypedDict):
     agent: str
+    turn_id: str                # id of the user turn that produced this result
     status: Literal["ok", "no_answer", "wrong_agent", "error", "needs_input"]
     answer: str                 # plain answer; NO disclaimer (added later, see below)
     sources: list[Source]
@@ -163,6 +164,7 @@ class BaseAgent(ABC):
 Shared behaviour in `run()`:
 - **Logging:** start, end, duration, and errors via `get_logger()`; never `print`.
 - **Disclaimer (not here):** `run()` returns the plain answer. The disclaimer from `get_config()["app"]["disclaimer"]` is appended exactly once, by the final-answer nodes only: `synthesizer`, `safe_response` and `fallback`. Agent outputs are merged before the disclaimer is added, so a two-agent answer never shows it twice.
+- **Output guard:** a rule-based phrase check on the answer before returning (section 3.3).
 - **Error handling:** any exception becomes an `AgentResult` with `status="error"` and a friendly message. It is never re-raised into the graph.
 - **Usage:** token counts are recorded by `UsageTracker` (section 10), not by the agent.
 
@@ -174,6 +176,7 @@ Shared behaviour in `run()`:
 class GraphState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]   # conversation memory
     query: str
+    turn_id: str                  # new for every user turn (set by the facade)
     intent_hint: str | None       # set by Portfolio/Market/Goals tabs
     intents: list[str]            # from router, e.g. ["market", "finance_qa"]
     router_confidence: float
@@ -194,26 +197,49 @@ class GraphState(TypedDict):
 - **Single-writer fields** (e.g. `agents_to_run`, `route_attempts`, `final_answer`) need no reducer: one node sets them, so replacing is the intent.
 - **Token totals are not in state.** They come from `UsageTracker` (section 10).
 
+**Per-turn state hygiene.** The checkpointer persists state per `thread_id`, so without care the previous turn's values carry over into the next turn: the append-reducer keys (`agent_outputs`, `errors`) would keep growing, and the single-writer keys (`intent_hint`, `intents`, `agents_to_run`, `route_attempts`, `final_answer`) would keep their old values. Rules:
+- **`facade.run_query` passes a complete, fresh input on every call:** it resets `intent_hint` (to the tab's hint or `None`), `intents`, `agents_to_run`, `final_answer`, sets `route_attempts = 0`, and sets `turn_id` to a new UUID. Resetting an append-reducer key needs care: `operator.add` cannot clear a list, so the filter below is what protects those keys.
+- **Every `AgentResult` carries the `turn_id`** of the turn that produced it (filled in by `BaseAgent.run()` from state).
+- **Nodes, edges and the synthesizer read only results for the current `turn_id`** through one helper, `current_results(state)`, which returns `[r for r in state["agent_outputs"] if r["turn_id"] == state["turn_id"]]` (the same filter applies to `errors`, stored as `turn_id`-tagged entries). Old results stay in the checkpoint history but are never used.
+- **Example:** in turn 1 the user submits the Market tab (`intent_hint="market"`). In turn 2 they type a Chat question. Turn 2's input sets `intent_hint=None`, so the START edge goes to the router instead of `market`; `route_attempts` starts at 0; and turn 1's market result is ignored because its `turn_id` differs.
+
 **Example node function:**
 
 ```python
 def market_node(state: GraphState) -> dict:
-    result = MarketAgent().run(state)
+    result = MarketAgent().run(state)             # result["turn_id"] == state["turn_id"]
     update = {"agent_outputs": [result]}          # appended by operator.add
     if result["error"]:
         update["errors"] = [result["error"]]
     return update
 ```
 
-**Example: how the synthesizer reads the list:**
+**Synthesizer: handles N results (up to 4 with re-routes) and cannot fail on an empty `ok` list:**
 
 ```python
 def synthesizer_node(state: GraphState) -> dict:
-    ok = [r for r in state["agent_outputs"] if r["status"] == "ok"]
-    answer = ok[0]["answer"] if len(ok) == 1 else merge_with_llm(ok)   # one LLM call only for 2+
-    sources = [s for r in ok for s in r["sources"]]
+    results = current_results(state)                       # this turn only
+    ok = [r for r in results if r["status"] == "ok"]
+    if ok:
+        answer = ok[0]["answer"] if len(ok) == 1 else merge_with_llm(ok)  # LLM only for 2+
+        sources = [s for r in ok for s in r["sources"]]
+    else:
+        no_answer = [r for r in results if r["status"] == "no_answer"]
+        if not no_answer:                                  # defensive; the edge routes to fallback
+            return fallback_node(state)
+        answer = no_answer[-1]["answer"]                   # present the no_answer message
+        sources = []
     return {"final_answer": add_disclaimer(answer), "sources": sources}
 ```
+
+**Result handling rule:** if at least one result is `ok`, merge the `ok` results. If none is `ok` but at least one is `no_answer`, the synthesizer presents the `no_answer` message (for example "the knowledge base has no good match") **with the disclaimer**. `fallback` is used only when every result is `error` or nothing ran.
+
+### 3.3 Output guard
+No agent may give a personalised buy/sell/hold recommendation.
+- **Prompts:** every agent prompt forbids personalised buy/sell/hold advice.
+- **Why a second layer:** tab requests skip the router, so the `specific_advice` guardrail (section 4.3) never sees them. A one-stock portfolio can tempt the commentary to say "you should sell".
+- **Rule-based check:** `BaseAgent.run()` runs a cheap phrase check on the answer before returning it (patterns such as "you should (buy|sell|hold)", "I recommend (buying|selling)", "sell your", "buy more"; list in config). On a match it replaces the answer with a short educational rewording request (one retry) or, if still matching, a safe message, and logs a warning. Because it lives in `run()` (Template Method), every agent gets it for free.
+- **[Later]:** an LLM-based check for subtler phrasing.
 
 ---
 
@@ -254,16 +280,18 @@ router -> (conditional) safe_response if specific_advice/out_of_scope
                         | clarify if confidence is low or intent is clarify
                         | first agent in agents_to_run | fallback
 agent node -> (conditional on AgentResult.status of the latest result):
+      (only results with the current turn_id are considered)
       ok            -> next agent in agents_to_run | synthesizer
-      wrong_agent / no_answer -> re-route (below) | synthesizer if nothing to try
+      wrong_agent / no_answer -> re-route (below) | else next agent | synthesizer
       needs_input   -> clarify
-      error         -> next agent | fallback if every result so far is error/no_answer
+      error         -> next agent | fallback if every result is error, or nothing ran
+at the end of the queue: synthesizer if any result is ok or no_answer, else fallback
 safe_response, synthesizer, fallback, clarify -> END
 ```
 
 **Re-routing example:** `finance_qa` returns `no_answer` for "what is NVDA doing today", but the query contains a ticker, so the conditional edge sends it to `market`. `route_attempts` is incremented on each re-route and **capped at 2 hops**; at the cap the graph goes to `synthesizer` or `fallback`. LangGraph's recursion limit (set in config) is only a backstop.
 
-**All-agents-failed path:** if no agent returned `ok`, the edge goes to `fallback`, not `synthesizer`. `synthesizer` is reached only when at least one result is `ok`.
+**All-agents-failed path:** if every result is `error`, or nothing ran, the edge goes to `fallback`, not `synthesizer`. If no result is `ok` but at least one is `no_answer`, the edge goes to `synthesizer`, which presents the `no_answer` message with the disclaimer (section 3.2). A user who asked something the knowledge base cannot answer gets that honest message, not a generic failure.
 
 **Disclaimer:** added once, by `synthesizer`, `safe_response` and `fallback`. `clarify` asks a question and gives no financial content, so it adds none.
 
@@ -449,7 +477,7 @@ Three layers:
 - Runs are tagged with `thread_id`, agent name and LLM role.
 - **Privacy warning:** traces send prompts and responses to the LangSmith cloud. Keep it off whenever real portfolio data is in use.
 - The sidebar shows a status line: "LangSmith: off" or "LangSmith: on, project X".
-- The three new variables are added (empty) to `.env.example` during the observability build step. `.env` itself is never read or committed.
+- The three variables are **already in place** in `.env.example` (nothing to add in a build step). `.env` itself is never read or committed.
 - **[Later]:** LangSmith datasets for the RAG and router test sets.
 
 ---
@@ -479,8 +507,8 @@ Each step ships with tests and is small enough to review on its own.
 4. **RAG:** write articles, ingest with manifest, retriever, evaluation harness, tune values.
 5. **Agents (build first):** Finance Q&A, Market, Portfolio, Goal Planning.
 6. **Workflow:** state with reducers, router with confidence and guardrail, nodes, graph (START edge, re-routing, clarify), facade.
-7. **Persistence:** SQLite checkpointer, `ProfileRepository`, `.gitignore` for `*.db` (after dependency approval).
-8. **Observability:** LangSmith flag, tags, sidebar status, `.env.example` entries.
+7. **Persistence:** SQLite checkpointer, `ProfileRepository` (after dependency approval; `.gitignore` already covers `*.db`).
+8. **Observability:** LangSmith flag, tags, sidebar status (`.env.example` already has the variables).
 9. **Streamlit UI:** Chat first, then Market, Portfolio, Goals; sidebar.
 10. **Agents (build after):** News Synthesizer, then Tax Education with `tax:` config.
 11. **Polish:** README, docs, coverage gaps, demo script, tax-rate verification.
@@ -498,9 +526,10 @@ Rules: the LLM and network are always mocked. No real API calls in tests. Covera
 | RAG | chunk sizes and overlap, metadata survives to results, threshold gives "no match", manifest mismatch warning, tiny fixture index and a fake embedding |
 | **(a) RAG evaluation harness** | the harness itself: hit-rate@k and MRR computed correctly on a tiny fixture; sweep runs over a parameter grid; off-topic questions score below the threshold on the fixture. Uses the fake embedding, no network |
 | Agents | `BaseAgent` returns a plain answer and converts exceptions to error results; each agent with a fake LLM and stubbed tools; portfolio, goal and tax math as pure unit tests (tax values read from a test config); Tax Education retrieval is filtered to its topic |
-| **(b) Nodes, state and reducers** | each node returns only its own result in a list; **after a two-agent run, both agents' results are present in `agent_outputs`, in order**; `errors` accumulates; single-writer fields are replaced; synthesizer reads the list |
+| **(b) Nodes, state and reducers** | each node returns only its own result in a list; **after a two-agent run, both agents' results are present in `agent_outputs`, in order**; `errors` accumulates; single-writer fields are replaced; synthesizer reads the list and never fails on an empty `ok` list; **per-turn hygiene (same thread, checkpointer on):** a second turn never sees the first turn's results, `intent_hint` from a tab submit does not leak into the next chat message, `route_attempts` resets to 0 each turn, every result carries the current `turn_id`; `no_answer` only gives the synthesizer's no_answer message with the disclaimer, and all-`error` gives `fallback` |
 | **(c) Router and routing** | **golden set of 30 to 40 labelled queries** (fake LLM returning the label under test, plus checks on the parsing, guardrail and `intent_hint` bypass); `specific_advice` always goes only to `safe_response`; re-routing works (`no_answer` with a ticker goes to `market`); **loop guard: never more than 2 hops**; all-failed goes to `fallback`; low confidence and `needs_input` go to `clarify` |
 | **(d) Caching** | TTL expiry, stale fallback after failure, no caching past TTL (including market-dependent LLM answers), `CachedProvider` is transparent (same results and interface as the wrapped provider), exact-match LLM cache key includes role, model and prompt |
+| Output guard (adversarial) | phrase check flags "you should sell", "I recommend buying", etc. and replaces the answer; a one-stock portfolio whose fake-LLM commentary says "you should sell" is caught through the Portfolio tab path (no router); clean educational text passes unchanged |
 | Persistence | `ProfileRepository` round trip on a temp SQLite file; checkpointer keeps a thread across a new graph instance |
 | Observability | LangSmith stays disabled by default; status line text; tags include thread id, agent and role (no network) |
 | Web app | pure helpers (formatting, currency labels, validation, badge selection); one thin Streamlit smoke test using `streamlit.testing` |
@@ -528,7 +557,7 @@ Three stores, each with one job:
 
 ### 12.3 Identification and privacy
 - A simple **profile name** entered in the sidebar. No authentication, so it is not suitable for sensitive data and the UI says so.
-- Database path comes from config (`persistence.sqlite_path`). **`*.db` files must be in `.gitignore`** so user data is never committed.
+- Database path comes from config (`persistence.sqlite_path`). **`*.db` files are already in `.gitignore`** (nothing to add in a build step), so user data is never committed.
 
 ---
 

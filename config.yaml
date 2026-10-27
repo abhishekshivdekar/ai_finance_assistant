@@ -13,6 +13,19 @@ llm:
   model: gpt-6-luna    # if Google has retired this name, pick a current Flash model in AI Studio
   temperature: null
   max_retries: 3
+  roles:                      # per-role overrides merged over llm.*
+    router:
+      model: gpt-6-luna
+    synthesizer:
+      model: gpt-6-luna
+
+pricing:                      # USD per 1M tokens, keyed by model ID
+  gpt-6-luna:
+    input: 0.10
+    output: 0.50
+  gpt-5.4-mini:
+    input: 0.75
+    output: 4.50
 
 embeddings:
   provider: huggingface
@@ -33,3 +46,21 @@ market_data:
 
 workflow:
   max_history_turns: 10
+
+output_guard:
+  patterns:                   # case-insensitive regexes, see architecture section 3.3
+    - "you should (buy|sell|hold)"
+    - "I recommend (buying|selling)"
+    - "sell your"
+    - "buy more"
+  rewrite_prompt: |
+    Rewrite the text below as neutral financial education. Do not tell the reader
+    to buy, sell or hold anything. Keep the facts.
+
+    {answer}
+  safe_message: >
+    I can explain how this works in general terms, but I can't give personal
+    buy, sell or hold recommendations.
+
+agents:
+  error_message: "Sorry, something went wrong while preparing this answer. Please try again."
