@@ -93,7 +93,15 @@ All agents extend `BaseAgent` (section 3). Every agent provides information and 
 - **Purpose:** answer general finance-education questions with cited sources.
 - **Inputs:** user query, recent `messages`.
 - **Outputs:** answer text, list of `Source(title, url, chunk_id, score)`.
-- **Uses:** RAG retriever (section 5), LLM role `default`. Retrieval covers all topics.
+- **Uses:** RAG retriever (section 5), two LLM calls per question. Retrieval covers all topics unless the Chat tab's `topic_filter` is set.
+- **Pipeline (`src/agents/finance_qa.py`, prompts and messages in `config.yaml` under `finance_qa:`):**
+  1. **Rewrite:** one cheap call turns a colloquial question into a short finance-term query. On any failure, an empty reply or a malformed one (no letters, far over `rewrite_max_chars`), the original question is used; rewriting never fails the request.
+  2. **Retrieve** with the original and the rewritten query (`retrieve()`), merge by chunk keeping the best score, then re-apply the shared `select_chunks()` rules and `rag.top_k` to the merged list.
+  3. **Nothing retrieved:** `status="no_answer"` with a fixed message, and the answer LLM is not called.
+  4. **Grounded answer:** one call whose system prompt says to answer only from the numbered context, cite `[1]`, `[2]`, reply exactly `NO_ANSWER` when the context does not actually answer (even for finance topics the knowledge base lacks, such as loans or crypto), stay educational, give no tax figures from memory, and use short beginner language.
+  5. **Parse:** `NO_ANSWER` gives `no_answer` with the same fixed message. Otherwise `status="ok"`; citations that do not exist are removed, the rest are renumbered `1..m`, and `sources` holds only the chunks actually cited, in that order.
+- **LLM roles:** `finance_qa_rewrite` and `finance_qa` (both merged over `llm.*`), so usage is recorded per agent and per call type.
+- **Payload:** `QAPayload` with `rewritten_query` and `retrieved` (count). An empty query returns `needs_input`.
 
 ### 2.2 Portfolio Analysis
 - **Purpose:** explain a user's holdings: allocation, concentration, diversification, simple risk indicators.

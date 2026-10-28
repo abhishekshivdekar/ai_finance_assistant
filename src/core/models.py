@@ -54,6 +54,13 @@ class TaxPayload(TypedDict, total=False):
     steps: list[str]
 
 
+class QAPayload(TypedDict, total=False):
+    """Finance Q&A data: the search query actually used and how many chunks were retrieved."""
+
+    rewritten_query: str
+    retrieved: int
+
+
 class AgentResult(TypedDict):
     """Common envelope every agent returns.
 
@@ -66,7 +73,7 @@ class AgentResult(TypedDict):
     answer: str
     sources: list[Source]
     error: str | None
-    data: MarketPayload | PortfolioPayload | GoalPayload | TaxPayload | None
+    data: MarketPayload | PortfolioPayload | GoalPayload | TaxPayload | QAPayload | None
 
 
 @dataclass

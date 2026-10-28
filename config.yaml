@@ -18,6 +18,10 @@ llm:
       model: gpt-6-luna
     synthesizer:
       model: gpt-6-luna
+    finance_qa_rewrite:         # Finance Q&A query rewriting (own role so its usage is counted by agent)
+      model: gpt-6-luna
+    finance_qa:                 # Finance Q&A grounded answer
+      model: gpt-6-luna
 
 pricing:                      # USD per 1M tokens, keyed by model ID
   gpt-6-luna:
@@ -81,6 +85,35 @@ output_guard:
   safe_message: >
     I can explain how this works in general terms, but I can't give personal
     buy, sell or hold recommendations.
+
+finance_qa:                   # Finance Q&A agent prompts and messages (architecture section 2.1)
+  rewrite_max_chars: 120      # longer rewrites are cut at a word boundary (much longer = malformed, original is used)
+  no_answer_sentinel: NO_ANSWER
+  no_answer_message: >
+    I couldn't find this in my knowledge base. I can explain topics such as
+    stocks, bonds, ETFs and mutual funds, risk and diversification, saving and
+    retirement goals, how markets work, and basic Indian savings and tax
+    accounts. Try asking about one of these.
+  rewrite_prompt: |
+    Turn the question below into a short search query made of plain finance
+    terms, as they would appear in a finance textbook. Reply with the query
+    only: no quotes, no explanation, at most twelve words.
+
+    Example: "will my pile last after my salary stops" -> retirement corpus withdrawal how long savings last
+
+    Question: {question}
+  system_prompt: |
+    You are a finance education assistant for beginners, with India-first examples.
+    Answer ONLY from the numbered context below. Do not use outside knowledge.
+    - Cite the context you used as [1], [2] right after the claim it supports.
+    - If the context does not actually answer the question, even when the question
+      is about finance (for example loans, crypto, insurance, credit scores or GST),
+      reply with exactly NO_ANSWER and nothing else.
+    - Educational only: explain how things work. Never tell the reader what to buy,
+      sell or hold, and never give personal advice.
+    - Do not state tax rates, limits or deadlines from memory; use only what the
+      context says and point to the official source for current figures.
+    - Use short, plain language that a beginner can follow.
 
 agents:
   error_message: "Sorry, something went wrong while preparing this answer. Please try again."
