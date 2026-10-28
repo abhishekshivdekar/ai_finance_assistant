@@ -1,0 +1,41 @@
+# Labelled questions for the RAG evaluation harness (architecture section 5.3).
+# expected: article ids as "<topic>/<slug>" (the chunk_id part before "#").
+# off_topic: must match nothing above rag.score_threshold.
+# grid: values swept by rag_eval.py (these are eval settings, not app config).
+
+questions:
+  - question: "What is a stock and what does owning a share mean?"
+    expected: ["stocks/what-is-a-stock"]
+  - question: "How do dividends work for shareholders?"
+    expected: ["stocks/what-is-a-stock"]
+  - question: "What happens to bond prices when interest rates rise?"
+    expected: ["bonds/how-bonds-work"]
+  - question: "What are the coupon and the maturity date of a bond?"
+    expected: ["bonds/how-bonds-work"]
+  - question: "What is the difference between an ETF and a mutual fund?"
+    expected: ["etfs_and_funds/etfs-and-mutual-funds-basics"]
+  - question: "What does the expense ratio of a fund mean?"
+    expected: ["etfs_and_funds/etfs-and-mutual-funds-basics"]
+  - question: "What is diversification and why do investors spread their money?"
+    expected: ["risk_and_diversification/risk-and-diversification-basics"]
+  - question: "What kinds of investment risk are there?"
+    expected: ["risk_and_diversification/risk-and-diversification-basics"]
+  - question: "How does compounding help with long term financial goals?"
+    expected: ["goals_and_retirement/setting-financial-goals"]
+  - question: "What are EPF, PPF and NPS in India?"
+    expected: ["accounts_and_taxes_india/indian-savings-and-tax-accounts-overview"]
+  - question: "How is a share price set by bids and asks on an exchange?"
+    expected: ["market_basics/how-stock-markets-work"]
+  - question: "What do NAV and CAGR stand for?"
+    expected: ["glossary/finance-glossary-essentials"]
+
+off_topic:
+  - "What is the best recipe for a chocolate cake?"
+  - "Who won the football world cup in 2018?"
+  - "How do I fix a flat bicycle tyre?"
+
+grid:
+  chunk_size: [400, 600, 800]
+  chunk_overlap: [60, 120]
+  top_k: [1, 3, 4]
+  threshold: [0.25, 0.35, 0.45]

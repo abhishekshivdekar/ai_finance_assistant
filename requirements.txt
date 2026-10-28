@@ -10,6 +10,8 @@ langchain-openai
 # RAG
 faiss-cpu
 sentence-transformers
+langchain-text-splitters
+numpy
 
 # Market data
 yfinance

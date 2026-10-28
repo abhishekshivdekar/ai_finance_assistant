@@ -34,15 +34,31 @@ embeddings:
 rag:
   knowledge_base_dir: src/data/knowledge_base
   vector_store_dir: src/rag/vector_store
+  vector_store: faiss         # faiss | chroma | pinecone (only faiss is built)
+  # STARTING VALUES, tuned by tests/rag_eval (architecture section 5.3)
   chunk_size: 800
   chunk_overlap: 120
   top_k: 4
+  score_threshold: 0.35
+  candidate_multiplier: 5     # over-fetch factor when a topic filter is set
+  topics:
+    - stocks
+    - bonds
+    - etfs_and_funds
+    - risk_and_diversification
+    - goals_and_retirement
+    - accounts_and_taxes_india
+    - market_basics
+    - glossary
 
 market_data:
   provider: yfinance          # yfinance | alpha_vantage
   cache_ttl_minutes: 30
   max_retries: 3
   backoff_seconds: 2
+  history_ttl_minutes: 240    # longer than cache_ttl_minutes: history changes slowly
+  history_periods: [1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max]
+  snapshot_path: src/data/market_snapshot.json
 
 workflow:
   max_history_turns: 10

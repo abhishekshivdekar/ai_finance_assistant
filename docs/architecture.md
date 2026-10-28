@@ -97,15 +97,21 @@ All agents extend `BaseAgent` (section 3). Every agent provides information and 
 
 ### 2.2 Portfolio Analysis
 - **Purpose:** explain a user's holdings: allocation, concentration, diversification, simple risk indicators.
-- **Inputs:** portfolio table (`ticker, shares, cost_basis`) from the Portfolio tab, or the saved portfolio from the profile store.
-- **Outputs:** `PortfolioPayload` (weights, total value per currency, top-holding share, sector split) plus plain-language commentary.
+- **Inputs:** portfolio table (`ticker, shares, cost_basis`, plus optional `expense_ratio` and `asset_class`) from the Portfolio tab, or the saved portfolio from the profile store. `expense_ratio` is the annual fund cost in percent (e.g. `0.20`); when missing it is shown as "not provided", never guessed. `asset_class` is one of `equity`, `bond`, `gold`, `cash`, `other`; a holding without one counts as `unclassified`.
+- **Outputs:** `PortfolioPayload` (weights, total value per currency, top-holding share, sector split, asset-class split, weighted-average expense ratio and its coverage, diversification score with its breakdown, risk label) plus plain-language commentary.
+- **Metrics (all computed in code; the thresholds and weights below are starting values in `config.yaml` under `portfolio:`, labelled "illustrative"):**
+  - **Weighted-average expense ratio** = sum of (weight x `expense_ratio`) over the holdings that provide one, with weights re-normalised to those holdings. `expense_ratio_coverage` is the share of portfolio value that provided one. If no holding provides it, the result is "not provided".
+  - **Diversification score (0 to 100)** = `round(100 x (0.4 x count_score + 0.4 x concentration_score + 0.2 x spread_score))`, where `count_score = min(N, 15) / 15` (N = number of holdings), `concentration_score = 1 - top_holding_share`, and `spread_score = min(k, 4) / 4` (k = number of asset classes with at least 5% of portfolio value). The three sub-scores are returned in `diversification_breakdown`. Example: 5 equally weighted equity holdings give count 0.33, concentration 0.80, spread 0.25, so the score is 50. It is an educational indicator, not a rating.
+  - **Risk label (`low` / `moderate` / `high`)** from the asset-class mix: let `growth_share` be the portfolio share in `equity`, `other` and `unclassified`; below 30% is `low`, 30% to 70% is `moderate`, above 70% is `high`. Example: 80% equity and 20% bonds gives `high`. It describes the mix only and is not a personal risk assessment.
+  - Per the market scope rule, weights and these metrics are computed within each currency; a mixed USD/INR portfolio gets one labelled set per currency, not a blended number.
 - **Uses:** market data layer for current prices, pure-Python metric functions, LLM `default` for explanation only (numbers are computed in code, not by the LLM).
 
 ### 2.3 Market Analysis
 - **Purpose:** explain current price, trend, and basic stats for a ticker or index.
 - **Inputs:** ticker(s) extracted by the router or Market tab.
-- **Outputs:** `MarketPayload` (quote table with currency, price history, freshness `as_of`, `source`, `is_stale`), commentary.
-- **Uses:** market data layer (yfinance), LLM `default`.
+- **Outputs:** `MarketPayload` (quote table with currency, price history, trend analysis, freshness `as_of`, `source`, `is_stale`), commentary.
+- **Trend analysis (computed in code, never by the LLM):** 1-month and 6-month percent change, and the position within the 52-week range, from `get_history`. `change_pct = (latest close - close at start of period) / close at start of period x 100`. `range_position_pct = (price - 52-week low) / (52-week high - 52-week low) x 100`, where 0 means at the low and 100 at the high. They are returned as `trend` in `MarketPayload` (`change_1m_pct`, `change_6m_pct`, `range_52w_position_pct`, `low_52w`, `high_52w`). A value is `None` ("not available") when the history is too short, and the figures carry the same freshness and currency labels as the quote. The LLM only explains these numbers in plain language.
+- **Uses:** market data layer (yfinance), LLM `default` for explanation only.
 
 ### 2.4 Goal Planning
 - **Purpose:** risk-aware projections toward a goal (retirement, house, etc.).
@@ -188,6 +194,7 @@ class GraphState(TypedDict):
     market_freshness: dict | None
     portfolio: list[dict] | None  # from Portfolio tab / profile store
     goal_params: dict | None      # from Goals tab
+    topic_filter: str | None      # set by the Chat tab dropdown; the facade passes it to the retriever
     final_answer: str
 ```
 
@@ -210,7 +217,7 @@ def market_node(state: GraphState) -> dict:
     result = MarketAgent().run(state)             # result["turn_id"] == state["turn_id"]
     update = {"agent_outputs": [result]}          # appended by operator.add
     if result["error"]:
-        update["errors"] = [result["error"]]
+        update["errors"] = [{"turn_id": result["turn_id"], "message": result["error"]}]
     return update
 ```
 
@@ -335,6 +342,8 @@ Example: "What is Apple trading at, and what is a P/E ratio?" gives intents `["m
 4. Build the prompt: use only the provided context, cite `[1]..[n]`.
 5. Answer with citations.
 
+**Topic filter in the Chat tab:** the Chat tab offers an optional topic filter dropdown (default "All topics"). The selected topic is passed to the retriever as the `topic` metadata filter from step 2. Tax Education always uses its own locked `accounts_and_taxes_india` filter, whatever the dropdown says.
+
 **Source attribution:** each chunk carries `{title, topic, references, chunk_id, score}`, returned in `AgentResult.sources`; the UI shows a "Sources" expander under each answer.
 **No relevant source:** if no chunk passes the threshold, the agent returns `status="no_answer"` saying the knowledge base has no good match instead of guessing. This status also feeds re-routing (section 4.4).
 
@@ -439,11 +448,21 @@ llm:
   model: <default-model-id>        # default role
   temperature: 0.2                 # null if the model only supports its default
   max_retries: 3
+  max_requests_per_minute: null    # null = no limit
   roles:
     router:
       model: <default-model-id>     # same as default for now; a cheaper ID can be swapped in later
     synthesizer:                    # optional; falls back to default
       model: <default-model-id>
+
+portfolio:                          # starting values, labelled "illustrative"
+  diversification_weights:          # sub-score weights, sum to 1
+    count: 0.4
+    concentration: 0.4
+    spread: 0.2
+  risk_thresholds:                  # growth_share in percent
+    low_below: 30
+    high_above: 70
 ```
 
 - `get_llm(role="default")` reads `llm.roles.<role>` and merges over `llm.*`; unknown or missing role falls back to the default.
@@ -451,6 +470,7 @@ llm:
 - **Router:** same model as default for now (decision), with structured output. It is skipped for tab submissions that carry an `intent_hint`. A cheaper model or the hybrid router (section 4.3) is the cost lever later.
 - **Agents and synthesizer:** default model, since answer quality matters here.
 - The existing `get_llm(temperature=None)` signature stays compatible: `role` is a new optional parameter.
+- **Rate limiting.** A per-minute request limit is read from config (`llm.max_requests_per_minute`) and enforced in `get_llm`'s call path, so no agent can bypass it. It works alongside `max_retries`: the limiter keeps the app under the provider's limit in the first place, and retries handle failures that still happen. When the limit is reached, a call waits for a free slot instead of failing. If the key is missing or null, no limit is applied.
 - **[Later]:** per-role provider.
 
 ---

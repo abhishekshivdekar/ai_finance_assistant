@@ -1,0 +1,72 @@
+{
+  "_meta": {
+    "label": "SAMPLE DATA",
+    "as_of": "2026-10-27T00:00:00+00:00",
+    "note": "SAMPLE DATA for offline fallback. All values are illustrative, not real quotes."
+  },
+  "tickers": {
+    "RELIANCE.NS": {
+      "name": "Reliance Industries (sample)", "currency": "INR",
+      "price": 2900.0, "previous_close": 2880.0,
+      "history": [
+        {"date": "2026-10-21", "close": 2850.0}, {"date": "2026-10-22", "close": 2862.0},
+        {"date": "2026-10-23", "close": 2871.0}, {"date": "2026-10-24", "close": 2880.0},
+        {"date": "2026-10-27", "close": 2900.0}
+      ]
+    },
+    "TCS.NS": {
+      "name": "Tata Consultancy Services (sample)", "currency": "INR",
+      "price": 3900.0, "previous_close": 3925.0,
+      "history": [
+        {"date": "2026-10-21", "close": 3950.0}, {"date": "2026-10-22", "close": 3940.0},
+        {"date": "2026-10-23", "close": 3932.0}, {"date": "2026-10-24", "close": 3925.0},
+        {"date": "2026-10-27", "close": 3900.0}
+      ]
+    },
+    "INFY.NS": {
+      "name": "Infosys (sample)", "currency": "INR",
+      "price": 1500.0, "previous_close": 1490.0,
+      "history": [
+        {"date": "2026-10-21", "close": 1470.0}, {"date": "2026-10-22", "close": 1478.0},
+        {"date": "2026-10-23", "close": 1485.0}, {"date": "2026-10-24", "close": 1490.0},
+        {"date": "2026-10-27", "close": 1500.0}
+      ]
+    },
+    "HDFCBANK.NS": {
+      "name": "HDFC Bank (sample)", "currency": "INR",
+      "price": 1700.0, "previous_close": 1695.0,
+      "history": [
+        {"date": "2026-10-21", "close": 1680.0}, {"date": "2026-10-22", "close": 1685.0},
+        {"date": "2026-10-23", "close": 1690.0}, {"date": "2026-10-24", "close": 1695.0},
+        {"date": "2026-10-27", "close": 1700.0}
+      ]
+    },
+    "^NSEI": {
+      "name": "NIFTY 50 (sample)", "currency": "INR",
+      "price": 24500.0, "previous_close": 24450.0,
+      "history": [
+        {"date": "2026-10-21", "close": 24300.0}, {"date": "2026-10-22", "close": 24350.0},
+        {"date": "2026-10-23", "close": 24400.0}, {"date": "2026-10-24", "close": 24450.0},
+        {"date": "2026-10-27", "close": 24500.0}
+      ]
+    },
+    "AAPL": {
+      "name": "Apple (sample)", "currency": "USD",
+      "price": 230.0, "previous_close": 228.0,
+      "history": [
+        {"date": "2026-10-21", "close": 225.0}, {"date": "2026-10-22", "close": 226.0},
+        {"date": "2026-10-23", "close": 227.0}, {"date": "2026-10-24", "close": 228.0},
+        {"date": "2026-10-27", "close": 230.0}
+      ]
+    },
+    "MSFT": {
+      "name": "Microsoft (sample)", "currency": "USD",
+      "price": 420.0, "previous_close": 418.0,
+      "history": [
+        {"date": "2026-10-21", "close": 412.0}, {"date": "2026-10-22", "close": 414.0},
+        {"date": "2026-10-23", "close": 416.0}, {"date": "2026-10-24", "close": 418.0},
+        {"date": "2026-10-27", "close": 420.0}
+      ]
+    }
+  }
+}
