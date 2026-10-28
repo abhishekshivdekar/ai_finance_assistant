@@ -11,12 +11,17 @@ answerable and off-topic score distributions (architecture section 5.3).
 
 Three sets are scored separately: "development" (questions), "held-out"
 (independent questions; skipped until labelled) and the off-topic set made of
-off_topic plus near_miss. The extra columns held_out_hit_rate, held_out_mrr and
-near_miss_false appear only once at least one held-out item is labelled.
+off_topic plus near_miss. near_miss_false is always shown; held_out_hit_rate
+and held_out_mrr appear only once at least one held-out item is labelled.
+
+After the table, a diagnostics report for the configuration currently in
+config.yaml lists the development misses and the score gap between answerable
+and off-topic/near-miss questions (see `diagnostics`).
 """
 from __future__ import annotations
 
 from itertools import product
+from statistics import median
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +29,7 @@ import yaml
 
 from src.rag.embeddings import get_embedder
 from src.rag.ingest import Article, build_store, load_articles
+from src.utils.config import get_config
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -157,15 +163,15 @@ def sweep(
 
 
 BASE_COLUMNS = ["chunk_size", "chunk_overlap", "top_k", "threshold",
-                "hit_rate", "mrr", "off_topic_false"]
-HELD_OUT_COLUMNS = ["held_out_hit_rate", "held_out_mrr", "near_miss_false"]
+                "hit_rate", "mrr", "off_topic_false", "near_miss_false"]
+HELD_OUT_COLUMNS = ["held_out_hit_rate", "held_out_mrr"]
 
 
 def format_table(rows: list[dict[str, Any]], show_held_out: bool = False) -> str:
     """Render the sweep rows as a fixed-width text table.
 
-    The held-out and near_miss columns are appended only when show_held_out is
-    True (that is, when at least one held-out item is labelled).
+    The held-out columns are appended only when show_held_out is True (that is,
+    when at least one held-out item is labelled); near_miss_false is always shown.
     """
     columns = BASE_COLUMNS + (HELD_OUT_COLUMNS if show_held_out else [])
     width = max(len(c) for c in columns)
@@ -179,18 +185,109 @@ def format_table(rows: list[dict[str, Any]], show_held_out: bool = False) -> str
     return "\n".join(lines)
 
 
+def best_by_article(hits: list[tuple[dict[str, Any], float]]) -> dict[str, float]:
+    """Best chunk score per article id, in order of first appearance."""
+    best: dict[str, float] = {}
+    for rec, score in hits:
+        art = article_id(rec["chunk_id"])
+        best[art] = max(score, best.get(art, score))
+    return best
+
+
+def _fmt_scores(scores: list[tuple[str, float]]) -> str:
+    return ", ".join(f"{art} ({score:.3f})" for art, score in scores)
+
+
+def diagnostics(
+    data: dict[str, Any],
+    articles: list[Article],
+    embedder: Any,
+    chunk_size: int,
+    chunk_overlap: int,
+    top_k: int,
+    threshold: float,
+) -> str:
+    """Report for ONE configuration: development misses and the score gap.
+
+    (a) Each development question whose expected article is not returned, with
+    the top 3 articles actually returned (best chunk score each). (b) The lowest
+    and median best-chunk score of the expected article over answerable
+    questions, against the highest best-chunk score of any off_topic or
+    near_miss question, and whether the highest of those is below the lowest
+    answerable score (a threshold between them separates the two sets).
+    """
+    store = build_store(articles, embedder, chunk_size, chunk_overlap)
+    every_chunk = len(store)
+
+    def search(question: str) -> list[tuple[dict[str, Any], float]]:
+        return store.search(embedder.embed_query(question), every_chunk)
+
+    lines = [
+        f"Diagnostics for config.yaml: chunk_size={chunk_size}, "
+        f"chunk_overlap={chunk_overlap}, top_k={top_k}, score_threshold={threshold}",
+        "",
+    ]
+    questions = data["questions"]
+    answerable: list[float] = []
+    misses: list[str] = []
+    for q in questions:
+        hits = search(q["question"])
+        returned = rank_from_hits(hits, top_k, threshold)
+        best = best_by_article(hits)
+        answerable.append(max((best.get(art, 0.0) for art in q["expected"]), default=0.0))
+        if rank_of_first_hit(returned, q["expected"]) is None:
+            kept = best_by_article([(r, s) for r, s in hits if s >= threshold][:top_k])
+            shown = _fmt_scores(list(kept.items())[:3]) or "nothing above threshold"
+            misses.append(
+                f"  Q: {q['question']}\n"
+                f"     expected: {', '.join(q['expected'])}\n"
+                f"     returned: {shown}"
+            )
+    lines.append(f"a) Development misses: {len(misses)} of {len(questions)}")
+    lines.extend(misses or ["  none"])
+
+    lines += ["", "b) Score gap (best chunk score per question)"]
+    if answerable:
+        lowest = min(answerable)
+        lines.append(
+            f"  answerable (expected article): lowest {lowest:.3f}, "
+            f"median {median(answerable):.3f}"
+        )
+    unanswerable: list[float] = []
+    for label, items in (("off_topic", data["off_topic"]), ("near_miss", data.get("near_miss") or [])):
+        scores = [max((s for _, s in search(item)), default=0.0) for item in items]
+        unanswerable += scores
+        if scores:
+            lines.append(f"  {label}: highest {max(scores):.3f}")
+    if answerable and unanswerable:
+        top_off = max(unanswerable)
+        verdict = "BELOW" if top_off < lowest else "NOT below"
+        lines.append(
+            f"  The highest off-topic/near-miss score ({top_off:.3f}) is {verdict} "
+            f"the lowest answerable score ({lowest:.3f})."
+        )
+    return "\n".join(lines)
+
+
 def main() -> None:
-    """Run the sweep with the real embedder and print the set summary and table."""
+    """Run the sweep with the real embedder; print the summary, table and diagnostics."""
     data = load_questions()
     articles = load_articles()
+    embedder = get_embedder()
     held_out = data.get("held_out") or []
     rows = sweep(
-        data["grid"], articles, get_embedder(), data["questions"], data["off_topic"],
+        data["grid"], articles, embedder, data["questions"], data["off_topic"],
         held_out, data.get("near_miss") or [],
     )
     print("\n".join(summarize_sets(data)))
     print()
     print(format_table(rows, show_held_out=bool(split_held_out(held_out)[0])))
+    cfg = get_config()["rag"]
+    print()
+    print(diagnostics(
+        data, articles, embedder, cfg["chunk_size"], cfg["chunk_overlap"],
+        cfg["top_k"], cfg["score_threshold"],
+    ))
 
 
 if __name__ == "__main__":

@@ -116,7 +116,8 @@ def test_main_prints_table_with_fake_embedder(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "hit_rate" in out and len(out.splitlines()) > 5
     assert "held-out: 0 of 10 labelled yet" in out
-    assert "held_out_hit_rate" not in out and "near_miss_false" not in out
+    assert "held_out_hit_rate" not in out and "near_miss_false" in out
+    assert "Diagnostics for config.yaml: chunk_size=800, chunk_overlap=120, top_k=4" in out
 
 
 HELD_OUT = [
@@ -178,8 +179,9 @@ def test_format_table_shows_held_out_columns_only_when_asked():
     rows = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, OFF_TOPIC, HELD_OUT, NEAR_MISS)
     plain = format_table(rows).splitlines()
     full = format_table(rows, show_held_out=True).splitlines()
-    assert "near_miss_false" not in plain[0] and "held_out_mrr" not in plain[0]
-    for name in ("held_out_hit_rate", "held_out_mrr", "near_miss_false"):
+    assert "held_out_hit_rate" not in plain[0] and "held_out_mrr" not in plain[0]
+    assert "near_miss_false" in plain[0] and "near_miss_false" in full[0]   # always shown
+    for name in ("held_out_hit_rate", "held_out_mrr"):
         assert name in full[0]
     assert len({len(line) for line in full}) == 1   # fixed width
 
@@ -193,3 +195,50 @@ def test_main_shows_extra_columns_when_a_held_out_item_is_labelled(monkeypatch, 
     out = capsys.readouterr().out
     assert "held-out: 1 of 10 labelled yet" in out
     assert "held_out_hit_rate" in out and "near_miss_false" in out
+
+
+DIAG_CFG = dict(chunk_size=200, chunk_overlap=20, top_k=1, threshold=0.3)
+
+
+def _diag(questions, off_topic=OFF_TOPIC, near_miss=("chocolate cake recipe",), **cfg):
+    data = {"questions": questions, "off_topic": off_topic, "near_miss": list(near_miss)}
+    return rag_eval.diagnostics(data, _toy_articles(), FakeEmbedder(), **{**DIAG_CFG, **cfg})
+
+
+def test_best_by_article_keeps_highest_chunk_score():
+    hits = [({"chunk_id": "t/a#0"}, 0.4), ({"chunk_id": "t/a#1"}, 0.7), ({"chunk_id": "t/b#0"}, 0.5)]
+    assert rag_eval.best_by_article(hits) == {"t/a": 0.7, "t/b": 0.5}
+
+
+def test_diagnostics_lists_each_miss_with_expected_and_returned():
+    report = _diag(QUESTIONS)   # the third question carries a deliberately wrong label
+    assert "chunk_size=200, chunk_overlap=20, top_k=1, score_threshold=0.3" in report
+    assert "a) Development misses: 1 of 3" in report
+    assert report.count("  Q: ") == 1
+    assert "expected: stocks/shares" in report
+    assert "returned: bonds/bonds (" in report   # what was actually returned, with a score
+
+
+def test_diagnostics_miss_with_nothing_above_threshold():
+    report = _diag(QUESTIONS[:1], threshold=0.99)
+    assert "a) Development misses: 1 of 1" in report
+    assert "returned: nothing above threshold" in report
+
+
+def test_diagnostics_reports_score_gap_and_says_below():
+    report = _diag(QUESTIONS[:2])   # both correctly labelled
+    assert "a) Development misses: 0 of 2\n  none" in report
+    assert "answerable (expected article): lowest 0.775, median 0.820" in report
+    assert "off_topic: highest" in report and "near_miss: highest" in report
+    assert "is BELOW the lowest answerable score" in report
+
+
+def test_diagnostics_says_not_below_when_off_topic_scores_as_high():
+    report = _diag(QUESTIONS[:1], off_topic=["shares company ownership"])   # off-topic = a real match
+    assert "is NOT below the lowest answerable score" in report
+
+
+def test_diagnostics_handles_empty_sets():
+    report = _diag([], off_topic=[], near_miss=())
+    assert "Development misses: 0 of 0" in report
+    assert "lowest" not in report and "highest" not in report
