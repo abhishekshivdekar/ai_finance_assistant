@@ -134,7 +134,7 @@ def test_main_prints_table_with_fake_embedder(capsys):
     assert "hit_rate" in out and len(out.splitlines()) > 5
     assert "held-out: 10 of 10 labelled yet" in out
     assert "held_out_hit_rate" in out and "near_miss_false" in out
-    assert "Diagnostics for config.yaml: chunk_size=800, chunk_overlap=120, top_k=4" in out
+    assert "Diagnostics for config.yaml: chunk_size=300, chunk_overlap=120, top_k=6" in out
 
 
 HELD_OUT = [

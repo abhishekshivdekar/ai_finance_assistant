@@ -53,7 +53,7 @@ def test_results_carry_metadata(store):
     top = chunks[0]
     assert isinstance(top, RetrievedChunk)
     assert (top.title, top.topic, top.chunk_id) == ("Bonds", "bonds", "bonds/bonds#0")
-    assert top.references == REFS and "coupon" in top.text and top.score > 0.35
+    assert top.references == REFS and "coupon" in top.text and top.score > 0.30
 
 
 def test_scores_are_sorted_best_first(store):
@@ -62,7 +62,7 @@ def test_scores_are_sorted_best_first(store):
     assert chunks[0].score >= chunks[1].score
 
 
-QUERY = "investors market price shares company ownership"  # closest to stocks, still above 0.35 for bonds
+QUERY = "investors market price shares company ownership"  # closest to stocks, still above 0.30 for bonds
 
 
 def test_topic_filter_keeps_only_that_topic(store):

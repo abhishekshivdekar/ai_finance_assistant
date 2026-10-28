@@ -35,13 +35,13 @@ rag:
   knowledge_base_dir: src/data/knowledge_base
   vector_store_dir: src/rag/vector_store
   vector_store: faiss         # faiss | chroma | pinecone (only faiss is built)
-  # STARTING VALUES, tuned by tests/rag_eval (architecture section 5.3)
-  chunk_size: 800
+  # TUNED by tests/rag_eval (architecture section 5.3, README "RAG tuning results")
+  chunk_size: 300
   chunk_overlap: 120
   topic_chunking:             # per-topic overrides of chunk_size/chunk_overlap (starting values, tunable)
     glossary: {chunk_size: 250, chunk_overlap: 0}
-  top_k: 4
-  score_threshold: 0.35
+  top_k: 6
+  score_threshold: 0.30
   max_chunks_per_article: 2   # diversity cap: at most this many chunks from one article (0/null = off)
   max_chunks_per_topic:       # per-topic caps (empty = off); glossary entries are tiny and many match at once
     glossary: 1

@@ -329,7 +329,7 @@ Example: "What is Apple trading at, and what is a P/E ratio?" gives intents `["m
 | Step | Decision | Why |
 |---|---|---|
 | Load | Markdown loader reads front matter into metadata | Keeps citation data with the text |
-| Chunk | `RecursiveCharacterTextSplitter`, `rag.chunk_size`, `rag.chunk_overlap` (starting values 800 and 120) | Paragraph-sized chunks; overlap keeps context across boundaries |
+| Chunk | `RecursiveCharacterTextSplitter`, `rag.chunk_size`, `rag.chunk_overlap` (tuned values 300 and 120, section 5.3) | Paragraph-sized chunks; overlap keeps context across boundaries |
 | Embed | Local `sentence-transformers/all-MiniLM-L6-v2` (`embeddings.*`) | Free, no API budget, runs offline |
 | Build and save | FAISS index in `rag.vector_store_dir` plus an **index manifest** | Fast, simple, no server |
 
@@ -340,7 +340,7 @@ Example: "What is Apple trading at, and what is a P/E ratio?" gives intents `["m
 ### 5.2 Online: `rag/retriever.py`
 1. Embed the query with the same model as ingest.
 2. Search **all** chunks (an exact flat index, cheap at this size; revisit with over-fetching, i.e. asking for more than `top_k` and trimming, if the knowledge base grows to tens of thousands of chunks). The optional `topic` filter (used by Tax Education) is applied to these hits **before** selection.
-3. Pass the hits to the shared pure function `select_chunks()`, which applies the score threshold, sorts best first, enforces the diversity rules and returns at most `rag.top_k` chunks. The rules are `rag.max_chunks_per_article` (default 2) and `rag.max_chunks_per_topic` (per-topic caps; `glossary` is capped at 1, because several tiny definitions often match at once and crowd out the real explanation). A cap that is empty or null is off.
+3. Pass the hits to the shared pure function `select_chunks()`, which applies the score threshold, sorts best first, enforces the diversity rules and returns at most `rag.top_k` chunks (6 after tuning, with `rag.score_threshold` 0.30). The rules are `rag.max_chunks_per_article` (default 2) and `rag.max_chunks_per_topic` (per-topic caps; `glossary` is capped at 1, because several tiny definitions often match at once and crowd out the real explanation). A cap that is empty or null is off.
 4. Build the prompt: use only the provided context, cite `[1]..[n]`.
 5. Answer with citations.
 
@@ -351,8 +351,8 @@ The eval harness (section 5.3) calls the same `select_chunks()` function, so it 
 **Source attribution:** each chunk carries `{title, topic, references, chunk_id, score}`, returned in `AgentResult.sources`; the UI shows a "Sources" expander under each answer.
 **No relevant source:** if no chunk passes the threshold, the agent returns `status="no_answer"` saying the knowledge base has no good match instead of guessing. This status also feeds re-routing (section 4.4).
 
-### 5.3 Starting values and evaluation harness
-`chunk_size`, `chunk_overlap`, `top_k` and the score threshold are **STARTING VALUES, not final**. An evaluation harness (`tests/rag_eval/`) tunes them:
+### 5.3 Tuning and evaluation harness
+`chunk_size`, `chunk_overlap`, `top_k` and the score threshold started as guesses (800, 120, 4 and 0.35) and were tuned with an evaluation harness (`tests/rag_eval/`). **Current values: `chunk_size` 300, `chunk_overlap` 120, `top_k` 6, `score_threshold` 0.30** (glossary keeps its 250/0 override). The sweep results are in the README, section "RAG tuning results". The harness works like this:
 - **Question set:** about 30 labelled questions: question plus the article(s) that should answer it, including a few off-topic questions that should match nothing.
 - **Sweep:** over `chunk_size`, overlap, `top_k` and threshold.
 - **Metrics:** hit-rate@k (does a labelled article appear in the top k) and MRR (mean reciprocal rank of the first correct article).

@@ -123,7 +123,7 @@ def chunk_article(
     Design pattern: STRATEGY chosen per topic. The topic's override in
     rag.topic_chunking (None means read it from config) replaces the default
     size and overlap. Example: glossary articles use 250/0, so each tiny
-    "**NAV** - ..." definition becomes its own chunk; stocks articles keep 800/120.
+    "**NAV** - ..." definition becomes its own chunk; stocks articles keep 300/120.
     """
     if topic_chunking is None:
         topic_chunking = get_config()["rag"].get("topic_chunking") or {}
