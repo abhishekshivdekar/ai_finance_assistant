@@ -53,3 +53,7 @@ Investors often respond to these risks by spreading across issuers, maturities a
 ## Key takeaway
 
 Bond risks include interest rate, credit, inflation, liquidity, reinvestment and call risk. Knowing which ones apply to a particular bond makes its yield easier to interpret: a higher return usually reflects more of these risks. This article is educational only.
+
+## In everyday words
+
+"If bonds are steadier than stocks, does that make them safe?" Steadier does not mean safe. Bonds carry several risks, such as changing interest rates, a borrower failing to pay, rising prices eating into returns, difficulty selling, and early repayment by the issuer. A higher return on a bond usually reflects more of these risks.

@@ -53,3 +53,7 @@ Neither style removes market risk. A passive equity fund still falls when the ma
 ## Key takeaway
 
 Active funds try to beat the market at a higher cost, while passive funds accept the market's return at a lower cost. Evidence suggests beating the market consistently is hard, but that does not settle the question. This article is educational and does not recommend either style.
+
+## In everyday words
+
+"What is the difference between a fund that picks companies and one that copies the market?" The first is called active: it tries to beat the market and costs more. The second is passive: it accepts the market's return and costs less. Evidence suggests beating the market consistently is hard, but that does not settle the question.

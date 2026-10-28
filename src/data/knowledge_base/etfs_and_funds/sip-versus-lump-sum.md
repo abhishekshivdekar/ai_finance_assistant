@@ -59,3 +59,7 @@ With a lump sum, all the money is invested on one day. If markets rise afterward
 ## Key takeaway
 
 A SIP trades the chance of perfect timing for regular discipline and a smoother entry, while a lump sum puts everything to work at once. Neither is ahead in all conditions. This article is educational only and does not suggest which approach any person should use.
+
+## In everyday words
+
+"Is investing a fixed amount every month smarter than putting in everything at once?" A SIP trades the chance of perfect timing for regular discipline and a smoother entry, while a lump sum puts everything to work at once. Neither is ahead in all conditions.

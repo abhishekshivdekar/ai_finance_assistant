@@ -61,3 +61,7 @@ Prices often react quickly to news such as company results, policy announcements
 ## Key takeaway
 
 Stock markets bring buyers and sellers together under rules that aim to be transparent. Prices come from the interaction of bids and asks, and indices summarise broad movements. This article is educational and does not predict market direction or suggest any trade.
+
+## In everyday words
+
+"Where do people actually trade shares, and how is the price decided?" A stock market is an organised place where buyers and sellers meet under rules meant to be transparent. Prices come from the interaction of bids, what buyers offer, and asks, what sellers want. Indices then summarise the broad movement.

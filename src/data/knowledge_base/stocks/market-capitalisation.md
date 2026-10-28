@@ -53,3 +53,7 @@ Market cap ignores debt and cash. Two firms with equal market caps can be very d
 ## Key takeaway
 
 Market cap is share price multiplied by shares outstanding, giving a snapshot of how the market values a company at one moment. It helps compare company sizes fairly, but it should be read alongside other information such as debt, profits and free float. This article is educational only.
+
+## In everyday words
+
+"How do people measure how big a listed company is?" They multiply the share price by the number of shares outstanding, which gives the market capitalisation. It is a snapshot of how the market values the company at one moment and helps compare company sizes fairly. It is best read alongside debt, profits and free float.

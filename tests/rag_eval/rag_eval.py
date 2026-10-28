@@ -14,9 +14,14 @@ Three sets are scored separately: "development" (questions), "held-out"
 off_topic plus near_miss. near_miss_false is always shown; held_out_hit_rate
 and held_out_mrr appear only once at least one held-out item is labelled.
 
-After the table, a diagnostics report for the configuration currently in
-config.yaml lists the development misses and the score gap between answerable
-and off-topic/near-miss questions (see `diagnostics`).
+The "diversity" column says whether the result-diversity caps of the app
+(rag.max_chunks_per_article / rag.max_chunks_per_topic, applied by the shared
+`select_chunks`) were on or off, so the sweep shows what the caps are worth.
+
+After the table, a diagnostics report lists the development misses and the
+score gap between answerable and off-topic/near-miss questions (see
+`diagnostics`), for the configuration currently in config.yaml and for the
+best row of the sweep.
 """
 from __future__ import annotations
 
@@ -27,8 +32,9 @@ from typing import Any
 
 import yaml
 
-from src.rag.embeddings import get_embedder
+from src.rag.embeddings import SentenceTransformerEmbedder, get_embedder
 from src.rag.ingest import Article, build_store, load_articles
+from src.rag.retriever import diversity_caps, select_chunks
 from src.utils.config import get_config
 from src.utils.logger import get_logger
 
@@ -48,11 +54,41 @@ def article_id(chunk_id: str) -> str:
     return chunk_id.split("#")[0]
 
 
+def make_embedder(model_name: str | None = None) -> Any:
+    """Embedder for the eval: the shared one from config, or a separate one by name.
+
+    A named model gets its OWN SentenceTransformerEmbedder, so the cached
+    get_embedder() singleton the app uses is untouched. The eval only builds
+    in-memory stores (build_store) and never saves, so the app's index and
+    manifest are not affected either.
+    """
+    if model_name is None:
+        return get_embedder()
+    return SentenceTransformerEmbedder(model_name)
+
+
+def kept_hits(
+    hits: list[tuple[dict[str, Any], float]], top_k: int, threshold: float, diversity: bool = True
+) -> list[tuple[dict[str, Any], float]]:
+    """The (chunk, score) pairs the app would keep, via the shared select_chunks.
+
+    diversity=True applies the caps from config.yaml exactly as retrieve() does;
+    False turns the caps off (threshold and top_k still apply).
+    """
+    max_per_article, max_per_topic = (
+        diversity_caps(get_config()["rag"]) if diversity else (None, {})
+    )
+    return select_chunks(hits, top_k, threshold, max_per_article, max_per_topic)
+
+
 def rank_from_hits(
-    hits: list[tuple[dict[str, Any], float]], top_k: int, threshold: float
+    hits: list[tuple[dict[str, Any], float]],
+    top_k: int,
+    threshold: float,
+    diversity: bool = True,
 ) -> list[str]:
-    """Article ids in rank order after applying the threshold and top_k to chunks."""
-    kept = [rec for rec, score in hits if score >= threshold][:top_k]
+    """Article ids in rank order of the chunks kept by `kept_hits`."""
+    kept = [rec for rec, _ in kept_hits(hits, top_k, threshold, diversity)]
     ranked: list[str] = []
     for rec in kept:
         art = article_id(rec["chunk_id"])
@@ -111,14 +147,18 @@ def sweep(
     off_topic: list[str],
     held_out: list[dict[str, Any]] | None = None,
     near_miss: list[str] | None = None,
+    diversity_modes: tuple[bool, ...] = (True, False),
 ) -> list[dict[str, Any]]:
     """Evaluate every grid combination. One store per (chunk_size, overlap).
+
+    Every combination is scored once per entry of `diversity_modes` (caps on,
+    caps off), shown in the "diversity" column. Each question searches the whole
+    store, as retrieve() does, so the caps have spare hits to choose from.
 
     The development, held-out and off-topic sets are scored independently.
     Unlabelled held-out items are skipped; near_miss false matches are counted
     apart from off_topic ones.
     """
-    max_k = max(grid["top_k"])
     held_out, _ = split_held_out(held_out or [])
     q_vecs = [embedder.embed_query(q["question"]) for q in questions]
     ho_vecs = [embedder.embed_query(q["question"]) for q in held_out]
@@ -131,38 +171,52 @@ def sweep(
             log.warning("Skipping overlap %d >= chunk_size %d", overlap, size)
             continue
         store = build_store(articles, embedder, size, overlap)
-        q_hits = [store.search(v, max_k) for v in q_vecs]
-        ho_hits = [store.search(v, max_k) for v in ho_vecs]
-        off_hits = [store.search(v, max_k) for v in off_vecs]
-        near_hits = [store.search(v, max_k) for v in near_vecs]
-        for top_k, threshold in product(grid["top_k"], grid["threshold"]):
-            ranks = [
-                rank_of_first_hit(rank_from_hits(h, top_k, threshold), q["expected"])
-                for h, q in zip(q_hits, questions)
-            ]
-            ho_ranks = [
-                rank_of_first_hit(rank_from_hits(h, top_k, threshold), q["expected"])
-                for h, q in zip(ho_hits, held_out)
-            ]
+        every_chunk = len(store)
+        q_hits = [store.search(v, every_chunk) for v in q_vecs]
+        ho_hits = [store.search(v, every_chunk) for v in ho_vecs]
+        off_hits = [store.search(v, every_chunk) for v in off_vecs]
+        near_hits = [store.search(v, every_chunk) for v in near_vecs]
+        for top_k, threshold, diversity in product(
+            grid["top_k"], grid["threshold"], diversity_modes
+        ):
+            def rank(h: list[tuple[dict[str, Any], float]]) -> list[str]:
+                return rank_from_hits(h, top_k, threshold, diversity)
+
+            ranks = [rank_of_first_hit(rank(h), q["expected"]) for h, q in zip(q_hits, questions)]
+            ho_ranks = [rank_of_first_hit(rank(h), q["expected"]) for h, q in zip(ho_hits, held_out)]
             rows.append(
                 {
                     "chunk_size": size, "chunk_overlap": overlap, "top_k": top_k,
-                    "threshold": threshold, "hit_rate": hit_rate_at_k(ranks, top_k),
-                    "mrr": mrr(ranks),
-                    "off_topic_false": sum(
-                        1 for h in off_hits if rank_from_hits(h, top_k, threshold)
-                    ),
+                    "threshold": threshold, "diversity": "on" if diversity else "off",
+                    "hit_rate": hit_rate_at_k(ranks, top_k), "mrr": mrr(ranks),
+                    "off_topic_false": sum(1 for h in off_hits if rank(h)),
                     "held_out_hit_rate": hit_rate_at_k(ho_ranks, top_k),
                     "held_out_mrr": mrr(ho_ranks),
-                    "near_miss_false": sum(
-                        1 for h in near_hits if rank_from_hits(h, top_k, threshold)
-                    ),
+                    "near_miss_false": sum(1 for h in near_hits if rank(h)),
                 }
             )
     return rows
 
 
-BASE_COLUMNS = ["chunk_size", "chunk_overlap", "top_k", "threshold",
+def best_row(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The best sweep row: no false matches first, then hit_rate, then mrr.
+
+    Rows that let an off-topic or near-miss question through lose to rows that
+    do not, because an answer built on an unrelated chunk is worse than none.
+    Ties keep the earlier row.
+    """
+    def key(row: dict[str, Any]) -> tuple[bool, float, float]:
+        clean = row["off_topic_false"] + row["near_miss_false"] == 0
+        return clean, row["hit_rate"], row["mrr"]
+
+    best: dict[str, Any] | None = None
+    for row in rows:
+        if best is None or key(row) > key(best):
+            best = row
+    return best
+
+
+BASE_COLUMNS = ["chunk_size", "chunk_overlap", "top_k", "threshold", "diversity",
                 "hit_rate", "mrr", "off_topic_false", "near_miss_false"]
 HELD_OUT_COLUMNS = ["held_out_hit_rate", "held_out_mrr"]
 
@@ -206,8 +260,13 @@ def diagnostics(
     chunk_overlap: int,
     top_k: int,
     threshold: float,
+    diversity: bool = True,
+    label: str = "config.yaml",
 ) -> str:
     """Report for ONE configuration: development misses and the score gap.
+
+    `label` names the configuration in the heading ("config.yaml" or "best
+    sweep row"); `diversity` says whether the result caps apply.
 
     (a) Each development question whose expected article is not returned, with
     the top 3 articles actually returned (best chunk score each). (b) The lowest
@@ -223,8 +282,9 @@ def diagnostics(
         return store.search(embedder.embed_query(question), every_chunk)
 
     lines = [
-        f"Diagnostics for config.yaml: chunk_size={chunk_size}, "
-        f"chunk_overlap={chunk_overlap}, top_k={top_k}, score_threshold={threshold}",
+        f"Diagnostics for {label}: chunk_size={chunk_size}, "
+        f"chunk_overlap={chunk_overlap}, top_k={top_k}, score_threshold={threshold}, "
+        f"diversity={'on' if diversity else 'off'}",
         "",
     ]
     questions = data["questions"]
@@ -232,11 +292,11 @@ def diagnostics(
     misses: list[str] = []
     for q in questions:
         hits = search(q["question"])
-        returned = rank_from_hits(hits, top_k, threshold)
+        returned = rank_from_hits(hits, top_k, threshold, diversity)
         best = best_by_article(hits)
         answerable.append(max((best.get(art, 0.0) for art in q["expected"]), default=0.0))
         if rank_of_first_hit(returned, q["expected"]) is None:
-            kept = best_by_article([(r, s) for r, s in hits if s >= threshold][:top_k])
+            kept = best_by_article(kept_hits(hits, top_k, threshold, diversity))
             shown = _fmt_scores(list(kept.items())[:3]) or "nothing above threshold"
             misses.append(
                 f"  Q: {q['question']}\n"
@@ -269,16 +329,21 @@ def diagnostics(
     return "\n".join(lines)
 
 
-def main() -> None:
-    """Run the sweep with the real embedder; print the summary, table and diagnostics."""
+def main(embedding_model: str | None = None) -> None:
+    """Run the sweep; print the summary, table and diagnostics (config row, best row).
+
+    embedding_model None uses config.yaml; a name builds the eval stores with
+    that model instead (see make_embedder). The app's saved index is untouched.
+    """
     data = load_questions()
     articles = load_articles()
-    embedder = get_embedder()
+    embedder = make_embedder(embedding_model)
     held_out = data.get("held_out") or []
     rows = sweep(
         data["grid"], articles, embedder, data["questions"], data["off_topic"],
         held_out, data.get("near_miss") or [],
     )
+    print(f"embedding model: {embedding_model or get_config()['embeddings']['model']}")
     print("\n".join(summarize_sets(data)))
     print()
     print(format_table(rows, show_held_out=bool(split_held_out(held_out)[0])))
@@ -288,6 +353,13 @@ def main() -> None:
         data, articles, embedder, cfg["chunk_size"], cfg["chunk_overlap"],
         cfg["top_k"], cfg["score_threshold"],
     ))
+    best = best_row(rows)
+    if best:
+        print()
+        print(diagnostics(
+            data, articles, embedder, best["chunk_size"], best["chunk_overlap"],
+            best["top_k"], best["threshold"], best["diversity"] == "on", "best sweep row",
+        ))
 
 
 if __name__ == "__main__":

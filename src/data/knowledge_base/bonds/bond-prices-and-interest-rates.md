@@ -49,3 +49,7 @@ Rising rates are not purely negative. Money returning from maturing bonds can be
 ## Key takeaway
 
 Bond prices and interest rates move in opposite directions because a bond's fixed coupon is compared with what new bonds pay. Longer-duration bonds move more. Understanding this helps explain why a bond fund or bond holding can show a loss when central banks raise rates, even without any default. This article is educational only.
+
+## In everyday words
+
+"Why does my bond or bond fund lose value when interest rates go up?" A bond's coupon is fixed, so when new bonds start paying more, the older bond looks less attractive and its price drops. It works the other way too when rates fall. Bonds that run for longer tend to move more, and the loss can show up even though the borrower never missed a payment.

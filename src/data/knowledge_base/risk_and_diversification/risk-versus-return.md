@@ -57,3 +57,7 @@ The length of time money can stay invested affects how much short-term swings ma
 ## Key takeaway
 
 Risk and potential return are linked because investors need a reason to accept uncertainty. A higher potential reward always comes with a wider range of outcomes, including losses. This article is educational and does not assess any individual's situation.
+
+## In everyday words
+
+"Why do investments that promise big gains also scare people?" Higher potential returns come with a wider range of outcomes, including losses. The link exists because investors need a reason to accept uncertainty.

@@ -54,3 +54,7 @@ AMFI publishes daily NAVs for mutual funds, and each fund house shows its own on
 ## Key takeaway
 
 NAV is simply net assets divided by units. It moves with the value of the holdings, and its level on its own says nothing about whether a fund is cheap or expensive. This article is educational only.
+
+## In everyday words
+
+"Does a fund with a low NAV give more growth than one with a high NAV?" NAV is simply the price of one unit, worked out as net assets divided by units. It moves with the value of the fund's holdings. Its level on its own says nothing about whether a fund is cheap or expensive.

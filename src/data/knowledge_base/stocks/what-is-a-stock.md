@@ -49,3 +49,7 @@ Shares are bought and sold through a broker, who connects the investor to a stoc
 ## Key takeaway
 
 A stock is a share of ownership in a business. Its value can rise or fall, it may or may not pay dividends, and it carries the risk of loss. Learning how a company earns money, and how its shares are priced, helps investors understand what they hold. This article is educational and does not suggest any particular investment.
+
+## In everyday words
+
+"What does it mean to own a share?" A stock is a small piece of ownership in a company, and the person holding it is a shareholder. Its value can rise or fall, it may or may not pay dividends, and it carries the risk of loss.

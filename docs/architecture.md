@@ -339,10 +339,12 @@ Example: "What is Apple trading at, and what is a P/E ratio?" gives intents `["m
 
 ### 5.2 Online: `rag/retriever.py`
 1. Embed the query with the same model as ingest.
-2. Search `rag.top_k` nearest chunks (optionally filtered by `topic`, used by Tax Education).
-3. Apply the score threshold; drop weak matches.
+2. Search **all** chunks (an exact flat index, cheap at this size; revisit with over-fetching, i.e. asking for more than `top_k` and trimming, if the knowledge base grows to tens of thousands of chunks). The optional `topic` filter (used by Tax Education) is applied to these hits **before** selection.
+3. Pass the hits to the shared pure function `select_chunks()`, which applies the score threshold, sorts best first, enforces the diversity rules and returns at most `rag.top_k` chunks. The rules are `rag.max_chunks_per_article` (default 2) and `rag.max_chunks_per_topic` (per-topic caps; `glossary` is capped at 1, because several tiny definitions often match at once and crowd out the real explanation). A cap that is empty or null is off.
 4. Build the prompt: use only the provided context, cite `[1]..[n]`.
 5. Answer with citations.
+
+The eval harness (section 5.3) calls the same `select_chunks()` function, so it measures exactly what the app does.
 
 **Topic filter in the Chat tab:** the Chat tab offers an optional topic filter dropdown (default "All topics"). The selected topic is passed to the retriever as the `topic` metadata filter from step 2. Tax Education always uses its own locked `accounts_and_taxes_india` filter, whatever the dropdown says.
 
@@ -354,6 +356,9 @@ Example: "What is Apple trading at, and what is a P/E ratio?" gives intents `["m
 - **Question set:** about 30 labelled questions: question plus the article(s) that should answer it, including a few off-topic questions that should match nothing.
 - **Sweep:** over `chunk_size`, overlap, `top_k` and threshold.
 - **Metrics:** hit-rate@k (does a labelled article appear in the top k) and MRR (mean reciprocal rank of the first correct article).
+- **Diversity on/off:** every sweep row is scored twice, with the `select_chunks()` caps on and off (a `diversity` column), using the same function as the app, so the table shows what the caps are worth.
+- **Evaluation sets:** development questions, a held-out set (independent questions, skipped until labelled; its columns appear once at least one item is labelled) and an off-topic set made of `off_topic` plus `near_miss` questions, which should match nothing (false matches are counted separately as `off_topic_false` and `near_miss_false`).
+- **Best row and diagnostics:** the "best row" of the sweep ranks rows with no false matches first, then by `hit_rate`, then by `mrr`. A diagnostics report (development misses and the score gap between answerable and off-topic questions) is printed for the `config.yaml` settings and for the best row.
 - **Cost:** retrieval metrics use local embeddings, so the sweep costs no API tokens.
 - **Threshold:** set from the score gap between answerable and off-topic questions (place it between the two score distributions).
 - **Optional:** an LLM-judge faithfulness check on a small sample (uses tokens, so run it rarely and never in the normal test run).

@@ -42,3 +42,7 @@ Interest from both is generally taxable, though the specific treatment can vary 
 ## Key takeaway
 
 Fixed deposits offer simplicity and a stable stated value, while bonds offer tradability and variety but with price changes and credit risk. Each fits different needs and neither is risk-free. This article is educational only.
+
+## In everyday words
+
+"Is a bond just a fancier fixed deposit?" Both are ways of lending money for interest, but they differ in practice. A fixed deposit is simple and has a stable stated value, while a bond can be traded and comes in many varieties, though its price can change and the borrower can fail to pay. Neither is free of risk.

@@ -61,3 +61,7 @@ As a goal gets closer, many investors gradually reduce the share of volatile ass
 ## Key takeaway
 
 Asset allocation is the high-level split between shares, debt, gold and cash, shaped by time horizon, goals and comfort with risk. It is one of the main drivers of how a portfolio behaves. This article is educational and offers no personal recommendation.
+
+## In everyday words
+
+"How do people decide how to split their savings between shares, bonds, gold and cash?" That split is called asset allocation, and many investors consider it more influential than any single holding. It is shaped by time horizon, goals and comfort with risk, and it is one of the main drivers of how a portfolio behaves.

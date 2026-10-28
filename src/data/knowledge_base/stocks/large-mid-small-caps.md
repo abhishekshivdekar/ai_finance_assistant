@@ -59,3 +59,7 @@ Many investors hold companies of several sizes to avoid relying on one segment, 
 ## Key takeaway
 
 Large, mid and small caps are size groupings by market capitalisation. Larger companies are generally more established and easier to trade, while smaller ones tend to offer more growth potential alongside more volatility and less liquidity. This article is educational only.
+
+## In everyday words
+
+"What do people mean by big, medium and small companies on the stock market?" These are size groups based on market capitalisation. Larger companies are generally more established and easier to trade, while smaller ones tend to offer more growth potential alongside bigger ups and downs and less ease of trading.

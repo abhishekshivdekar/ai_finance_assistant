@@ -50,3 +50,7 @@ Exchanges trade only during set hours. They are supervised by regulators such as
 ## Key takeaway
 
 A stock exchange is a rule-based marketplace that matches buyers and sellers, publishes prices and helps trades settle. Understanding order types, spreads and liquidity helps explain why the price an investor sees is not always the price a trade is completed at. This article is educational only.
+
+## In everyday words
+
+"What happens to my order after I tap the trade button?" It goes to a stock exchange, a rule-based marketplace that matches buyers and sellers, publishes prices and helps trades settle. Order types, spreads and liquidity explain why the price seen on screen is not always the price a trade is completed at.

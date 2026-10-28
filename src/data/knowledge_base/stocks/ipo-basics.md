@@ -55,3 +55,7 @@ When the shares first trade, they may open above or below the issue price. The d
 ## Key takeaway
 
 An IPO converts a private company into a publicly traded one, using a regulated process of documents, price setting, bidding, allotment and listing. Careful reading of the offer document helps investors understand what they would own. This article is educational and does not suggest participating in any issue.
+
+## In everyday words
+
+"How does a company come to the stock market for the first time?" It does this through an initial public offering, where a private company offers its shares to the public for the first time. The process is regulated and moves through documents, price setting, bidding, allotment and listing. Reading the offer document helps people understand what they would own.

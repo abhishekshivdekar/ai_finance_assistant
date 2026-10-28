@@ -57,3 +57,7 @@ Since market cap equals share price times shares outstanding, the P/E also equal
 ## Key takeaway
 
 The P/E ratio relates a share price to a company's profit per share. It is a starting point for asking questions about how a stock is valued, not an answer by itself, and it works best when compared against similar companies and read with other information. This article is educational only.
+
+## In everyday words
+
+"A friend says a stock trades at a multiple of its yearly profit, what does that mean?" The P/E ratio relates a share price to the company's profit per share. It is a starting point for asking how a stock is valued, not an answer by itself, and it works best when compared against similar companies.

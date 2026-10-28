@@ -42,6 +42,9 @@ rag:
     glossary: {chunk_size: 250, chunk_overlap: 0}
   top_k: 4
   score_threshold: 0.35
+  max_chunks_per_article: 2   # diversity cap: at most this many chunks from one article (0/null = off)
+  max_chunks_per_topic:       # per-topic caps (empty = off); glossary entries are tiny and many match at once
+    glossary: 1
   topics:
     - stocks
     - bonds

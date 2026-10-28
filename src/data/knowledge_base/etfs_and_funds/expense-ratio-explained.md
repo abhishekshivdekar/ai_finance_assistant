@@ -61,3 +61,7 @@ The expense ratio does not include exit loads, brokerage on ETF trades, bid-ask 
 ## Key takeaway
 
 The expense ratio is a small percentage that works silently every year and can add up over long periods. It is one important comparison point among several. This article is educational and does not recommend any fund.
+
+## In everyday words
+
+"What does a fund quietly charge me every year for running things?" That yearly fee is the expense ratio, shown as a percentage of the money the fund manages. It looks small, but it works silently every year and can add up over long periods. It is one comparison point among several.

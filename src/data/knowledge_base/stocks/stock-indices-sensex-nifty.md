@@ -50,3 +50,7 @@ An index shows the past, not the future. A rising index does not mean every shar
 ## Key takeaway
 
 Sensex and Nifty 50 are summary numbers for baskets of large Indian companies, weighted mostly by free-float market value. They help describe how the market is doing and provide benchmarks for funds. This article is educational only.
+
+## In everyday words
+
+"What does it mean when the news says the market was up today?" It usually refers to an index, a single number that summarises the movement of a chosen group of shares. Sensex and Nifty are such numbers for baskets of large Indian companies. They also serve as benchmarks for funds.

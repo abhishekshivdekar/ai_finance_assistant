@@ -68,3 +68,7 @@ Correlation looks backwards and captures only the typical direction, not how lar
 ## Key takeaway
 
 Correlation tells investors whether two holdings tend to move together, and diversification works best when they do not. The relationship changes over time and can tighten in a crisis. This article is educational only.
+
+## In everyday words
+
+"What does it mean when two investments move in opposite directions?" Correlation measures how closely two investments move together. Spreading money works best when holdings do not move together. The relationship changes over time and can tighten in a crisis, so holdings that seemed different may fall together.

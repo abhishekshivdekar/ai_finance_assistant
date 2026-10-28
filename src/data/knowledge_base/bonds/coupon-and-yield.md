@@ -51,3 +51,7 @@ A higher yield often reflects a higher risk of the issuer failing to pay, which 
 ## Key takeaway
 
 The coupon is the fixed interest promise on a bond, while yield describes the return relative to the price paid. Current yield is a simple snapshot, yield to maturity is a fuller estimate, and neither guarantees the final result. This article is educational only.
+
+## In everyday words
+
+"The bond promises one rate, so why does my return look different?" The coupon is the fixed interest the bond promises. Yield compares that income with the price actually paid, so it changes when the price changes. Current yield is a quick snapshot and yield to maturity is a fuller estimate, but neither guarantees the final result.

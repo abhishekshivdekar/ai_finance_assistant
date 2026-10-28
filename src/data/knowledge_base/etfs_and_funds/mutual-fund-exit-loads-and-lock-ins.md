@@ -47,3 +47,7 @@ There is no single rule that applies to all mutual funds. Exit loads, their dura
 ## Key takeaway
 
 Exit loads add a cost to early withdrawals, while lock-ins block withdrawals for a set time. Both are scheme-specific, so the scheme documents are the source of truth. This article is educational only and does not recommend any fund.
+
+## In everyday words
+
+"Can I take my money out of a fund whenever I want, and will it cost me?" It depends on the scheme. An exit load adds a cost to an early withdrawal, and a lock-in blocks withdrawals for a set time. The scheme documents are the source of truth for both.

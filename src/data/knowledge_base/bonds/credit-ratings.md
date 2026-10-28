@@ -56,3 +56,7 @@ Ratings are not fixed. An agency may upgrade or downgrade a bond as the borrower
 ## Key takeaway
 
 Credit ratings express, in letters, an agency's opinion on how likely a borrower is to pay as promised. Higher grades suggest lower credit risk and typically lower yields; lower grades suggest higher risk and higher yields. They are helpful but imperfect. This article is educational only.
+
+## In everyday words
+
+"What do letters like AAA next to a company's debt mean?" They are an agency's opinion of how likely the borrower is to pay interest and repay on time. Higher grades suggest lower credit risk and usually lower yields, while lower grades suggest higher risk and higher yields. A rating is helpful, but it is only an opinion and it can lag behind events.

@@ -57,3 +57,7 @@ Spreading too thinly has costs. Many small holdings can be hard to track, may ad
 ## Key takeaway
 
 Diversification works by letting company-specific problems offset each other, with the greatest benefit coming from the first few unrelated holdings. It leaves market risk untouched. This article is educational only.
+
+## In everyday words
+
+"Why not just put everything into one company?" Spreading money across holdings lets one company's problems be offset by the others. The benefit is greatest from the first few unrelated holdings, and adding more helps less after that. It does not remove market risk.

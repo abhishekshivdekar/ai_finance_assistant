@@ -58,3 +58,7 @@ The ability to trade at any time during market hours does not guarantee that tra
 ## Key takeaway
 
 An ETF combines a fund's diversified basket with the trading convenience of a share. Its price stays near the value of its holdings through a creation and redemption process, but costs such as spreads and tracking difference still matter. This article is educational and does not recommend any ETF.
+
+## In everyday words
+
+"How can a fund trade in my share app like a regular stock?" An ETF is a fund whose units are listed on an exchange, so they trade like a share. Its price stays close to the value of what it holds through a creation and redemption process. Costs such as spreads and tracking difference still matter.

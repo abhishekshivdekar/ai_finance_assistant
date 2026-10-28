@@ -82,8 +82,8 @@ GRID = {"chunk_size": [200, 50], "chunk_overlap": [20, 60], "top_k": [1, 2], "th
 
 def test_sweep_metrics_on_toy_fixture():
     rows = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, OFF_TOPIC)
-    # overlap 60 >= chunk_size 50 is skipped: 3 valid size/overlap pairs x 2 x 2
-    assert len(rows) == 3 * 2 * 2
+    # overlap 60 >= chunk_size 50 is skipped: 3 valid size/overlap pairs x 2 x 2 x (diversity on/off)
+    assert len(rows) == 3 * 2 * 2 * 2
     easy = next(r for r in rows if r["chunk_size"] == 200 and r["top_k"] == 1 and r["threshold"] == 0.3)
     assert easy["hit_rate"] == pytest.approx(2 / 3)
     assert easy["mrr"] == pytest.approx(2 / 3)
@@ -242,3 +242,123 @@ def test_diagnostics_handles_empty_sets():
     report = _diag([], off_topic=[], near_miss=())
     assert "Development misses: 0 of 0" in report
     assert "lowest" not in report and "highest" not in report
+
+
+# --- diversity switch, shared rule, best row, embedding model ---
+from src.rag import retriever as retriever_module
+from src.rag.retriever import select_chunks
+
+
+def _hit(chunk_id, score):
+    return ({"chunk_id": chunk_id, "topic": chunk_id.split("/")[0]}, score)
+
+
+CROWDED = [
+    _hit("glossary/g#0", 0.9), _hit("glossary/h#0", 0.8), _hit("stocks/a#0", 0.7),
+    _hit("stocks/a#1", 0.6), _hit("stocks/a#2", 0.5), _hit("bonds/b#0", 0.4),
+]
+
+
+def test_rank_from_hits_diversity_switch():
+    # caps on (config: 2 per article, 1 glossary): h#0 and a#2 are dropped
+    assert rank_from_hits(CROWDED, 4, 0.3, diversity=True) == ["glossary/g", "stocks/a", "bonds/b"]
+    # caps off: top 4 chunks are g, h, a, a
+    assert rank_from_hits(CROWDED, 4, 0.3, diversity=False) == ["glossary/g", "glossary/h", "stocks/a"]
+
+
+def test_harness_and_retrieve_agree_on_the_same_hits(monkeypatch):
+    records = [({**rec, "text": "t", "title": "T", "references": REFS}, score) for rec, score in CROWDED]
+
+    class Store:
+        def __len__(self):
+            return len(records)
+
+        def search(self, vector, k):
+            return records[:k]
+
+    for top_k in (2, 3, 4, 6):
+        chunks = retriever_module.retrieve("anything", top_k=top_k, embedder=FakeEmbedder(), store=Store())
+        app_ids = [c.chunk_id for c in chunks]
+        rag = rag_eval.get_config()["rag"]
+        shared = select_chunks(
+            records, top_k, rag["score_threshold"],
+            rag["max_chunks_per_article"], rag["max_chunks_per_topic"],
+        )
+        assert app_ids == [rec["chunk_id"] for rec, _ in shared]
+        harness = rag_eval.rank_from_hits(records, top_k, rag["score_threshold"], diversity=True)
+        assert harness == list(dict.fromkeys(i.split("#")[0] for i in app_ids))
+
+
+def test_sweep_reports_diversity_on_and_off():
+    rows = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, OFF_TOPIC)
+    assert {r["diversity"] for r in rows} == {"on", "off"}
+    assert "diversity" in format_table(rows).splitlines()[0]
+    only_on = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, OFF_TOPIC, diversity_modes=(True,))
+    assert {r["diversity"] for r in only_on} == {"on"} and len(only_on) == len(rows) // 2
+
+
+def test_best_row_prefers_clean_rows_then_hit_rate_then_mrr():
+    base = {"off_topic_false": 0, "near_miss_false": 0, "hit_rate": 0.5, "mrr": 0.4}
+    leaky = {**base, "hit_rate": 0.9, "off_topic_false": 1}
+    clean_low = {**base, "hit_rate": 0.6}
+    clean_high = {**base, "hit_rate": 0.7, "mrr": 0.3}
+    clean_high_mrr = {**base, "hit_rate": 0.7, "mrr": 0.5}
+    assert rag_eval.best_row([leaky, clean_low]) is clean_low
+    assert rag_eval.best_row([clean_low, clean_high, clean_high_mrr]) is clean_high_mrr
+    assert rag_eval.best_row([leaky]) is leaky
+    assert rag_eval.best_row([]) is None
+
+
+def test_main_prints_diagnostics_for_config_and_best_row(monkeypatch, capsys):
+    monkeypatch.setattr(rag_eval, "get_embedder", lambda: FakeEmbedder())
+    rag_eval.main()
+    out = capsys.readouterr().out
+    assert "Diagnostics for config.yaml:" in out and "Diagnostics for best sweep row:" in out
+    assert out.count("diversity=") == 2   # one heading per diagnostics block
+    assert " on " in out and " off " in out   # table rows for both modes
+
+
+class FakeSTEmbedder(FakeEmbedder):
+    """Stands in for SentenceTransformerEmbedder; records the model name."""
+
+    created: list = []
+
+    def __init__(self, model_name):
+        super().__init__()
+        self.model_name = model_name
+        FakeSTEmbedder.created.append(model_name)
+
+
+def test_make_embedder_default_uses_the_shared_embedder(monkeypatch):
+    shared = FakeEmbedder()
+    monkeypatch.setattr(rag_eval, "get_embedder", lambda: shared)
+    assert rag_eval.make_embedder(None) is shared
+
+
+def test_embedding_model_override_builds_its_own_embedder_and_leaves_the_app_alone(monkeypatch, capsys):
+    FakeSTEmbedder.created = []
+    monkeypatch.setattr(rag_eval, "SentenceTransformerEmbedder", FakeSTEmbedder)
+
+    def boom(*args, **kwargs):
+        raise AssertionError("the app's embedder / index must not be touched")
+
+    monkeypatch.setattr(rag_eval, "get_embedder", boom)
+    import src.rag.ingest as ingest
+    monkeypatch.setattr(ingest, "build_index", boom)
+    monkeypatch.setattr(ingest, "write_manifest", boom)
+
+    rag_eval.main("some/other-model")
+    out = capsys.readouterr().out
+    assert FakeSTEmbedder.created == ["some/other-model"]
+    assert "embedding model: some/other-model" in out
+
+
+def test_run_rag_eval_passes_the_constant_to_main(monkeypatch):
+    import run_rag_eval
+    assert run_rag_eval.EMBEDDING_MODEL is None
+    seen = []
+    monkeypatch.setattr(run_rag_eval.runpy, "run_path", lambda path, run_name: {"main": seen.append})
+    run_rag_eval.run()
+    monkeypatch.setattr(run_rag_eval, "EMBEDDING_MODEL", "some/other-model")
+    run_rag_eval.run()
+    assert seen == [None, "some/other-model"]

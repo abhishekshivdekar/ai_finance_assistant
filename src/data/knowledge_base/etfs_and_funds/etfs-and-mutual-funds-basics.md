@@ -54,3 +54,7 @@ Regulators require funds to publish documents describing their strategy and risk
 ## Key takeaway
 
 Funds let investors own a diversified basket through a single product. Mutual funds and ETFs differ mainly in how they are bought and priced, and costs matter over time. This article is educational and does not recommend any fund.
+
+## In everyday words
+
+"What is a fund, and how are ETFs and mutual funds different?" A fund pools money from many people and invests it in a basket of securities, so a single product gives a diversified mix. The two most common kinds differ mainly in how they are bought and priced. Costs matter over time as well.

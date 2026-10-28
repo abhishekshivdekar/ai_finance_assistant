@@ -61,3 +61,7 @@ Life changes: income grows, families expand, markets move. Investors often revie
 ## Key takeaway
 
 A goal with an amount, a date and a plan is much easier to track than a wish. Time horizon, inflation and compounding shape how goals are approached. This article is educational and is not a personal financial plan.
+
+## In everyday words
+
+"What makes a money goal different from a wish?" A goal becomes much easier to track once it has an amount, a date and a plan, instead of staying a vague hope. Time horizon, inflation and compounding all shape how goals are approached.

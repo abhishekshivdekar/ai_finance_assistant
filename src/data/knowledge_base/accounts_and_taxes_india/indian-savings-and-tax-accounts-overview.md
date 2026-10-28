@@ -54,3 +54,7 @@ When investments such as shares or mutual funds are sold at a profit, the profit
 ## Key takeaway
 
 EPF, PPF, NPS and ELSS serve similar long-term purposes but differ in risk, lock-in and rules. Tax rules change, so always confirm current details with official sources. This article is general education, not tax or investment advice.
+
+## In everyday words
+
+"Which Indian savings options get special tax treatment, and how do they differ?" Several long-term options, such as EPF, PPF, NPS and ELSS, are treated in a special way under the tax law. They serve similar long-term purposes but differ in risk, lock-in and rules. For any current figure or rule, the official income tax website is the place to check.

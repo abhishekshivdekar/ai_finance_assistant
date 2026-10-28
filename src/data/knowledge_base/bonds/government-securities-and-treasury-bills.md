@@ -46,3 +46,7 @@ Government securities are among the most actively traded debt instruments, so th
 ## Key takeaway
 
 Treasury bills are short-term, discount-priced government debt, and government bonds are longer-term instruments paying coupons. Their credit risk is generally seen as low, but they are still affected by interest rate and inflation movements. This article is educational only.
+
+## In everyday words
+
+"How does the government borrow money from ordinary people?" It issues debt. Treasury bills are short-term and sold at a discount, while government bonds run for longer and pay a coupon. Their credit risk is generally seen as low, but their prices still move with interest rates and inflation.

@@ -51,3 +51,7 @@ Investors often use bonds to bring steadier income and lower price swings than s
 ## Key takeaway
 
 A bond is a loan with a promised interest rate and repayment date. Its price moves in the opposite direction to interest rates, and its safety depends on the borrower. Understanding coupon, maturity, yield and credit quality gives a good foundation for reading any bond's description. This is educational material only.
+
+## In everyday words
+
+"What exactly is a bond?" It is a loan that an investor makes to a government or a company. In return, the borrower promises regular interest and to hand back the original amount on a fixed date. The bond's price moves in the opposite direction to interest rates, and how safe it is depends on the borrower.

@@ -74,7 +74,7 @@ def test_topic_filter_searches_all_chunks(store):
     spy = SpyStore(store)
     _retrieve(QUERY, spy, topic="bonds", top_k=1)
     _retrieve(QUERY, spy, top_k=1)
-    assert spy.requested == [len(store), 1]
+    assert spy.requested == [len(store), len(store)]   # no-topic search also scans all (caps need spare hits)
 
 
 class EmptyStore:
@@ -146,3 +146,91 @@ def test_to_sources_reuses_source_model():
         title="Title", url="https://www.sebi.gov.in", chunk_id="t/a#0", score=0.5
     )
     assert sources[1]["url"] is None and sources[1]["chunk_id"] == "t/b#1"
+
+
+# --- select_chunks: the shared diversity rule (fake data, no embedder) ---
+from src.rag.retriever import diversity_caps, select_chunks
+
+
+def _hit(chunk_id, score):
+    return ({"chunk_id": chunk_id, "topic": chunk_id.split("/")[0]}, score)
+
+
+HITS = [
+    _hit("stocks/a#0", 0.9), _hit("stocks/a#1", 0.8), _hit("stocks/a#2", 0.7),
+    _hit("glossary/g#0", 0.6), _hit("glossary/h#0", 0.5), _hit("bonds/b#0", 0.4),
+    _hit("bonds/c#0", 0.2),
+]
+
+
+def _ids(hits):
+    return [rec["chunk_id"] for rec, _ in hits]
+
+
+def test_select_chunks_caps_per_article_and_per_topic():
+    kept = select_chunks(HITS, 10, 0.3, max_per_article=2, max_per_topic={"glossary": 1})
+    # a#2 is a third chunk of one article; glossary/h#0 is a second glossary chunk
+    assert _ids(kept) == ["stocks/a#0", "stocks/a#1", "glossary/g#0", "bonds/b#0"]
+
+
+def test_select_chunks_cap_off_when_config_is_empty():
+    for article_cap, topic_cap in ((None, {}), (0, None), (None, None)):
+        kept = select_chunks(HITS, 10, 0.3, article_cap, topic_cap)
+        assert _ids(kept) == [r["chunk_id"] for r, s in HITS if s >= 0.3]
+
+
+def test_select_chunks_keeps_order_threshold_and_top_k():
+    shuffled = [HITS[3], HITS[0], HITS[6], HITS[1]]
+    kept = select_chunks(shuffled, 10, 0.3)
+    assert [s for _, s in kept] == [0.9, 0.8, 0.6]            # sorted best first, 0.2 dropped
+    assert _ids(select_chunks(HITS, 2, 0.3, 2, {})) == ["stocks/a#0", "stocks/a#1"]
+    assert select_chunks(HITS, 10, 0.95, 2, {}) == []
+
+
+def test_capped_hits_make_room_for_lower_ranked_articles():
+    # without the cap top_k=3 is all stocks/a; with it the third slot goes to glossary
+    assert _ids(select_chunks(HITS, 3, 0.3)) == ["stocks/a#0", "stocks/a#1", "stocks/a#2"]
+    assert _ids(select_chunks(HITS, 3, 0.3, 2, {"glossary": 1})) == [
+        "stocks/a#0", "stocks/a#1", "glossary/g#0"]
+
+
+def test_diversity_caps_reads_config():
+    assert diversity_caps({"max_chunks_per_article": 2, "max_chunks_per_topic": {"glossary": 1}}) == (2, {"glossary": 1})
+    assert diversity_caps({}) == (None, {})
+    assert get_config()["rag"]["max_chunks_per_article"] == 2
+
+
+class ScriptedStore:
+    """Returns fixed hits so retrieve() can be checked against select_chunks."""
+
+    def __init__(self, hits):
+        self.hits = hits
+
+    def __len__(self):
+        return len(self.hits)
+
+    def search(self, vector, k):
+        return self.hits[:k]
+
+
+def _rec(chunk_id, score):
+    topic = chunk_id.split("/")[0]
+    rec = {"text": "t", "title": "T", "topic": topic, "references": REFS, "chunk_id": chunk_id}
+    return rec, score
+
+
+def test_retrieve_applies_the_caps_from_config(monkeypatch):
+    hits = [_rec(r["chunk_id"], s) for r, s in HITS]
+    store = ScriptedStore(hits)
+    _patch_rag(monkeypatch, top_k=4, score_threshold=0.3)
+    got = [c.chunk_id for c in _retrieve("anything", store)]
+    assert got == _ids(select_chunks(hits, 4, 0.3, 2, {"glossary": 1}))
+    assert got == ["stocks/a#0", "stocks/a#1", "glossary/g#0", "bonds/b#0"]
+
+
+def test_retrieve_caps_off_when_config_is_empty(monkeypatch):
+    hits = [_rec(r["chunk_id"], s) for r, s in HITS]
+    _patch_rag(monkeypatch, top_k=3, score_threshold=0.3,
+               max_chunks_per_article=None, max_chunks_per_topic={})
+    got = [c.chunk_id for c in _retrieve("anything", ScriptedStore(hits))]
+    assert got == ["stocks/a#0", "stocks/a#1", "stocks/a#2"]

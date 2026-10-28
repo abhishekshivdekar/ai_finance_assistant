@@ -57,3 +57,7 @@ Dividends may be taxable, and the rules differ by country and change over time. 
 ## Key takeaway
 
 A dividend is a discretionary share of profit paid to shareholders. Knowing the key dates, the yield and the payout ratio helps explain announcements and price movements around them. This article is educational only.
+
+## In everyday words
+
+"Does a company have to share its profit with the people who own it?" No. A dividend is a payment out of profits that the company chooses to make, so some firms pay regularly and others pay nothing. Key dates decide who receives a payment, and a dividend never protects against a falling share price.

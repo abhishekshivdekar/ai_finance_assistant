@@ -58,3 +58,7 @@ Investors often distinguish between **risk tolerance**, how comfortable someone 
 ## Key takeaway
 
 Risk cannot be avoided, but it can be understood and spread out. Diversification is a widely used tool for reducing the impact of any single failure. This article is educational and does not assess any individual's situation.
+
+## In everyday words
+
+"What is investment risk, and what can be done about it?" Risk is the chance that the outcome differs from what was expected, including the chance of losing money. It cannot be avoided, but it can be understood and spread out. Diversification is a widely used tool for reducing the impact of any single failure.

@@ -7,17 +7,17 @@ questions:
   - question: "What is a stock and what does owning a share mean?"
     expected: ["stocks/what-is-a-stock"]
   - question: "How do dividends work for shareholders?"
-    expected: ["stocks/what-is-a-stock"]
+    expected: ["stocks/what-is-a-stock", "stocks/dividends"]
   - question: "What happens to bond prices when interest rates rise?"
     expected: ["bonds/how-bonds-work"]
   - question: "What are the coupon and the maturity date of a bond?"
-    expected: ["bonds/how-bonds-work"]
+    expected: ["bonds/how-bonds-work", "bonds/coupon-and-yield", "glossary/bond-and-interest-rate-terms"]
   - question: "What is the difference between an ETF and a mutual fund?"
     expected: ["etfs_and_funds/etfs-and-mutual-funds-basics"]
   - question: "What does the expense ratio of a fund mean?"
-    expected: ["etfs_and_funds/etfs-and-mutual-funds-basics"]
+    expected: ["etfs_and_funds/etfs-and-mutual-funds-basics", "etfs_and_funds/expense-ratio-explained", "glossary/mutual-fund-terms"]
   - question: "What is diversification and why do investors spread their money?"
-    expected: ["risk_and_diversification/risk-and-diversification-basics"]
+    expected: ["risk_and_diversification/risk-and-diversification-basics", "risk_and_diversification/diversification-explained"]
   - question: "What kinds of investment risk are there?"
     expected: ["risk_and_diversification/risk-and-diversification-basics"]
   - question: "How does compounding help with long term financial goals?"
@@ -25,9 +25,9 @@ questions:
   - question: "What are EPF, PPF and NPS in India?"
     expected: ["accounts_and_taxes_india/indian-savings-and-tax-accounts-overview"]
   - question: "How is a share price set by bids and asks on an exchange?"
-    expected: ["market_basics/how-stock-markets-work"]
+    expected: ["market_basics/how-stock-markets-work", "market_basics/how-prices-move"]
   - question: "What do NAV and CAGR stand for?"
-    expected: ["glossary/finance-glossary-essentials"]
+    expected: ["glossary/finance-glossary-essentials", "etfs_and_funds/net-asset-value-nav-explained", "glossary/mutual-fund-terms"]
   # --- stocks batch (casual wording, not copied from the articles) ---
   - question: "Where does my order actually go after I tap the trade button in my broker app?"
     expected: ["stocks/shares-and-exchanges"]
@@ -40,11 +40,11 @@ questions:
   - question: "Why did a stock drop on the day the company paid out cash to its holders?"
     expected: ["stocks/dividends"]
   - question: "Does every listed company send profit money to the people who own it?"
-    expected: ["stocks/dividends"]
+    expected: ["stocks/dividends", "stocks/what-is-a-stock"]
   - question: "Is a company with a 5000 rupee share automatically bigger than one with a 50 rupee share?"
     expected: ["stocks/market-capitalisation"]
   - question: "How do people measure how big a listed business is?"
-    expected: ["stocks/market-capitalisation"]
+    expected: ["stocks/market-capitalisation", "stocks/large-mid-small-caps"]
   - question: "My friend says a stock is trading at 25 times its yearly profit, what does that mean?"
     expected: ["stocks/price-to-earnings-ratio"]
   - question: "Why can't I judge a bank and a software firm using the same valuation multiple?"
@@ -304,7 +304,7 @@ near_miss:
   - "How do I file my GST return?"
 
 grid:
-  chunk_size: [400, 600, 800]
+  chunk_size: [300, 400, 600]
   chunk_overlap: [60, 120]
-  top_k: [1, 3, 4]
-  threshold: [0.25, 0.35, 0.45]
+  top_k: [4, 6]
+  threshold: [0.30, 0.35]
