@@ -40,7 +40,6 @@ rag:
   chunk_overlap: 120
   top_k: 4
   score_threshold: 0.35
-  candidate_multiplier: 5     # over-fetch factor when a topic filter is set
   topics:
     - stocks
     - bonds

@@ -2,8 +2,8 @@
 
 Design pattern: STRATEGY consumer. retrieve() depends only on the embedder and
 VectorStore interfaces, so tests inject fakes. Example: retrieve("What is a
-bond?", topic="bonds") over-fetches top_k x candidate_multiplier chunks (FAISS
-has no metadata filter), keeps the bonds ones, drops scores under
+bond?", topic="bonds") searches every chunk (FAISS has
+no metadata filter), keeps the bonds ones, drops scores under
 rag.score_threshold and returns at most top_k; an off-topic question returns [].
 """
 from __future__ import annotations
@@ -49,9 +49,12 @@ def retrieve(
         return []
 
     k = rag["top_k"] if top_k is None else top_k
-    candidates = k if topic is None else k * rag["candidate_multiplier"]
-    embedder = embedder or get_embedder()
-    store = store or get_vector_store()
+    if embedder is None:
+        embedder = get_embedder()
+    if store is None:
+        store = get_vector_store()
+    # FAISS has no metadata filter, so a topic filter searches every chunk.
+    candidates = k if topic is None else len(store)
 
     hits = store.search(embedder.embed_query(query), candidates)
     if topic is not None:

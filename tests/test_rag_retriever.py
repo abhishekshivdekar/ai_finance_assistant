@@ -30,6 +30,9 @@ class SpyStore:
     def __init__(self, inner):
         self.inner, self.requested = inner, []
 
+    def __len__(self):
+        return len(self.inner)
+
     def search(self, vector, k):
         self.requested.append(k)
         return self.inner.search(vector, k)
@@ -67,15 +70,33 @@ def test_topic_filter_keeps_only_that_topic(store):
     assert chunks and {c.topic for c in chunks} == {"bonds"}
 
 
-def test_topic_filter_overfetches_candidates(store):
+def test_topic_filter_searches_all_chunks(store):
     spy = SpyStore(store)
-    multiplier = get_config()["rag"]["candidate_multiplier"]
     _retrieve(QUERY, spy, topic="bonds", top_k=1)
     _retrieve(QUERY, spy, top_k=1)
-    assert spy.requested == [1 * multiplier, 1]
+    assert spy.requested == [len(store), 1]
 
 
-def test_overfetch_finds_a_chunk_that_plain_top_k_would_miss(store):
+class EmptyStore:
+    def __init__(self):
+        self.searched = False
+
+    def __len__(self):
+        return 0
+
+    def search(self, vector, k):
+        self.searched = True
+        return []
+
+
+def test_explicit_empty_store_is_used_not_replaced(store, monkeypatch):
+    monkeypatch.setattr(retriever, "get_vector_store", lambda: store)
+    empty = EmptyStore()
+    assert _retrieve("bond coupon maturity interest issuer", empty) == []
+    assert empty.searched
+
+
+def test_topic_filter_finds_a_chunk_that_plain_top_k_would_miss(store):
     assert _retrieve(QUERY, store, top_k=1)[0].topic == "stocks"
     assert [c.topic for c in _retrieve(QUERY, store, topic="bonds", top_k=1)] == ["bonds"]
 
