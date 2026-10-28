@@ -19,8 +19,9 @@ log = get_logger(__name__)
 class SentenceTransformerEmbedder:
     """Wraps a local sentence-transformers model; vectors are L2-normalised."""
 
-    def __init__(self, model_name: str) -> None:
+    def __init__(self, model_name: str, show_progress_bar: bool | None = None) -> None:
         self.model_name = model_name
+        self.show_progress_bar = show_progress_bar   # None = library default
         self._model: Any = None
 
     def _load(self) -> Any:
@@ -34,8 +35,11 @@ class SentenceTransformerEmbedder:
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed many texts into normalised vectors."""
+        options: dict[str, Any] = {}
+        if self.show_progress_bar is not None:
+            options["show_progress_bar"] = self.show_progress_bar
         vectors = self._load().encode(
-            texts, normalize_embeddings=True, convert_to_numpy=True
+            texts, normalize_embeddings=True, convert_to_numpy=True, **options
         )
         return [list(map(float, v)) for v in vectors]
 

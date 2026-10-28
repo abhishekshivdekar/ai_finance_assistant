@@ -10,12 +10,20 @@ from pathlib import Path
 
 EMBEDDING_MODEL: str | None = None   # None = use embeddings.model from config.yaml
 
+# The sweep runs ONLY these (chunk_size, chunk_overlap, top_k, threshold) configs,
+# each with the diversity caps on and off. Held-out hit rate / MRR are the first columns.
+SWEEP_CONFIGS: list[tuple[int, int, int, float]] = [
+    (300, 120, 6, 0.30),
+    (400, 120, 6, 0.30),
+    (400, 60, 6, 0.35),
+]
+
 HARNESS = Path(__file__).parent / "tests" / "rag_eval" / "rag_eval.py"
 
 
 def run() -> None:
     """Load the harness by path (tests/ is not a package) and call its main()."""
-    runpy.run_path(str(HARNESS), run_name="rag_eval")["main"](EMBEDDING_MODEL)
+    runpy.run_path(str(HARNESS), run_name="rag_eval")["main"](EMBEDDING_MODEL, SWEEP_CONFIGS)
 
 
 if __name__ == "__main__":

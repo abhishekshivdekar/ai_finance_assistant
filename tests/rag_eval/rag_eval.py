@@ -55,16 +55,17 @@ def article_id(chunk_id: str) -> str:
 
 
 def make_embedder(model_name: str | None = None) -> Any:
-    """Embedder for the eval: the shared one from config, or a separate one by name.
+    """Embedder for the eval: its own instance, with the progress bar switched off.
 
-    A named model gets its OWN SentenceTransformerEmbedder, so the cached
-    get_embedder() singleton the app uses is untouched. The eval only builds
-    in-memory stores (build_store) and never saves, so the app's index and
-    manifest are not affected either.
+    The model is `model_name`, or embeddings.model from config.yaml when None.
+    The eval gets its OWN SentenceTransformerEmbedder (show_progress_bar=False,
+    so the output is not flooded), never the cached get_embedder() singleton the
+    app uses. The eval only builds in-memory stores (build_store) and never
+    saves, so the app's index and manifest are not affected either.
     """
-    if model_name is None:
-        return get_embedder()
-    return SentenceTransformerEmbedder(model_name)
+    return SentenceTransformerEmbedder(
+        model_name or get_config()["embeddings"]["model"], show_progress_bar=False
+    )
 
 
 def kept_hits(
@@ -148,8 +149,12 @@ def sweep(
     held_out: list[dict[str, Any]] | None = None,
     near_miss: list[str] | None = None,
     diversity_modes: tuple[bool, ...] = (True, False),
+    configs: list[tuple[int, int, int, float]] | None = None,
 ) -> list[dict[str, Any]]:
     """Evaluate every grid combination. One store per (chunk_size, overlap).
+
+    `configs`, a list of (chunk_size, chunk_overlap, top_k, threshold), replaces
+    the grid product so that only those configurations run.
 
     Every combination is scored once per entry of `diversity_modes` (caps on,
     caps off), shown in the "diversity" column. Each question searches the whole
@@ -166,7 +171,14 @@ def sweep(
     near_vecs = [embedder.embed_query(q) for q in near_miss or []]
     rows: list[dict[str, Any]] = []
 
-    for size, overlap in product(grid["chunk_size"], grid["chunk_overlap"]):
+    if configs is None:
+        sizes = list(product(grid["chunk_size"], grid["chunk_overlap"]))
+        settings = {pair: list(product(grid["top_k"], grid["threshold"])) for pair in sizes}
+    else:
+        sizes = list(dict.fromkeys((c[0], c[1]) for c in configs))
+        settings = {pair: [(c[2], c[3]) for c in configs if (c[0], c[1]) == pair] for pair in sizes}
+
+    for size, overlap in sizes:
         if overlap >= size:
             log.warning("Skipping overlap %d >= chunk_size %d", overlap, size)
             continue
@@ -176,9 +188,7 @@ def sweep(
         ho_hits = [store.search(v, every_chunk) for v in ho_vecs]
         off_hits = [store.search(v, every_chunk) for v in off_vecs]
         near_hits = [store.search(v, every_chunk) for v in near_vecs]
-        for top_k, threshold, diversity in product(
-            grid["top_k"], grid["threshold"], diversity_modes
-        ):
+        for (top_k, threshold), diversity in product(settings[(size, overlap)], diversity_modes):
             def rank(h: list[tuple[dict[str, Any], float]]) -> list[str]:
                 return rank_from_hits(h, top_k, threshold, diversity)
 
@@ -216,18 +226,19 @@ def best_row(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     return best
 
 
-BASE_COLUMNS = ["chunk_size", "chunk_overlap", "top_k", "threshold", "diversity",
-                "hit_rate", "mrr", "off_topic_false", "near_miss_false"]
+CONFIG_COLUMNS = ["chunk_size", "chunk_overlap", "top_k", "threshold", "diversity"]
+DEV_COLUMNS = ["hit_rate", "mrr", "off_topic_false", "near_miss_false"]
 HELD_OUT_COLUMNS = ["held_out_hit_rate", "held_out_mrr"]
 
 
 def format_table(rows: list[dict[str, Any]], show_held_out: bool = False) -> str:
     """Render the sweep rows as a fixed-width text table.
 
-    The held-out columns are appended only when show_held_out is True (that is,
-    when at least one held-out item is labelled); near_miss_false is always shown.
+    The held-out columns are the primary ones: they come right after the
+    configuration, and appear only when show_held_out is True (that is, when at
+    least one held-out item is labelled). near_miss_false is always shown.
     """
-    columns = BASE_COLUMNS + (HELD_OUT_COLUMNS if show_held_out else [])
+    columns = CONFIG_COLUMNS + (HELD_OUT_COLUMNS if show_held_out else []) + DEV_COLUMNS
     width = max(len(c) for c in columns)
     lines = ["  ".join(f"{c:>{width}}" for c in columns)]
     for row in rows:
@@ -329,11 +340,16 @@ def diagnostics(
     return "\n".join(lines)
 
 
-def main(embedding_model: str | None = None) -> None:
+def main(
+    embedding_model: str | None = None,
+    configs: list[tuple[int, int, int, float]] | None = None,
+) -> None:
     """Run the sweep; print the summary, table and diagnostics (config row, best row).
 
     embedding_model None uses config.yaml; a name builds the eval stores with
     that model instead (see make_embedder). The app's saved index is untouched.
+    `configs` (chunk_size, chunk_overlap, top_k, threshold) limits the sweep to
+    those configurations instead of the questions.yaml grid.
     """
     data = load_questions()
     articles = load_articles()
@@ -341,7 +357,7 @@ def main(embedding_model: str | None = None) -> None:
     held_out = data.get("held_out") or []
     rows = sweep(
         data["grid"], articles, embedder, data["questions"], data["off_topic"],
-        held_out, data.get("near_miss") or [],
+        held_out, data.get("near_miss") or [], configs=configs,
     )
     print(f"embedding model: {embedding_model or get_config()['embeddings']['model']}")
     print("\n".join(summarize_sets(data)))

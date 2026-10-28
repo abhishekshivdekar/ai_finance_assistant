@@ -263,36 +263,26 @@ off_topic:
 # held_out: independent questions written by the project owner, not derived from
 # the articles. Items with an empty `expected` are skipped by the harness.
 held_out:
-  # TODO label after batch B4
   - question: "I just got my first salary, where do I even start?"
-    expected: []
-  # TODO label after batch B4
+    expected: ["goals_and_retirement/setting-financial-goals", "goals_and_retirement/budgeting-basics"]
   - question: "Is a mutual fund the same thing as buying shares, or how are they different?"
-    expected: []
-  # TODO label after batch B4
+    expected: ["etfs_and_funds/etfs-and-mutual-funds-basics"]
   - question: "How much money should I keep aside for emergencies, and where should I store it?"
-    expected: []
-  # TODO label after batch B4
+    expected: ["goals_and_retirement/emergency-fund-explained"]
   - question: "What happens to my money if the stock market crashes tomorrow?"
-    expected: []
-  # TODO label after batch B4
+    expected: ["market_basics/bull-and-bear-markets", "risk_and_diversification/risk-and-diversification-basics"]
   - question: "Do I need to pay taxes if I sell my investments after holding them for a year?"
-    expected: []
-  # TODO label after batch B4
+    expected: ["accounts_and_taxes_india/capital-gains-basics"]
   - question: "What's the difference between investing a small amount every month versus putting a big chunk in all at once?"
-    expected: []
-  # TODO label after batch B4
+    expected: ["etfs_and_funds/sip-versus-lump-sum"]
   - question: "Is saving money in a bank account enough to beat inflation over time?"
-    expected: []
-  # TODO label after batch B4
+    expected: ["risk_and_diversification/inflation-risk-explained"]
   - question: "How do I choose between a safe fixed-return option and market-linked investments?"
-    expected: []
-  # TODO label after batch B4
+    expected: ["risk_and_diversification/risk-versus-return", "bonds/bonds-versus-fixed-deposits"]
   - question: "If I start putting money into mutual funds today, can I withdraw it without penalties?"
-    expected: []
-  # TODO label after batch B4
+    expected: ["etfs_and_funds/mutual-fund-exit-loads-and-lock-ins"]
   - question: "What are index funds, and why does everyone recommend them for beginners?"
-    expected: []
+    expected: ["etfs_and_funds/index-funds-explained"]
 
 # near_miss: finance-adjacent questions the knowledge base does NOT cover;
 # like off_topic they must match nothing above the threshold (counted separately).
