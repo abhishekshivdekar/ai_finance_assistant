@@ -58,3 +58,7 @@ Inflation rates vary by year and by country, and the cost of a personal basket o
 ## Key takeaway
 
 Inflation quietly reduces what money can buy, so a balance that grows slowly may still lose real value. Looking at real returns helps show whether purchasing power is holding up. This article is educational and does not recommend any product.
+
+## In everyday words
+
+Say your savings grow slowly, but the price of vegetables, fuel and rent climbs faster. After a few years the same money buys less than it used to, even though the number in your account went up. That is what people mean when they say inflation eats into savings. It is a slow, quiet loss that is easy to miss because the balance never actually goes down.

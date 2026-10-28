@@ -141,6 +141,64 @@ questions:
   - question: "How often do investors reset their portfolio back to the original split?"
     expected: ["risk_and_diversification/rebalancing-explained"]
 
+  # --- goals_and_retirement and accounts_and_taxes_india batch ---
+  - question: "What is an emergency fund and how many months of expenses should it cover?"
+    expected: ["goals_and_retirement/emergency-fund-explained"]
+  - question: "My phone died and my scooter broke down in the same week, how do people get ready for sudden bills like that?"
+    expected: ["goals_and_retirement/emergency-fund-explained"]
+  - question: "What is compound interest and how is it different from simple interest?"
+    expected: ["goals_and_retirement/compound-interest-explained"]
+  - question: "Why do people say money grows faster the longer you leave it alone?"
+    expected: ["goals_and_retirement/compound-interest-explained", "goals_and_retirement/setting-financial-goals"]
+  - question: "What is a time horizon in financial planning?"
+    expected: ["goals_and_retirement/time-horizon-explained"]
+  - question: "I need some money in two years but my cousin's goal is twenty years away, does that change how we each treat it?"
+    expected: ["goals_and_retirement/time-horizon-explained", "goals_and_retirement/setting-financial-goals"]
+  - question: "What is the difference between willingness and ability to take risk?"
+    expected: ["goals_and_retirement/risk-tolerance-explained"]
+  - question: "I can afford to lose money but I get really anxious when my savings drop, what does that say about me?"
+    expected: ["goals_and_retirement/risk-tolerance-explained"]
+  - question: "How do people estimate how much they need for retirement?"
+    expected: ["goals_and_retirement/retirement-planning-basics", "goals_and_retirement/setting-financial-goals"]
+  - question: "How do people work out if the pile they built will last after the salary stops?"
+    expected: ["goals_and_retirement/retirement-planning-basics"]
+  - question: "What is the difference between saving and investing?"
+    expected: ["goals_and_retirement/saving-versus-investing"]
+  - question: "Is leaving cash in my bank account the same as putting it to work somewhere?"
+    expected: ["goals_and_retirement/saving-versus-investing", "risk_and_diversification/inflation-risk-explained"]
+  - question: "How do I make a monthly budget?"
+    expected: ["goals_and_retirement/budgeting-basics"]
+  - question: "I earn okay but by the 20th there is nothing left, how can I see where it all goes?"
+    expected: ["goals_and_retirement/budgeting-basics"]
+  - question: "What is PPF and how does its lock-in work?"
+    expected: ["accounts_and_taxes_india/ppf-explained", "accounts_and_taxes_india/indian-savings-and-tax-accounts-overview"]
+  - question: "Is there a government-run savings account for the long haul that doesn't move with the stock market?"
+    expected: ["accounts_and_taxes_india/ppf-explained", "accounts_and_taxes_india/indian-savings-and-tax-accounts-overview"]
+  - question: "What is EPF and what is a UAN?"
+    expected: ["accounts_and_taxes_india/epf-explained"]
+  - question: "What is the money cut from my payslip every month that my company matches?"
+    expected: ["accounts_and_taxes_india/epf-explained", "accounts_and_taxes_india/indian-savings-and-tax-accounts-overview"]
+  - question: "What is the National Pension System and how does it invest contributions?"
+    expected: ["accounts_and_taxes_india/nps-explained", "accounts_and_taxes_india/indian-savings-and-tax-accounts-overview"]
+  - question: "Can a freelancer with no employer set up a pension that invests in shares and bonds?"
+    expected: ["accounts_and_taxes_india/nps-explained"]
+  - question: "What is an ELSS fund and what is its lock-in?"
+    expected: ["accounts_and_taxes_india/elss-explained", "accounts_and_taxes_india/indian-savings-and-tax-accounts-overview"]
+  - question: "Is there a share-based fund where I can't pull my money out for a few years?"
+    expected: ["accounts_and_taxes_india/elss-explained", "etfs_and_funds/mutual-fund-exit-loads-and-lock-ins"]
+  - question: "How do short-term and long-term capital gains differ?"
+    expected: ["accounts_and_taxes_india/capital-gains-basics"]
+  - question: "Does the length of time I keep an investment change how the taxman treats my profit?"
+    expected: ["accounts_and_taxes_india/capital-gains-basics"]
+  - question: "What is the difference between a demat account and a trading account?"
+    expected: ["accounts_and_taxes_india/demat-and-trading-accounts"]
+  - question: "Why do I need a separate locker for my shares apart from the app where I place orders?"
+    expected: ["accounts_and_taxes_india/demat-and-trading-accounts", "stocks/shares-and-exchanges"]
+  - question: "How do tax deductions work in general?"
+    expected: ["accounts_and_taxes_india/tax-saving-deductions-overview"]
+  - question: "People say they saved tax by investing, does that mean the government gives the money back?"
+    expected: ["accounts_and_taxes_india/tax-saving-deductions-overview"]
+
 off_topic:
   - "What is the best recipe for a chocolate cake?"
   - "Who won the football world cup in 2018?"

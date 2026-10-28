@@ -52,3 +52,7 @@ These are reasons people give for their interest, not a recommendation. Whether 
 ## Key takeaway
 
 Index funds offer a low-effort, low-cost way to hold a market's worth of companies, but they carry the full market risk and a small tracking difference. This article is educational only and does not endorse any fund or approach.
+
+## In everyday words
+
+Most funds have a manager who picks the companies. An index fund works differently because it simply copies a list, such as the Nifty or the Sensex, and owns the same companies in about the same proportions. Nobody is trying to guess which company will do best. If the Nifty goes up or down, the fund tends to follow it closely, apart from a small cost for running the fund.

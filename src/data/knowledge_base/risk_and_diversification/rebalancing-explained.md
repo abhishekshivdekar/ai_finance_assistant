@@ -54,3 +54,7 @@ Rebalancing assumes the target mix is still right. Changes in goals, income, tim
 ## Key takeaway
 
 Rebalancing restores a portfolio to its planned mix after prices push it off course, mainly to keep risk where the investor wanted it. It brings costs and does not promise higher returns. This article is educational only.
+
+## In everyday words
+
+Imagine you planned to keep your savings split in a certain way, and then one holding did really well. Now it makes up a bigger share of everything you own than you intended, so your money is leaning more on that one thing. Rebalancing is simply the idea of moving the mix back toward the original plan. It is like straightening a picture that has slowly tilted on the wall.

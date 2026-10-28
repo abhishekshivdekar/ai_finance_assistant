@@ -12,6 +12,7 @@ FILES = sorted(KB_DIR.rglob("*.md"))
 ALLOWED_HOSTS = {
     "www.investor.gov", "www.finra.org", "www.sebi.gov.in", "www.amfiindia.com",
     "www.rbi.org.in", "www.incometax.gov.in", "www.nseindia.com", "www.bseindia.com",
+    "www.epfindia.gov.in", "www.nsdl.co.in", "www.cdslindia.com", "www.indiapost.gov.in",
 }
 
 
@@ -41,7 +42,12 @@ def test_article_rules(path):
         assert url.path in ("", "/"), f"deep link not allowed: {ref['url']}"
 
 
-def test_india_article_points_to_official_source_without_rates():
-    article = next(a for a in load_articles(KB_DIR) if a.topic == "accounts_and_taxes_india")
+INDIA_ARTICLES = [a for a in load_articles(KB_DIR) if a.topic == "accounts_and_taxes_india"]
+
+
+@pytest.mark.parametrize("article", INDIA_ARTICLES, ids=lambda a: a.title)
+def test_india_articles_point_to_official_source_without_rates(article):
+    """Every India tax article names incometax.gov.in and carries no rates."""
     assert "incometax.gov.in" in article.body
     assert "%" not in article.body and "percent" not in article.body.lower()
+    assert "%" not in article.title and "percent" not in article.title.lower()

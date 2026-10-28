@@ -58,3 +58,7 @@ Volatility figures are based on the past. Calm periods can end abruptly, and ext
 ## Key takeaway
 
 Volatility measures how widely an investment's price swings, usually through standard deviation. It is not identical to risk, but it shapes how bearable an investment is. This article is educational only.
+
+## In everyday words
+
+Some stocks are jumpy. One week the price shoots up, and the next week it drops back down, and it can feel like a rollercoaster. People use the word volatility for how big and how fast these ups and downs are. A calm stock moves a little each day, while a jumpy one can move a lot, and neither one tells you where the price will go next.
