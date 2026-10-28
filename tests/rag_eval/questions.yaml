@@ -82,6 +82,64 @@ questions:
     expected: ["bonds/bond-risks"]
   - question: "Besides the borrower running away with my money, what else can go wrong with lending instruments?"
     expected: ["bonds/bond-risks"]
+  # --- etfs_and_funds batch 2 ---
+  - question: "If I need my money back from a fund next month, will they charge me something?"
+    expected: ["etfs_and_funds/mutual-fund-exit-loads-and-lock-ins"]
+  - question: "Can I take my money out of a fund whenever I want or is it stuck for some years?"
+    expected: ["etfs_and_funds/mutual-fund-exit-loads-and-lock-ins"]
+  - question: "How come a fund can be bought through my share trading app all day like a regular stock?"
+    expected: ["etfs_and_funds/exchange-traded-funds-explained", "etfs_and_funds/etfs-and-mutual-funds-basics"]
+  - question: "Why does the price of a fund on the exchange sometimes differ from what its holdings are worth?"
+    expected: ["etfs_and_funds/exchange-traded-funds-explained"]
+  - question: "What does it mean when a fund just copies the Nifty instead of having someone pick companies?"
+    expected: ["etfs_and_funds/index-funds-explained", "etfs_and_funds/active-versus-passive-investing"]
+  - question: "Why doesn't my copy-the-market fund give exactly the same return as the market?"
+    expected: ["etfs_and_funds/index-funds-explained"]
+  - question: "How much does a fund quietly take from me every year for running things?"
+    expected: ["etfs_and_funds/expense-ratio-explained"]
+  - question: "Why does my friend say the direct version of a scheme earns more than the regular one?"
+    expected: ["etfs_and_funds/expense-ratio-explained"]
+  - question: "A fund unit costs 15 rupees and another costs 800, does the cheaper one give me more growth?"
+    expected: ["etfs_and_funds/net-asset-value-nav-explained"]
+  - question: "At what price do I get fund units if I invest in the afternoon?"
+    expected: ["etfs_and_funds/net-asset-value-nav-explained"]
+  - question: "Is putting a fixed sum in every month smarter than investing my whole bonus at once?"
+    expected: ["etfs_and_funds/sip-versus-lump-sum"]
+  - question: "What happens to my monthly instalments when prices keep falling for a long time?"
+    expected: ["etfs_and_funds/sip-versus-lump-sum"]
+  - question: "Do fund managers who pick companies actually do better than just copying the market?"
+    expected: ["etfs_and_funds/active-versus-passive-investing", "etfs_and_funds/index-funds-explained"]
+  - question: "Why do some people say paying a professional to choose stocks isn't worth it?"
+    expected: ["etfs_and_funds/active-versus-passive-investing", "etfs_and_funds/expense-ratio-explained"]
+  # --- risk_and_diversification batch 2 ---
+  - question: "Why do investments that promise big gains also scare people so much?"
+    expected: ["risk_and_diversification/risk-versus-return"]
+  - question: "Is putting money in something super safe really without any downside?"
+    expected: ["risk_and_diversification/risk-versus-return", "risk_and_diversification/inflation-risk-explained"]
+  - question: "How many different companies do I need before I'm not too dependent on one of them?"
+    expected: ["risk_and_diversification/diversification-explained"]
+  - question: "I own five funds, am I properly spread out or is it all the same stuff?"
+    expected: ["risk_and_diversification/diversification-explained", "risk_and_diversification/correlation-basics"]
+  - question: "How do people decide what portion of their savings goes to shares versus fixed income?"
+    expected: ["risk_and_diversification/asset-allocation-explained"]
+  - question: "Does a young person with a steady job split savings differently from someone close to retirement?"
+    expected: ["risk_and_diversification/asset-allocation-explained", "goals_and_retirement/setting-financial-goals"]
+  - question: "What does it mean when two investments tend to move in opposite directions?"
+    expected: ["risk_and_diversification/correlation-basics"]
+  - question: "Why do all my holdings drop together when markets get scary even though I own different things?"
+    expected: ["risk_and_diversification/correlation-basics", "risk_and_diversification/diversification-explained"]
+  - question: "What do people mean when they say a stock is jumpy?"
+    expected: ["risk_and_diversification/volatility-explained"]
+  - question: "If something loses half its value, why is getting back to even so tough?"
+    expected: ["risk_and_diversification/volatility-explained"]
+  - question: "My savings earn 3 percent but groceries cost more every year, am I losing out?"
+    expected: ["risk_and_diversification/inflation-risk-explained"]
+  - question: "Why do older people say a hundred rupees used to buy so much more?"
+    expected: ["risk_and_diversification/inflation-risk-explained"]
+  - question: "My shares did great and now they are a bigger chunk of my savings than I planned, what do people do about that?"
+    expected: ["risk_and_diversification/rebalancing-explained"]
+  - question: "How often do investors reset their portfolio back to the original split?"
+    expected: ["risk_and_diversification/rebalancing-explained"]
 
 off_topic:
   - "What is the best recipe for a chocolate cake?"

@@ -12,7 +12,7 @@ references:
 
 # Credit Ratings
 
-A bond is only as dependable as the borrower behind it. Credit ratings are a standard way to describe how likely an issuer is to meet its payment promises. The article "How Bonds Work" lists credit risk as one of the main risks; this article explains how ratings are produced and read.
+A bond is only as dependable as the borrower behind it, and independent credit rating agencies are the organisations that assess a borrower's ability to repay. Credit ratings are a standard way to describe how likely an issuer is to meet its payment promises. The article "How Bonds Work" lists credit risk as one of the main risks; this article explains how ratings are produced and read.
 
 ## What a rating is
 

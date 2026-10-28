@@ -12,7 +12,7 @@ references:
 
 # IPO Basics
 
-An initial public offering, or IPO, is the moment a privately owned company offers its shares to the general public for the first time. The article "What Is a Stock?" mentions IPOs in one line; this article walks through how the process usually works.
+An initial public offering, or IPO, is the moment a privately owned company offers its shares to the general public for the first time. It is also called a new issue or a public issue. The article "What Is a Stock?" mentions IPOs in one line; this article walks through how the process usually works.
 
 ## Why a company goes public
 
@@ -39,7 +39,7 @@ An IPO can contain two parts. A **fresh issue** creates new shares, and the mone
 
 ## Categories of applicants
 
-Issues in India set aside portions for different groups, such as retail individuals, institutional investors and non-institutional investors. Each group has its own allotment rules, which is why an applicant may receive fewer shares than requested, or none.
+Issues in India set aside portions for different groups, such as retail individuals, institutional investors and non-institutional investors. Each group has its own allotment rules, which is why an applicant may receive fewer shares than requested, or none. A beginner who says "I applied but did not get allotted" has usually run into this: when an issue is oversubscribed, allotment can be by lottery, and the unallotted application money is released back to the applicant.
 
 ## Listing day and what follows
 
