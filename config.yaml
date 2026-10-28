@@ -22,6 +22,8 @@ llm:
       model: gpt-6-luna
     finance_qa:                 # Finance Q&A grounded answer
       model: gpt-6-luna
+    portfolio_summary:          # Portfolio agent: plain-language summary of computed metrics
+      model: gpt-6-luna
 
 pricing:                      # USD per 1M tokens, keyed by model ID
   gpt-6-luna:
@@ -117,6 +119,53 @@ finance_qa:                   # Finance Q&A agent prompts and messages (architec
     - Do not state tax rates, limits or deadlines from memory; use only what the
       context says and point to the official source for current figures.
     - Use short, plain language that a beginner can follow.
+
+portfolio:                    # Portfolio agent (architecture section 2.2). All values illustrative.
+  max_holdings: 50            # holdings beyond this are ignored (bounds the number of quote calls)
+  full_diversification_holdings: 20   # equal positions in one currency that count as fully spread (HHI scaling)
+  single_class_penalty: 15    # points taken off the diversification score when everything is one asset class
+  concentration_warning: 0.40 # largest-position share (0-1) that adds a warning
+  equity_like_classes: [equity, etf, fund, other]   # asset classes counted in the equity share (cautious)
+  diversification_bands:      # diversification score (0-100)
+    concentrated_below: 40
+    diversified_from: 70
+  risk:                       # risk label = the higher of the equity level and the concentration level
+    equity_moderate_from: 0.40
+    equity_high_from: 0.70
+    concentration_moderate_from: 0.30
+    concentration_high_from: 0.50
+  needs_input_message: >
+    Add at least one holding (ticker, quantity) to analyse your portfolio.
+  unpriced_message: >
+    I couldn't get a price for any of the holdings right now, so I can't
+    analyse the portfolio. Please check the tickers or try again later.
+  summary_fallback: >
+    Here are the numbers calculated from your holdings: how the value is split,
+    how concentrated the largest positions are, a diversification score, a risk
+    label and the average fund cost where it was provided. A plain-language
+    summary was not available this time, so please read the table directly.
+    This is educational information, not personal advice.
+  summary_prompt: |
+    You are a finance education assistant explaining a portfolio to a beginner.
+    Below is a JSON summary of numbers that were already calculated by software.
+    Write a short plain-language summary in one paragraph (no lists, no headings).
+
+    Rules:
+    - Use ONLY numbers that appear in the JSON, copied exactly as written. Never
+      calculate, round, convert or invent a number, and never convert currencies.
+    - Each currency is a separate portfolio; never add them together.
+    - Mention the concentration (the largest position), the diversification score
+      and label, the risk label, and how many holdings the expense ratio is based
+      on (or that it was not provided).
+    - Describe what the numbers show, for example "the largest holding is 42.0%
+      of the INR portfolio". This is educational information, not personal
+      advice: never tell the reader to buy, sell, hold or rebalance anything and
+      never say "you should".
+    - If the JSON lists warnings (a missing price, or a stale or sample price),
+      mention them briefly.
+
+    JSON:
+    {metrics_json}
 
 agents:
   error_message: "Sorry, something went wrong while preparing this answer. Please try again."

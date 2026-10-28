@@ -31,12 +31,13 @@ class MarketPayload(TypedDict, total=False):
 
 
 class PortfolioPayload(TypedDict, total=False):
-    """Portfolio agent data. Values are kept per currency, never summed."""
+    """Portfolio agent data: PortfolioMetrics as a plain dict, plus warnings.
 
-    weights: dict[str, float]
-    total_value_by_currency: dict[str, float]
-    top_holding_share: float
-    sector_split: dict[str, float]
+    Values are kept per currency and never summed across currencies.
+    """
+
+    metrics: dict[str, Any]
+    warnings: list[str]
 
 
 class GoalPayload(TypedDict, total=False):

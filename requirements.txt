@@ -23,6 +23,7 @@ pandas
 
 # Config
 pyyaml
+pydantic
 python-dotenv
 
 # Testing

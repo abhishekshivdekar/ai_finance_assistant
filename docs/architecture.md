@@ -104,15 +104,21 @@ All agents extend `BaseAgent` (section 3). Every agent provides information and 
 - **Payload:** `QAPayload` with `rewritten_query` and `retrieved` (count). An empty query returns `needs_input`.
 
 ### 2.2 Portfolio Analysis
-- **Purpose:** explain a user's holdings: allocation, concentration, diversification, simple risk indicators.
-- **Inputs:** portfolio table (`ticker, shares, cost_basis`, plus optional `expense_ratio` and `asset_class`) from the Portfolio tab, or the saved portfolio from the profile store. `expense_ratio` is the annual fund cost in percent (e.g. `0.20`); when missing it is shown as "not provided", never guessed. `asset_class` is one of `equity`, `bond`, `gold`, `cash`, `other`; a holding without one counts as `unclassified`.
-- **Outputs:** `PortfolioPayload` (weights, total value per currency, top-holding share, sector split, asset-class split, weighted-average expense ratio and its coverage, diversification score with its breakdown, risk label) plus plain-language commentary.
-- **Metrics (all computed in code; the thresholds and weights below are starting values in `config.yaml` under `portfolio:`, labelled "illustrative"):**
-  - **Weighted-average expense ratio** = sum of (weight x `expense_ratio`) over the holdings that provide one, with weights re-normalised to those holdings. `expense_ratio_coverage` is the share of portfolio value that provided one. If no holding provides it, the result is "not provided".
-  - **Diversification score (0 to 100)** = `round(100 x (0.4 x count_score + 0.4 x concentration_score + 0.2 x spread_score))`, where `count_score = min(N, 15) / 15` (N = number of holdings), `concentration_score = 1 - top_holding_share`, and `spread_score = min(k, 4) / 4` (k = number of asset classes with at least 5% of portfolio value). The three sub-scores are returned in `diversification_breakdown`. Example: 5 equally weighted equity holdings give count 0.33, concentration 0.80, spread 0.25, so the score is 50. It is an educational indicator, not a rating.
-  - **Risk label (`low` / `moderate` / `high`)** from the asset-class mix: let `growth_share` be the portfolio share in `equity`, `other` and `unclassified`; below 30% is `low`, 30% to 70% is `moderate`, above 70% is `high`. Example: 80% equity and 20% bonds gives `high`. It describes the mix only and is not a personal risk assessment.
-  - Per the market scope rule, weights and these metrics are computed within each currency; a mixed USD/INR portfolio gets one labelled set per currency, not a blended number.
-- **Uses:** market data layer for current prices, pure-Python metric functions, LLM `default` for explanation only (numbers are computed in code, not by the LLM).
+- **Purpose:** explain a user's holdings: allocation, concentration, diversification and a simple risk label. Educational only.
+- **Principle:** every number is computed in deterministic Python (`src/core/portfolio_metrics.py`). The LLM is called at most once, to write a short plain-language summary from the already-computed metrics, and never calculates or invents a number.
+- **Inputs:** `state["portfolio"]`, a list of holdings: `ticker`, `quantity` (> 0), optional `avg_cost` (per unit, assumed to be in the quote's currency), optional `asset_class` (`equity`, `bond`, `etf`, `fund`, `cash`, `other`; default `equity`) and optional `expense_ratio_pct` (annual fund cost in percent, e.g. `0.20`; never guessed when missing). The currency is not an input: it comes from the quote. Models are immutable pydantic classes in `src/core/portfolio_models.py` (`Holding`, `Position`, `CurrencyMetrics`, `PortfolioMetrics`).
+- **Valuation (`src/core/portfolio_valuation.py`):** each holding is priced through the injected market provider (the shared `CachedProvider`, so cache, retry, stale-cache and sample-data fallbacks apply). Currencies are **never added or converted** and no FX rate is invented: totals, weights and every metric below are per currency. A holding whose price is unavailable is left out of the totals and named in the warnings, and the rest is still analysed. Prices from stale cache or sample data are flagged on the position and in the warnings. Invalid rows, duplicate tickers and holdings beyond `portfolio.max_holdings` are skipped with a warning.
+- **Metrics (pure functions; thresholds in `config.yaml` under `portfolio:`, labelled "illustrative"):**
+  - **Weights:** position value divided by its currency's total (sums to 1 per currency).
+  - **Unrealised P&L and %:** only where `avg_cost` was given: `(price - avg_cost) x quantity` and `(price / avg_cost - 1) x 100`.
+  - **Allocation by asset class:** share of value per class.
+  - **Concentration:** largest position weight and top-3 weight. A warning is added when the largest weight reaches `concentration_warning`, and a single-holding portfolio gets its own warning.
+  - **Diversification score (0 to 100):** `HHI = sum(weight^2)`; `score = clamp(100 x (1 - HHI) / (1 - 1/N_full), 0, 100)`, minus `single_class_penalty` points when every position is one asset class, floored at 0. `N_full = full_diversification_holdings` is the number of equal positions that counts as fully spread. Examples with `N_full = 20` and penalty 15: one holding scores 0; five equal equities score round(100 x 0.8 / 0.95) = 84, minus 15 = 69. Label from `diversification_bands`: `Concentrated` (below `concentrated_below`), `Well diversified` (from `diversified_from`), otherwise `Moderate`. It is an educational indicator, not a rating.
+  - **Risk label (`Low` / `Moderate` / `High`):** the higher of two levels. The equity level uses the value share in `equity_like_classes` (`equity`, `etf`, `fund`, `other`; a fund's real type is unknown, so the label errs cautious) against `equity_moderate_from` and `equity_high_from`. The concentration level uses the largest weight against `concentration_moderate_from` and `concentration_high_from`. It describes the mix only, not a personal risk assessment.
+  - **Weighted-average expense ratio:** over the holdings that provide one, with weights re-normalised to those holdings; coverage is reported as "based on N of M holdings"; "not provided" when none do.
+- **Summary step:** one call with the `portfolio_summary` role. The prompt (`portfolio.summary_prompt`) receives only the computed metrics as JSON with every number pre-formatted as text (`summary_input`), and asks for beginner language, observation wording ("the largest holding is 42.0% of the INR portfolio"), no buy/sell/hold advice, and mentions of concentration, diversification, the risk label and expense-ratio coverage. A **number guard** rejects a summary containing any number that is not in that JSON. If the call fails, the reply is empty or the guard rejects it, the fixed `portfolio.summary_fallback` text is used, `status` stays `ok` and a warning is added: the summary can never fail the request.
+- **Outputs:** `status="ok"` with `answer` = the summary and `data` = `PortfolioPayload` (`metrics`: the `PortfolioMetrics` as a dict with `positions`, `currencies`, `warnings`, `as_of`, `uses_stale_or_sample`; and `warnings`). An empty or fully invalid portfolio gives `needs_input`; if no holding can be priced, `no_answer` (the LLM is not called).
+- **Uses:** market data layer for prices, pure-Python metric functions, LLM role `portfolio_summary` (own role so usage is counted per agent).
 
 ### 2.3 Market Analysis
 - **Purpose:** explain current price, trend, and basic stats for a ticker or index.
@@ -469,15 +475,25 @@ llm:
       model: <default-model-id>     # same as default for now; a cheaper ID can be swapped in later
     synthesizer:                    # optional; falls back to default
       model: <default-model-id>
+    portfolio_summary:              # Portfolio agent summary (section 2.2)
+      model: <default-model-id>
 
 portfolio:                          # starting values, labelled "illustrative"
-  diversification_weights:          # sub-score weights, sum to 1
-    count: 0.4
-    concentration: 0.4
-    spread: 0.2
-  risk_thresholds:                  # growth_share in percent
-    low_below: 30
-    high_above: 70
+  max_holdings: 50
+  full_diversification_holdings: 20
+  single_class_penalty: 15
+  concentration_warning: 0.40
+  equity_like_classes: [equity, etf, fund, other]
+  diversification_bands: {concentrated_below: 40, diversified_from: 70}
+  risk:
+    equity_moderate_from: 0.40
+    equity_high_from: 0.70
+    concentration_moderate_from: 0.30
+    concentration_high_from: 0.50
+  needs_input_message: ...          # fixed texts and the summary prompt live here too (section 2.2)
+  unpriced_message: ...
+  summary_fallback: ...
+  summary_prompt: ...               # contains the {metrics_json} placeholder
 ```
 
 - `get_llm(role="default")` reads `llm.roles.<role>` and merges over `llm.*`; unknown or missing role falls back to the default.
@@ -524,7 +540,7 @@ Three layers:
 | Folder | Modules |
 |---|---|
 | `src/utils/` | `config.py`, `logger.py` (exist) |
-| `src/core/` | `llm_factory.py` (exists; add `role`), `usage_tracker.py`, `models.py` (AgentResult, payloads, Source, MarketResult), `profile_repository.py`, `tracing.py` |
+| `src/core/` | `llm_factory.py` (exists; add `role`), `usage_tracker.py`, `models.py` (AgentResult, payloads, Source, MarketResult), `portfolio_models.py`, `portfolio_metrics.py`, `portfolio_valuation.py`, `profile_repository.py`, `tracing.py` |
 | `src/data/` | `knowledge_base/*.md`, `sample_portfolios/` (US and `.NS`), `market_snapshot.json` (US and `.NS`) |
 | `src/rag/` | `ingest.py`, `embeddings.py`, `retriever.py`, `vector_store.py` (interface and FAISS), `vector_store/` |
 | `src/agents/` | `base_agent.py`, `finance_qa.py`, `portfolio.py`, `market.py`, `goal_planning.py`, `news.py`, `tax.py` |
