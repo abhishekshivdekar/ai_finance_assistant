@@ -28,6 +28,60 @@ questions:
     expected: ["market_basics/how-stock-markets-work"]
   - question: "What do NAV and CAGR stand for?"
     expected: ["glossary/finance-glossary-essentials"]
+  # --- stocks batch (casual wording, not copied from the articles) ---
+  - question: "Where does my order actually go after I tap the trade button in my broker app?"
+    expected: ["stocks/shares-and-exchanges"]
+  - question: "Why did my trade go through at a slightly different price than what I saw on screen?"
+    expected: ["stocks/shares-and-exchanges"]
+  - question: "A company I follow is coming to the market for the very first time, how does that work?"
+    expected: ["stocks/ipo-basics"]
+  - question: "I applied for a new issue and got nothing allotted, why does that happen?"
+    expected: ["stocks/ipo-basics"]
+  - question: "Why did a stock drop on the day the company paid out cash to its holders?"
+    expected: ["stocks/dividends"]
+  - question: "Does every listed company send profit money to the people who own it?"
+    expected: ["stocks/dividends"]
+  - question: "Is a company with a 5000 rupee share automatically bigger than one with a 50 rupee share?"
+    expected: ["stocks/market-capitalisation"]
+  - question: "How do people measure how big a listed business is?"
+    expected: ["stocks/market-capitalisation"]
+  - question: "My friend says a stock is trading at 25 times its yearly profit, what does that mean?"
+    expected: ["stocks/price-to-earnings-ratio"]
+  - question: "Why can't I judge a bank and a software firm using the same valuation multiple?"
+    expected: ["stocks/price-to-earnings-ratio"]
+  - question: "What do people mean by blue chip versus tiny companies on the stock market?"
+    expected: ["stocks/large-mid-small-caps"]
+  - question: "Why do the smallest listed companies jump around so much more than giants?"
+    expected: ["stocks/large-mid-small-caps"]
+  - question: "The news said the market was up 300 points today, what does that actually refer to?"
+    expected: ["stocks/stock-indices-sensex-nifty"]
+  - question: "How are Nifty 50 and Sensex different from each other?"
+    expected: ["stocks/stock-indices-sensex-nifty"]
+  # --- bonds batch ---
+  - question: "A bond says 7 percent on it but my actual return looks different, why?"
+    expected: ["bonds/coupon-and-yield"]
+  - question: "What is the difference between the interest a debt paper pays and its yield?"
+    expected: ["bonds/coupon-and-yield"]
+  - question: "Why does my debt fund show a loss when the RBI hikes rates?"
+    expected: ["bonds/bond-prices-and-interest-rates"]
+  - question: "If new loans pay more, why do older ones become worth less?"
+    expected: ["bonds/bond-prices-and-interest-rates"]
+  - question: "What do AAA and BB mean next to a company's debt?"
+    expected: ["bonds/credit-ratings"]
+  - question: "Who decides how likely a company is to repay what it borrowed from lenders?"
+    expected: ["bonds/credit-ratings"]
+  - question: "How does the government borrow money from ordinary people?"
+    expected: ["bonds/government-securities-and-treasury-bills"]
+  - question: "What are those 91 day papers the RBI sells at a discount?"
+    expected: ["bonds/government-securities-and-treasury-bills"]
+  - question: "Is lending to a company through a bond different from putting money in a bank deposit?"
+    expected: ["bonds/bonds-versus-fixed-deposits"]
+  - question: "Which is easier to take money out of early, a bank deposit or a bond?"
+    expected: ["bonds/bonds-versus-fixed-deposits"]
+  - question: "Can I lose money on debt instruments even if the company never misses a payment?"
+    expected: ["bonds/bond-risks"]
+  - question: "Besides the borrower running away with my money, what else can go wrong with lending instruments?"
+    expected: ["bonds/bond-risks"]
 
 off_topic:
   - "What is the best recipe for a chocolate cake?"
