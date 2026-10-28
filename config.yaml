@@ -101,6 +101,9 @@ finance_qa:                   # Finance Q&A agent prompts and messages (architec
 
     Example: "will my pile last after my salary stops" -> retirement corpus withdrawal how long savings last
 
+    If the question is not about money, finance or investing, return it unchanged.
+    Never add finance words to a non-finance question.
+
     Question: {question}
   system_prompt: |
     You are a finance education assistant for beginners, with India-first examples.

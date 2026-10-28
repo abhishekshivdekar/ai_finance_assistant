@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
@@ -93,6 +95,13 @@ def test_rewrite_equal_to_the_question_retrieves_once():
     agent, retrieve = make({STATE["query"]: [A]}, answer="Fine [1].", rewrite=STATE["query"])
     agent.run(STATE)
     assert len(retrieve.calls) == 1
+
+
+def test_rewrite_prompt_keeps_non_finance_questions_unchanged():
+    prompt = get_config()["finance_qa"]["rewrite_prompt"]
+    assert "If the question is not about money, finance or investing, return it unchanged." in prompt
+    assert "Never add finance words to a non-finance question." in prompt
+    assert "{question}" in prompt
 
 
 def test_clean_rewrite():
@@ -203,6 +212,19 @@ def test_sources_are_only_the_cited_chunks_and_renumbered():
 def test_citation_formats(text, expected):
     answer, cited = apply_citations(text, [A, B, C])
     assert answer == expected and len(cited) == 2
+
+
+def test_two_chunks_of_one_article_are_two_numbered_sources():
+    same_a = chunk("stocks/dividends#0", 0.8, title="Dividends Explained")
+    same_b = chunk("stocks/dividends#3", 0.7, title="Dividends Explained")
+    agent, _ = make({STATE["query"]: [same_a, same_b, B]}, answer="Paid from profit [2]. Dates matter [1][3].")
+    result = agent.run(STATE)
+    # cited in order 2, 1, 3 -> renumbered 1, 2, 3; every [n] is the n-th entry of sources, one-to-one
+    assert result["answer"] == "Paid from profit [1]. Dates matter [2][3]."
+    assert [s["chunk_id"] for s in result["sources"]] == ["stocks/dividends#3", "stocks/dividends#0", "bonds/b#0"]
+    used = sorted({int(n) for n in re.findall(r"\[(\d+)\]", result["answer"])})
+    assert used == list(range(1, len(result["sources"]) + 1))
+    assert len({s["chunk_id"] for s in result["sources"]}) == len(result["sources"])
 
 
 def test_citation_formats_cited_chunks():

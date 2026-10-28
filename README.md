@@ -27,4 +27,15 @@ Each row was scored with the diversity caps on and off; the numbers were identic
 
 **Near-miss limitation:** the threshold does not separate finance-adjacent questions that the knowledge base does not cover (for example loans, crypto or insurance) from answerable ones: 4 of 5 such near-miss questions still retrieve something above 0.30 in every row. Raising the threshold enough to stop this would also drop correct answers, so retrieval alone cannot solve it. The defence is layered: (1) a grounded prompt that tells the model to answer only from the retrieved context and to say so when the context does not cover the question, and (2) the router's `out_of_scope` intent, which sends questions outside the assistant's topics to a safe response before retrieval is used (architecture sections 3.3 and 4). These two layers belong to the agent and router steps and are not built yet.
 
-*Educational purposes only. Not financial advice.*
+## Finance Q&A results
+
+The Finance Q&A agent rewrites a colloquial question into a plain finance query, retrieves with both versions, and answers from the cited context only. A 12-question live check on `gpt-6-luna` (`live_check_qa.py`, real index and real LLM) gave:
+
+- **Answerable: 6 of 6** answered with valid citations. Two of these were colloquial questions that query rewriting rescued.
+- **Not covered: 6 of 6** correctly returned `no_answer`: the 5 near-miss questions and 1 off-topic question. They passed retrieval, so the grounded prompt (reply `NO_ANSWER` when the context does not answer) is what stopped them. This is the layered defence described under "RAG tuning results".
+- **Cost:** about $0.0015 for the 12 questions (roughly $0.00013 per question).
+- **Latency:** about 27 seconds for the first call (cold start), then 3.5 to 9 seconds.
+
+This is a small sample (12 questions), so treat it as a sanity check, not a benchmark.
+
+*Educational purposes only. Not financial advice.

@@ -3,6 +3,7 @@
 Run from the project root after build_index.py:  python live_check_qa.py
 Prints, per question: status, rewritten query, answer, cited article slugs and tokens,
 then a total token and cost summary by role.
+Sources print as numbered lines: [n] is the same n as in the answer text.
 """
 from pathlib import Path
 
@@ -48,12 +49,13 @@ def main() -> None:
             result = agent.run({"turn_id": "live", "query": question})
             after = tokens_now()
             data = result["data"] or {}
-            slugs = sorted({s["chunk_id"].split("#")[0] for s in result["sources"]})
             print(f"\n[{label}] {question}")
             print(f"  status:    {result['status']}")
             print(f"  rewritten: {data.get('rewritten_query', '-')}")
             print(f"  answer:    {result['answer']}")
-            print(f"  cited:     {', '.join(slugs) or '-'}")
+            print("  sources:   " + ("-" if not result["sources"] else ""))
+            for n, source in enumerate(result["sources"], start=1):
+                print(f"    [{n}] {source['chunk_id'].split('#')[0]}")
             print(f"  tokens:    in={after[0] - before[0]} out={after[1] - before[1]}")
 
     print("\n=== Usage summary ===")

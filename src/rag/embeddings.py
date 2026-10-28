@@ -33,19 +33,23 @@ class SentenceTransformerEmbedder:
             self._model = SentenceTransformer(self.model_name)
         return self._model
 
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed many texts into normalised vectors."""
+    def _encode(self, texts: list[str], show_progress_bar: bool | None) -> list[list[float]]:
+        """Encode texts; the progress-bar flag is passed only when it is set."""
         options: dict[str, Any] = {}
-        if self.show_progress_bar is not None:
-            options["show_progress_bar"] = self.show_progress_bar
+        if show_progress_bar is not None:
+            options["show_progress_bar"] = show_progress_bar
         vectors = self._load().encode(
             texts, normalize_embeddings=True, convert_to_numpy=True, **options
         )
         return [list(map(float, v)) for v in vectors]
 
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed many texts into normalised vectors."""
+        return self._encode(texts, self.show_progress_bar)
+
     def embed_query(self, text: str) -> list[float]:
-        """Embed one query into a normalised vector."""
-        return self.embed_documents([text])[0]
+        """Embed one query into a normalised vector (never shows a progress bar)."""
+        return self._encode([text], False)[0]
 
 
 @lru_cache(maxsize=1)

@@ -22,9 +22,11 @@ class FakeModel:
     def __init__(self, name):
         self.name = name
         self.encode_calls = []
+        self.progress_flags = []
         FakeModel.instances.append(self)
 
-    def encode(self, texts, normalize_embeddings, convert_to_numpy):
+    def encode(self, texts, normalize_embeddings, convert_to_numpy, show_progress_bar=None):
+        self.progress_flags.append(show_progress_bar)
         self.encode_calls.append((list(texts), normalize_embeddings, convert_to_numpy))
         return np.array([[1.0, 0.0] for _ in texts])
 
@@ -79,6 +81,16 @@ def test_progress_bar_flag_is_passed_only_when_set(fake_st):
             return np.array([[1.0, 0.0] for _ in texts])
 
     sys.modules["sentence_transformers"].SentenceTransformer = Model
-    SentenceTransformerEmbedder("m", show_progress_bar=False).embed_query("q")
-    SentenceTransformerEmbedder("m").embed_query("q")
+    SentenceTransformerEmbedder("m", show_progress_bar=False).embed_documents(["q"])
+    SentenceTransformerEmbedder("m").embed_documents(["q"])
     assert seen == [{"show_progress_bar": False}, {}]
+
+
+def test_single_queries_never_show_a_progress_bar(fake_st):
+    embedder = SentenceTransformerEmbedder("m")   # default: library behaviour for documents
+    embedder.embed_documents(["a", "b"])
+    embedder.embed_query("q")
+    assert FakeModel.instances[0].progress_flags == [None, False]
+    verbose = SentenceTransformerEmbedder("m", show_progress_bar=True)
+    verbose.embed_query("q")
+    assert FakeModel.instances[-1].progress_flags == [False]
