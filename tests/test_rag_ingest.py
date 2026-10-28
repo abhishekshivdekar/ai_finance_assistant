@@ -137,6 +137,7 @@ def test_build_index_end_to_end(tmp_path, monkeypatch):
         "embedding_model": get_config()["embeddings"]["model"],
         "chunk_size": 300, "chunk_overlap": 30,
         "article_hash": compute_article_hash(kb),
+        "topic_chunking": get_config()["rag"]["topic_chunking"],
     }
 
 
@@ -155,3 +156,28 @@ def test_build_index_with_no_valid_articles_raises(tmp_path):
     with pytest.raises(ValueError):
         build_index(FakeEmbedder(), tmp_path / "kb", tmp_path / "idx")
     assert not (tmp_path / "idx").exists()
+
+
+GLOSSARY_BODY = "\n\n".join(f"**Term{i}** - definition number {i} has some words." for i in range(12))
+
+
+def test_topic_override_applies_only_to_its_topic():
+    overrides = {"glossary": {"chunk_size": 100, "chunk_overlap": 0}}
+    glossary = chunk_article(_article(GLOSSARY_BODY, topic="glossary"), 800, 120, overrides)
+    stocks = chunk_article(_article(GLOSSARY_BODY, topic="stocks"), 800, 120, overrides)
+    assert len(glossary) > 3 and all(len(c["text"]) <= 100 for c in glossary)
+    assert len(stocks) == 1
+
+
+def test_topic_override_defaults_to_config():
+    cfg = get_config()["rag"]["topic_chunking"]["glossary"]
+    chunks = chunk_article(_article(GLOSSARY_BODY * 3, topic="glossary"), 800, 120)
+    assert all(len(c["text"]) <= cfg["chunk_size"] for c in chunks)
+    assert len(chunk_article(_article(GLOSSARY_BODY, topic="stocks"), 800, 120)) == 1
+
+
+def test_build_store_honours_override():
+    glossary = _article(GLOSSARY_BODY, topic="glossary")
+    plain = build_store([glossary], FakeEmbedder(), 800, 0, {})
+    split = build_store([glossary], FakeEmbedder(), 800, 0, {"glossary": {"chunk_size": 100, "chunk_overlap": 0}})
+    assert len(plain) == 1 and len(split) > 3

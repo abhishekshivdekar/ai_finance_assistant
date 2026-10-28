@@ -35,6 +35,7 @@ def _current(cfg, kb):
     return build_manifest(
         cfg["embeddings"]["model"], cfg["rag"]["chunk_size"],
         cfg["rag"]["chunk_overlap"], compute_article_hash(kb),
+        cfg["rag"]["topic_chunking"],
     )
 
 
@@ -115,3 +116,19 @@ def test_warn_if_stale_unreadable_knowledge_base(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(manifest, "compute_article_hash", boom)
     with caplog.at_level(logging.WARNING):
         assert warn_if_stale(tmp_path / "idx") == ["article_hash"]
+
+
+def test_manifest_records_topic_chunking_and_defaults_to_empty():
+    overrides = {"glossary": {"chunk_size": 250, "chunk_overlap": 0}}
+    assert build_manifest("m", 800, 120, "h", overrides)["topic_chunking"] == overrides
+    assert build_manifest("m", 800, 120, "h")["topic_chunking"] == {}
+
+
+def test_warn_if_stale_topic_chunking_change(tmp_path, monkeypatch, caplog):
+    kb = _kb(tmp_path)
+    cfg = _patch_cfg(monkeypatch, kb)
+    write_manifest(tmp_path / "idx", _current(cfg, kb))
+    cfg["rag"]["topic_chunking"] = {"glossary": {"chunk_size": 300, "chunk_overlap": 0}}
+    with caplog.at_level(logging.WARNING):
+        assert warn_if_stale(tmp_path / "idx") == ["topic_chunking"]
+    assert "topic_chunking" in caplog.text

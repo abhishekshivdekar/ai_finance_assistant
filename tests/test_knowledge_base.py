@@ -13,6 +13,7 @@ ALLOWED_HOSTS = {
     "www.investor.gov", "www.finra.org", "www.sebi.gov.in", "www.amfiindia.com",
     "www.rbi.org.in", "www.incometax.gov.in", "www.nseindia.com", "www.bseindia.com",
     "www.epfindia.gov.in", "www.nsdl.co.in", "www.cdslindia.com", "www.indiapost.gov.in",
+    "www.pfrda.org.in",
 }
 
 

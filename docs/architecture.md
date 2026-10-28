@@ -333,7 +333,9 @@ Example: "What is Apple trading at, and what is a P/E ratio?" gives intents `["m
 | Embed | Local `sentence-transformers/all-MiniLM-L6-v2` (`embeddings.*`) | Free, no API budget, runs offline |
 | Build and save | FAISS index in `rag.vector_store_dir` plus an **index manifest** | Fast, simple, no server |
 
-**Manifest** (`manifest.json` beside the index): embedding model name, chunk size and overlap, and a hash of the article set. It is checked when the index loads; a mismatch with current config logs a warning (the index may be stale and should be rebuilt).
+**Manifest** (`manifest.json` beside the index): embedding model name, chunk size and overlap, and a hash of the article set and the per-topic overrides. It is checked when the index loads; a mismatch with current config logs a warning (the index may be stale and should be rebuilt).
+
+**Per-topic chunking:** `rag.topic_chunking` can override `chunk_size` and `chunk_overlap` for one topic; `glossary` starts at 250 and 0. Glossary entries are tiny, independent definitions, so one entry per chunk retrieves better than a blend of several unrelated terms. The overrides are recorded in the manifest (a change triggers the stale-index warning), and the eval sweep varies only the default settings while glossary articles keep their override.
 
 ### 5.2 Online: `rag/retriever.py`
 1. Embed the query with the same model as ingest.

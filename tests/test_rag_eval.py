@@ -101,7 +101,7 @@ def test_format_table():
 
 def test_real_questions_file_is_well_formed():
     data = load_questions()
-    assert len(data["questions"]) == 94 and len(data["off_topic"]) == 3
+    assert len(data["questions"]) == 121 and len(data["off_topic"]) == 3
     assert len(data["held_out"]) == 10 and len(data["near_miss"]) == 5
     assert all(q["question"] and q["expected"] == [] for q in data["held_out"])
     known = {f"{a.topic}/{a.slug}" for a in load_articles()}

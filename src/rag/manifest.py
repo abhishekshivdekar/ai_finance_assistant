@@ -35,14 +35,19 @@ def compute_article_hash(kb_dir: Path) -> str:
 
 
 def build_manifest(
-    embedding_model: str, chunk_size: int, chunk_overlap: int, article_hash: str
+    embedding_model: str,
+    chunk_size: int,
+    chunk_overlap: int,
+    article_hash: str,
+    topic_chunking: dict[str, dict[str, int]] | None = None,
 ) -> dict[str, Any]:
-    """Assemble the manifest dict."""
+    """Assemble the manifest dict; topic_chunking records the per-topic overrides."""
     return {
         "embedding_model": embedding_model,
         "chunk_size": chunk_size,
         "chunk_overlap": chunk_overlap,
         "article_hash": article_hash,
+        "topic_chunking": topic_chunking or {},
     }
 
 
@@ -80,6 +85,7 @@ def warn_if_stale(directory: Path) -> list[str]:
             cfg["rag"]["chunk_size"],
             cfg["rag"]["chunk_overlap"],
             compute_article_hash(resolve_dir(cfg["rag"]["knowledge_base_dir"])),
+            cfg["rag"].get("topic_chunking") or {},
         )
     except OSError:
         log.warning("Could not read the knowledge base to verify the index manifest")

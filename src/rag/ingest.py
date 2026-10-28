@@ -31,7 +31,7 @@ log = get_logger(__name__)
 
 _FRONT_MATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-_VERIFY = re.compile(r"<!--\s*VERIFY\s*-->")
+_VERIFY = re.compile(r"<!--\s*VERIFY\s*(?::[^>]*?)?\s*-->")
 
 
 class ArticleError(ValueError):
@@ -112,9 +112,26 @@ def load_articles(kb_dir: Path | None = None) -> list[Article]:
     return articles
 
 
-def chunk_article(article: Article, chunk_size: int, chunk_overlap: int) -> list[dict[str, Any]]:
-    """Split an article into chunk records that carry its metadata."""
-    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+def chunk_article(
+    article: Article,
+    chunk_size: int,
+    chunk_overlap: int,
+    topic_chunking: dict[str, dict[str, int]] | None = None,
+) -> list[dict[str, Any]]:
+    """Split an article into chunk records that carry its metadata.
+
+    Design pattern: STRATEGY chosen per topic. The topic's override in
+    rag.topic_chunking (None means read it from config) replaces the default
+    size and overlap. Example: glossary articles use 250/0, so each tiny
+    "**NAV** - ..." definition becomes its own chunk; stocks articles keep 800/120.
+    """
+    if topic_chunking is None:
+        topic_chunking = get_config()["rag"].get("topic_chunking") or {}
+    override = topic_chunking.get(article.topic) or {}
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=override.get("chunk_size", chunk_size),
+        chunk_overlap=override.get("chunk_overlap", chunk_overlap),
+    )
     pieces = splitter.split_text(_COMMENT.sub("", article.body).strip())
     return [
         {
@@ -129,13 +146,17 @@ def chunk_article(article: Article, chunk_size: int, chunk_overlap: int) -> list
 
 
 def build_store(
-    articles: list[Article], embedder: Any, chunk_size: int, chunk_overlap: int
+    articles: list[Article],
+    embedder: Any,
+    chunk_size: int,
+    chunk_overlap: int,
+    topic_chunking: dict[str, dict[str, int]] | None = None,
 ) -> VectorStore:
     """Chunk and embed articles into an in-memory store (not saved)."""
     records = [
         record
         for article in articles
-        for record in chunk_article(article, chunk_size, chunk_overlap)
+        for record in chunk_article(article, chunk_size, chunk_overlap, topic_chunking)
     ]
     store = FaissStore()
     if records:
@@ -159,14 +180,20 @@ def build_index(
     overlap = rag["chunk_overlap"] if chunk_overlap is None else chunk_overlap
 
     articles = load_articles(kb_path)
-    store = build_store(articles, embedder or get_embedder(), size, overlap)
+    store = build_store(
+        articles, embedder or get_embedder(), size, overlap, rag.get("topic_chunking") or {}
+    )
     if len(store) == 0:
         raise ValueError(f"No valid articles found in {kb_path}")
     store.save(out_path)
     write_manifest(
         out_path,
         build_manifest(
-            cfg["embeddings"]["model"], size, overlap, compute_article_hash(kb_path)
+            cfg["embeddings"]["model"],
+            size,
+            overlap,
+            compute_article_hash(kb_path),
+            rag.get("topic_chunking") or {},
         ),
     )
     log.info("Indexed %d articles into %d chunks at %s", len(articles), len(store), out_path)

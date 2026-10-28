@@ -198,6 +198,62 @@ questions:
     expected: ["accounts_and_taxes_india/tax-saving-deductions-overview"]
   - question: "People say they saved tax by investing, does that mean the government gives the money back?"
     expected: ["accounts_and_taxes_india/tax-saving-deductions-overview"]
+  # --- market_basics batch (plain, then casual) ---
+  - question: "What are a bull market and a bear market?"
+    expected: ["market_basics/bull-and-bear-markets"]
+  - question: "Everyone keeps saying the bulls are back, what does that even mean?"
+    expected: ["market_basics/bull-and-bear-markets"]
+  - question: "What makes the price of a share go up or down?"
+    expected: ["market_basics/how-prices-move"]
+  - question: "Why did a stock fall even though the company reported better profits?"
+    expected: ["market_basics/how-prices-move"]
+  - question: "What is the difference between a market order and a limit order?"
+    expected: ["market_basics/market-orders-versus-limit-orders"]
+  - question: "I set my price on a trade and it never went through, why not?"
+    expected: ["market_basics/market-orders-versus-limit-orders"]
+  - question: "What are the stock market trading hours and what does T+1 settlement mean?"
+    expected: ["market_basics/trading-hours-and-settlement"]
+  - question: "I sold shares today, when does the money actually reach me?"
+    expected: ["market_basics/trading-hours-and-settlement"]
+  - question: "How do I read a candlestick chart of a share price?"
+    expected: ["market_basics/reading-a-price-chart"]
+  - question: "What are those little red and green bars with lines on a stock graph?"
+    expected: ["market_basics/reading-a-price-chart"]
+  - question: "How do inflation, interest rates and RBI policy affect the stock market?"
+    expected: ["market_basics/macroeconomic-indicators-and-markets"]
+  - question: "Why do share prices jump when the central bank changes its rate?"
+    expected: ["market_basics/macroeconomic-indicators-and-markets"]
+  # --- glossary batch (one term each) ---
+  - question: "What does spread mean in trading?"
+    expected: ["glossary/market-and-trading-terms"]
+  - question: "What is a circuit breaker on a stock exchange?"
+    expected: ["glossary/market-and-trading-terms"]
+  - question: "What is a stop-loss order?"
+    expected: ["glossary/market-and-trading-terms", "market_basics/market-orders-versus-limit-orders"]
+  - question: "What is a stock split?"
+    expected: ["glossary/stock-terms"]
+  - question: "What are bonus shares?"
+    expected: ["glossary/stock-terms"]
+  - question: "What is a rights issue?"
+    expected: ["glossary/stock-terms"]
+  - question: "What is yield to maturity on a bond?"
+    expected: ["glossary/bond-and-interest-rate-terms", "bonds/coupon-and-yield"]
+  - question: "What is a zero-coupon bond?"
+    expected: ["glossary/bond-and-interest-rate-terms", "bonds/coupon-and-yield"]
+  - question: "What is the repo rate?"
+    expected: ["glossary/bond-and-interest-rate-terms", "market_basics/macroeconomic-indicators-and-markets"]
+  - question: "What does XIRR stand for?"
+    expected: ["glossary/mutual-fund-terms"]
+  - question: "What is tracking error in an index fund?"
+    expected: ["glossary/mutual-fund-terms", "etfs_and_funds/index-funds-explained"]
+  - question: "What is an exit load?"
+    expected: ["glossary/mutual-fund-terms", "etfs_and_funds/mutual-fund-exit-loads-and-lock-ins"]
+  - question: "What is a depository participant?"
+    expected: ["glossary/india-account-and-tax-terms", "accounts_and_taxes_india/demat-and-trading-accounts"]
+  - question: "What does TDS stand for?"
+    expected: ["glossary/india-account-and-tax-terms"]
+  - question: "What does KYC stand for and what is it?"
+    expected: ["glossary/india-account-and-tax-terms", "accounts_and_taxes_india/demat-and-trading-accounts"]
 
 off_topic:
   - "What is the best recipe for a chocolate cake?"
