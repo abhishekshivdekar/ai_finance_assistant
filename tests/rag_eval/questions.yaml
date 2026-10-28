@@ -34,6 +34,49 @@ off_topic:
   - "Who won the football world cup in 2018?"
   - "How do I fix a flat bicycle tyre?"
 
+# held_out: independent questions written by the project owner, not derived from
+# the articles. Items with an empty `expected` are skipped by the harness.
+held_out:
+  # TODO label after batch B4
+  - question: "I just got my first salary, where do I even start?"
+    expected: []
+  # TODO label after batch B4
+  - question: "Is a mutual fund the same thing as buying shares, or how are they different?"
+    expected: []
+  # TODO label after batch B4
+  - question: "How much money should I keep aside for emergencies, and where should I store it?"
+    expected: []
+  # TODO label after batch B4
+  - question: "What happens to my money if the stock market crashes tomorrow?"
+    expected: []
+  # TODO label after batch B4
+  - question: "Do I need to pay taxes if I sell my investments after holding them for a year?"
+    expected: []
+  # TODO label after batch B4
+  - question: "What's the difference between investing a small amount every month versus putting a big chunk in all at once?"
+    expected: []
+  # TODO label after batch B4
+  - question: "Is saving money in a bank account enough to beat inflation over time?"
+    expected: []
+  # TODO label after batch B4
+  - question: "How do I choose between a safe fixed-return option and market-linked investments?"
+    expected: []
+  # TODO label after batch B4
+  - question: "If I start putting money into mutual funds today, can I withdraw it without penalties?"
+    expected: []
+  # TODO label after batch B4
+  - question: "What are index funds, and why does everyone recommend them for beginners?"
+    expected: []
+
+# near_miss: finance-adjacent questions the knowledge base does NOT cover;
+# like off_topic they must match nothing above the threshold (counted separately).
+near_miss:
+  - "How does a home loan EMI work?"
+  - "Is bitcoin a good investment?"
+  - "Which insurance policy should I buy?"
+  - "What is a credit score and how do I improve it?"
+  - "How do I file my GST return?"
+
 grid:
   chunk_size: [400, 600, 800]
   chunk_overlap: [60, 120]

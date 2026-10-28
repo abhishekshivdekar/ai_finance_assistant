@@ -20,6 +20,8 @@ load_questions = rag_eval.load_questions
 mrr = rag_eval.mrr
 rank_from_hits = rag_eval.rank_from_hits
 rank_of_first_hit = rag_eval.rank_of_first_hit
+split_held_out = rag_eval.split_held_out
+summarize_sets = rag_eval.summarize_sets
 sweep = rag_eval.sweep
 
 REFS = [{"name": "SEBI", "url": "https://www.sebi.gov.in"}]
@@ -100,6 +102,8 @@ def test_format_table():
 def test_real_questions_file_is_well_formed():
     data = load_questions()
     assert len(data["questions"]) == 12 and len(data["off_topic"]) == 3
+    assert len(data["held_out"]) == 10 and len(data["near_miss"]) == 5
+    assert all(q["question"] and q["expected"] == [] for q in data["held_out"])
     known = {f"{a.topic}/{a.slug}" for a in load_articles()}
     for q in data["questions"]:
         assert q["question"] and set(q["expected"]) <= known
@@ -111,3 +115,81 @@ def test_main_prints_table_with_fake_embedder(monkeypatch, capsys):
     rag_eval.main()
     out = capsys.readouterr().out
     assert "hit_rate" in out and len(out.splitlines()) > 5
+    assert "held-out: 0 of 10 labelled yet" in out
+    assert "held_out_hit_rate" not in out and "near_miss_false" not in out
+
+
+HELD_OUT = [
+    {"question": "shares company ownership", "expected": ["stocks/shares"]},
+    {"question": "bond coupon maturity", "expected": []},   # unlabelled: skipped
+]
+NEAR_MISS = ["bond coupon maturity", "chocolate cake recipe"]   # first one false-matches
+EASY = {"chunk_size": 200, "chunk_overlap": 20, "top_k": 1, "threshold": 0.3}
+
+
+def _easy_row(**kwargs):
+    rows = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, OFF_TOPIC, **kwargs)
+    return next(r for r in rows if all(r[k] == v for k, v in EASY.items()))
+
+
+def test_split_held_out_skips_and_counts_unlabelled():
+    labelled, skipped = split_held_out(HELD_OUT)
+    assert labelled == [HELD_OUT[0]] and skipped == 1
+    assert split_held_out([{"question": "q", "expected": []}] * 10) == ([], 10)
+
+
+def test_summarize_sets_reports_labelled_count():
+    data = {"questions": QUESTIONS, "off_topic": OFF_TOPIC, "near_miss": NEAR_MISS, "held_out": HELD_OUT}
+    lines = summarize_sets(data)
+    assert lines[0] == "development: 3 questions"
+    assert lines[1] == "held-out: 1 of 2 labelled yet"
+    assert "1 off_topic + 2 near_miss" in lines[2]
+    assert summarize_sets({"questions": [], "off_topic": []})[1] == "held-out: 0 of 0 labelled yet"
+
+
+def test_unlabelled_held_out_scores_zero_and_leaves_other_sets_alone():
+    row = _easy_row(held_out=[{"question": "q", "expected": []}] * 10)
+    assert row["held_out_hit_rate"] == 0.0 and row["held_out_mrr"] == 0.0
+    assert row["hit_rate"] == pytest.approx(2 / 3) and row["off_topic_false"] == 0
+
+
+def test_labelled_held_out_item_is_scored_correctly():
+    row = _easy_row(held_out=HELD_OUT)   # only the labelled item counts, found at rank 1
+    assert row["held_out_hit_rate"] == 1.0 and row["held_out_mrr"] == 1.0
+    wrong = _easy_row(held_out=[{"question": "bond coupon maturity", "expected": ["stocks/shares"]}])
+    assert wrong["held_out_hit_rate"] == 0.0 and wrong["held_out_mrr"] == 0.0
+
+
+def test_three_sets_are_scored_independently():
+    row = _easy_row(held_out=HELD_OUT, near_miss=NEAR_MISS)
+    assert row["hit_rate"] == pytest.approx(2 / 3)   # development only
+    assert row["held_out_hit_rate"] == 1.0           # held-out only
+    assert row["off_topic_false"] == 0 and row["near_miss_false"] == 1
+
+
+def test_near_miss_false_is_counted_apart_from_off_topic():
+    rows = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, ["bond coupon maturity"],
+                 near_miss=["chocolate cake recipe"])
+    easy = next(r for r in rows if all(r[k] == v for k, v in EASY.items()))
+    assert easy["off_topic_false"] == 1 and easy["near_miss_false"] == 0
+
+
+def test_format_table_shows_held_out_columns_only_when_asked():
+    rows = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, OFF_TOPIC, HELD_OUT, NEAR_MISS)
+    plain = format_table(rows).splitlines()
+    full = format_table(rows, show_held_out=True).splitlines()
+    assert "near_miss_false" not in plain[0] and "held_out_mrr" not in plain[0]
+    for name in ("held_out_hit_rate", "held_out_mrr", "near_miss_false"):
+        assert name in full[0]
+    assert len({len(line) for line in full}) == 1   # fixed width
+
+
+def test_main_shows_extra_columns_when_a_held_out_item_is_labelled(monkeypatch, capsys):
+    data = load_questions()
+    data["held_out"][0]["expected"] = ["stocks/what-is-a-stock"]
+    monkeypatch.setattr(rag_eval, "load_questions", lambda: data)
+    monkeypatch.setattr(rag_eval, "get_embedder", lambda: FakeEmbedder())
+    rag_eval.main()
+    out = capsys.readouterr().out
+    assert "held-out: 1 of 10 labelled yet" in out
+    assert "held_out_hit_rate" in out and "near_miss_false" in out
