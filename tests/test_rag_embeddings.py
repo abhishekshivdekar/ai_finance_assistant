@@ -68,3 +68,17 @@ def test_unsupported_provider_raises(monkeypatch):
     )
     with pytest.raises(ConfigError):
         get_embedder()
+
+
+def test_progress_bar_flag_is_passed_only_when_set(fake_st):
+    seen = []
+
+    class Model(FakeModel):
+        def encode(self, texts, normalize_embeddings, convert_to_numpy, **kwargs):
+            seen.append(kwargs)
+            return np.array([[1.0, 0.0] for _ in texts])
+
+    sys.modules["sentence_transformers"].SentenceTransformer = Model
+    SentenceTransformerEmbedder("m", show_progress_bar=False).embed_query("q")
+    SentenceTransformerEmbedder("m").embed_query("q")
+    assert seen == [{"show_progress_bar": False}, {}]

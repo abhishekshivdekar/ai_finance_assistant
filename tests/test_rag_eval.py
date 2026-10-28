@@ -27,6 +27,25 @@ sweep = rag_eval.sweep
 REFS = [{"name": "SEBI", "url": "https://www.sebi.gov.in"}]
 
 
+class FakeSTEmbedder(FakeEmbedder):
+    """Stands in for SentenceTransformerEmbedder; records model name and progress-bar flag."""
+
+    created: list = []
+
+    def __init__(self, model_name, show_progress_bar=None):
+        super().__init__()
+        self.model_name = model_name
+        self.show_progress_bar = show_progress_bar
+        FakeSTEmbedder.created.append((model_name, show_progress_bar))
+
+
+@pytest.fixture(autouse=True)
+def _fake_eval_embedder(monkeypatch):
+    """The eval builds its own embedder; replace it so no test loads a real model."""
+    FakeSTEmbedder.created = []
+    monkeypatch.setattr(rag_eval, "SentenceTransformerEmbedder", FakeSTEmbedder)
+
+
 def test_article_id():
     assert article_id("bonds/how-bonds-work#3") == "bonds/how-bonds-work"
 
@@ -103,20 +122,18 @@ def test_real_questions_file_is_well_formed():
     data = load_questions()
     assert len(data["questions"]) == 121 and len(data["off_topic"]) == 3
     assert len(data["held_out"]) == 10 and len(data["near_miss"]) == 5
-    assert all(q["question"] and q["expected"] == [] for q in data["held_out"])
     known = {f"{a.topic}/{a.slug}" for a in load_articles()}
-    for q in data["questions"]:
-        assert q["question"] and set(q["expected"]) <= known
+    for q in data["questions"] + data["held_out"]:
+        assert q["question"] and q["expected"] and set(q["expected"]) <= known
     assert set(data["grid"]) == {"chunk_size", "chunk_overlap", "top_k", "threshold"}
 
 
-def test_main_prints_table_with_fake_embedder(monkeypatch, capsys):
-    monkeypatch.setattr(rag_eval, "get_embedder", lambda: FakeEmbedder())
+def test_main_prints_table_with_fake_embedder(capsys):
     rag_eval.main()
     out = capsys.readouterr().out
     assert "hit_rate" in out and len(out.splitlines()) > 5
-    assert "held-out: 0 of 10 labelled yet" in out
-    assert "held_out_hit_rate" not in out and "near_miss_false" in out
+    assert "held-out: 10 of 10 labelled yet" in out
+    assert "held_out_hit_rate" in out and "near_miss_false" in out
     assert "Diagnostics for config.yaml: chunk_size=800, chunk_overlap=120, top_k=4" in out
 
 
@@ -186,15 +203,19 @@ def test_format_table_shows_held_out_columns_only_when_asked():
     assert len({len(line) for line in full}) == 1   # fixed width
 
 
-def test_main_shows_extra_columns_when_a_held_out_item_is_labelled(monkeypatch, capsys):
+def test_main_hides_held_out_columns_until_an_item_is_labelled(monkeypatch, capsys):
     data = load_questions()
-    data["held_out"][0]["expected"] = ["stocks/what-is-a-stock"]
+    for q in data["held_out"]:
+        q["expected"] = []
     monkeypatch.setattr(rag_eval, "load_questions", lambda: data)
-    monkeypatch.setattr(rag_eval, "get_embedder", lambda: FakeEmbedder())
     rag_eval.main()
     out = capsys.readouterr().out
-    assert "held-out: 1 of 10 labelled yet" in out
-    assert "held_out_hit_rate" in out and "near_miss_false" in out
+    assert "held-out: 0 of 10 labelled yet" in out
+    assert "held_out_hit_rate" not in out and "near_miss_false" in out
+    data["held_out"][0]["expected"] = ["stocks/what-is-a-stock"]
+    rag_eval.main()
+    out = capsys.readouterr().out
+    assert "held-out: 1 of 10 labelled yet" in out and "held_out_hit_rate" in out
 
 
 DIAG_CFG = dict(chunk_size=200, chunk_overlap=20, top_k=1, threshold=0.3)
@@ -309,8 +330,7 @@ def test_best_row_prefers_clean_rows_then_hit_rate_then_mrr():
     assert rag_eval.best_row([]) is None
 
 
-def test_main_prints_diagnostics_for_config_and_best_row(monkeypatch, capsys):
-    monkeypatch.setattr(rag_eval, "get_embedder", lambda: FakeEmbedder())
+def test_main_prints_diagnostics_for_config_and_best_row(capsys):
     rag_eval.main()
     out = capsys.readouterr().out
     assert "Diagnostics for config.yaml:" in out and "Diagnostics for best sweep row:" in out
@@ -318,26 +338,14 @@ def test_main_prints_diagnostics_for_config_and_best_row(monkeypatch, capsys):
     assert " on " in out and " off " in out   # table rows for both modes
 
 
-class FakeSTEmbedder(FakeEmbedder):
-    """Stands in for SentenceTransformerEmbedder; records the model name."""
-
-    created: list = []
-
-    def __init__(self, model_name):
-        super().__init__()
-        self.model_name = model_name
-        FakeSTEmbedder.created.append(model_name)
-
-
-def test_make_embedder_default_uses_the_shared_embedder(monkeypatch):
-    shared = FakeEmbedder()
-    monkeypatch.setattr(rag_eval, "get_embedder", lambda: shared)
-    assert rag_eval.make_embedder(None) is shared
+def test_make_embedder_is_its_own_instance_without_progress_bar():
+    mine = rag_eval.make_embedder(None)
+    assert isinstance(mine, FakeSTEmbedder) and mine.show_progress_bar is False
+    assert mine.model_name == rag_eval.get_config()["embeddings"]["model"]
+    assert FakeSTEmbedder.created == [(mine.model_name, False)]
 
 
 def test_embedding_model_override_builds_its_own_embedder_and_leaves_the_app_alone(monkeypatch, capsys):
-    FakeSTEmbedder.created = []
-    monkeypatch.setattr(rag_eval, "SentenceTransformerEmbedder", FakeSTEmbedder)
 
     def boom(*args, **kwargs):
         raise AssertionError("the app's embedder / index must not be touched")
@@ -349,16 +357,35 @@ def test_embedding_model_override_builds_its_own_embedder_and_leaves_the_app_alo
 
     rag_eval.main("some/other-model")
     out = capsys.readouterr().out
-    assert FakeSTEmbedder.created == ["some/other-model"]
+    assert FakeSTEmbedder.created == [("some/other-model", False)]
     assert "embedding model: some/other-model" in out
 
 
-def test_run_rag_eval_passes_the_constant_to_main(monkeypatch):
+def test_run_rag_eval_passes_the_constants_to_main(monkeypatch):
     import run_rag_eval
     assert run_rag_eval.EMBEDDING_MODEL is None
+    assert run_rag_eval.SWEEP_CONFIGS == [(300, 120, 6, 0.30), (400, 120, 6, 0.30), (400, 60, 6, 0.35)]
     seen = []
-    monkeypatch.setattr(run_rag_eval.runpy, "run_path", lambda path, run_name: {"main": seen.append})
+    monkeypatch.setattr(
+        run_rag_eval.runpy, "run_path",
+        lambda path, run_name: {"main": lambda model, configs: seen.append((model, configs))},
+    )
     run_rag_eval.run()
     monkeypatch.setattr(run_rag_eval, "EMBEDDING_MODEL", "some/other-model")
     run_rag_eval.run()
-    assert seen == [None, "some/other-model"]
+    assert seen == [(None, run_rag_eval.SWEEP_CONFIGS), ("some/other-model", run_rag_eval.SWEEP_CONFIGS)]
+
+
+def test_sweep_configs_runs_only_the_listed_configurations():
+    configs = [(200, 20, 2, 0.3), (200, 20, 1, 0.5), (100, 20, 2, 0.3)]
+    rows = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, OFF_TOPIC, configs=configs)
+    got = [(r["chunk_size"], r["chunk_overlap"], r["top_k"], r["threshold"]) for r in rows]
+    assert sorted(set(got)) == sorted(configs) and len(rows) == 3 * 2   # each with diversity on and off
+    bad = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, OFF_TOPIC, configs=[(50, 60, 1, 0.3)])
+    assert bad == []   # overlap >= chunk_size is skipped here too
+
+
+def test_held_out_columns_come_first_after_the_configuration():
+    rows = sweep(GRID, _toy_articles(), FakeEmbedder(), QUESTIONS, OFF_TOPIC, HELD_OUT)
+    header = format_table(rows, show_held_out=True).splitlines()[0].split()
+    assert header[5:7] == ["held_out_hit_rate", "held_out_mrr"] and header[7] == "hit_rate"
