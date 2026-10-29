@@ -636,8 +636,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
 
     Rules:
     - Use only numbers that appear in the JSON. Do not calculate or estimate anything new.
-    - Amounts and rates in the JSON are already written as text (with the currency sign, digit grouping or a percent sign).
-      Copy them exactly as written; do not round, shorten or reformat them (no "lakh" or "crore").
+    - Copy any `display` text exactly as given. Write computed amounts exactly as they appear in the data.
     - Say that the result is illustrative and that the rates must be verified on the official site.
     - Mention the exclusions in the JSON in one short sentence.
     - Educational only: never tell the reader what to buy, sell or hold, and give no personal advice.

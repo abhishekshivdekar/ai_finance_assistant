@@ -220,7 +220,8 @@ def test_the_commentary_prompt_holds_only_computed_data():
     assert set(payload) == {"calculation", "inputs", "results", "rates", "caveats"} and payload["results"]["total_tax"] == "₹5,500.00"
     assert payload["inputs"]["buy_value"] == "₹100,000.00" and payload["inputs"]["holding_months"] == 13
     assert payload["results"]["rate_pct"] == "10%" and payload["rates"]["equity_ltcg_pct"] == "10%"
-    assert "copy them exactly as written" in " ".join(prompt.split()).lower()
+    assert "copy any `display` text exactly as given" in " ".join(prompt.split()).lower()
+    assert "\\u20b9" not in prompt and "₹5,500.00" in prompt                    # the sign is sent as a character, not a JSON escape
     assert "2026" not in prompt and "incometax" not in prompt and CFG["stt_assumption"] in payload["caveats"]
     assert "never tell the reader what to buy, sell or hold" in prompt.replace("\n", " ").replace("  ", " ")
 
@@ -321,13 +322,11 @@ def test_default_llm_comes_from_the_factory_with_the_tax_role(monkeypatch):
 def test_default_retrieve_function_is_the_shared_retriever():
     assert TaxAgent(llm=FakeLLM()).retrieve_fn is retrieve
 
-def test_a_quoted_fact_number_with_only_a_chunk_citation_still_gets_the_footer():
+def test_a_quoted_fact_number_with_only_a_chunk_citation_gets_no_footer():
     _, _, result = ask("Equity fund gains held long are taxed at 15% [1].")
-    assert result["status"] == "ok" and result["data"]["fact_citations"] == []
-    assert result["data"]["config_used"] == {}                                   # matched by number only: not listed
-    assert result["data"]["exclusions"] == [CFG["stt_assumption"], *CFG["exclusions"]["capital_gains"]]
-    assert "illustrative, verify before relying (as of 2026-10-29)" in result["answer"]
-    assert result["answer"].endswith("equity funds.")
+    assert result["status"] == "ok" and result["data"]["fact_citations"] == []   # the number passes the guard ...
+    assert result["data"]["config_used"] == {} and result["data"]["exclusions"] == []   # ... but nothing is shown as used
+    assert result["answer"] == "Equity fund gains held long are taxed at 15% [1]."
 
 
 def test_an_answer_with_no_figure_and_no_fact_citation_gets_no_footer():
@@ -414,10 +413,36 @@ def test_a_definition_answer_without_a_figure_or_a_fact_citation_has_no_exclusio
     assert "illustrative, verify" not in result["answer"]
 
 
-def test_a_matched_non_equity_figure_gets_the_footer_and_the_capital_gains_list_without_the_tax_paid_line():
-    _, _, result = ask("The Sukanya Samriddhi rate is 8% [1].")
+def test_a_figure_matched_only_by_number_adds_no_footer_no_exclusion_and_no_config_used_entry():
+    cfg = tax_cfg()
+    for key in ("equity_ltcg_pct", "other_ltcg_pct"):                     # 12.5 in two figures, as in the real config
+        cfg["figures"][key]["value"], cfg["figures"][key]["display"] = 12.5, "12.5%"
+    original = tax_module.get_config
+    tax_module.get_config = lambda: full_config(cfg)
+    try:
+        result = TaxAgent(llm=FakeLLM("Long-term gains are taxed at 12.5% [1]."), retrieve_fn=FakeRetrieve([chunk(1)])).run(
+            {"turn_id": "t1", "query": QUESTION})
+    finally:
+        tax_module.get_config = original
     data = result["data"]
-    assert data["config_used"] == {} and "illustrative, verify before relying" in result["answer"]
+    assert result["status"] == "ok" and result["answer"] == "Long-term gains are taxed at 12.5% [1]."   # the number passed the guard
+    assert data["config_used"] == {} and data["fact_citations"] == [] and data["exclusions"] == []
+    assert "illustrative, verify" not in result["answer"] and CFG["stt_assumption"] not in json.dumps(data)
+
+
+def test_a_cited_equity_figure_adds_the_footer_the_figure_and_the_tax_paid_exclusion():
+    _, _, result = ask("Long-term equity gains are taxed at 10% [F2].")
+    data = result["data"]
+    assert set(data["config_used"]) == {"equity_ltcg_pct"} and data["fact_citations"] == [2]
+    assert data["exclusions"] == [CFG["stt_assumption"], *CFG["exclusions"]["capital_gains"]]
+    assert "illustrative, verify before relying" in result["answer"]
+
+
+def test_a_cited_non_equity_figure_gets_the_footer_and_the_capital_gains_list_without_the_tax_paid_line():
+    _, _, result = ask("Gains on other assets are taxed at 20% after 24 months [F6][F5].")
+    data = result["data"]
+    assert set(data["config_used"]) == {"other_ltcg_pct", "holding_months_other"}
+    assert "illustrative, verify before relying" in result["answer"]
     assert data["exclusions"] == CFG["exclusions"]["capital_gains"] and "transaction tax" not in result["answer"]
 
 
@@ -430,3 +455,14 @@ def test_a_matched_non_equity_figure_gets_the_footer_and_the_capital_gains_list_
 def test_the_commentary_guard_compares_with_the_pre_formatted_amounts(reply, ok):
     _, result = calc(EQUITY, reply=reply)
     assert (result["data"]["warnings"] == []) is ok and result["answer"].startswith(reply) is ok
+
+
+def test_a_lakh_style_display_goes_to_the_commentary_as_given_and_repeating_it_is_accepted(monkeypatch):
+    shown = "₹1,25,000 (₹1.25 lakh) per financial year"
+    cfg = tax_cfg()
+    cfg["figures"]["equity_ltcg_exemption"]["display"] = shown
+    monkeypatch.setattr(tax_module, "get_config", lambda: full_config(cfg))
+    llm, result = calc(EQUITY, reply=f"The yearly exemption is {shown}, and the total tax is ₹5,500.00; this is illustrative.")
+    assert f'"equity_ltcg_exemption": "{shown}"' in llm.calls[0]                  # sent exactly as in config
+    assert "(no \"lakh\"" not in llm.calls[0] and "no lakh" not in llm.calls[0].lower()
+    assert result["data"]["warnings"] == [] and shown in result["answer"]          # the guard accepts the repeated display text

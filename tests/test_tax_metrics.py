@@ -335,3 +335,36 @@ def test_the_figure_entry_carries_the_short_source():
     from src.core.tax_metrics import figure_entry
     entry = figure_entry(CFG, "cess_pct")
     assert entry["source_short"] == CFG["figures"]["cess_pct"]["source_short"] and entry["source_short"] != entry["source"]
+
+
+PLAIN_COUNTS = {"holding_months", "years", "year"}      # whole-number counts that are shown as they are
+
+
+def _numeric_fields(model):
+    """Names of the int/float fields of a pydantic model (also Optional ones)."""
+    return {name for name, field in model.model_fields.items() if str(field.annotation) in ("<class 'float'>", "<class 'int'>", "float | None", "int | None")}
+
+
+def test_every_numeric_model_and_result_field_is_formatted_or_listed_as_a_plain_count():
+    from src.core.tax_metrics import MONEY_FIELDS, PERCENT_FIELDS
+    from src.core.tax_models import SmallSavingsInputs
+    formatted = set(MONEY_FIELDS) | set(PERCENT_FIELDS)
+    declared = _numeric_fields(CapitalGainsInputs) | _numeric_fields(SmallSavingsInputs)
+    produced = set()
+    for calc in (
+        capital_gains(CapitalGainsInputs(asset_type="equity_fund", buy_value=1, sell_value=900000, holding_months=24, ltcg_exemption_already_used=1), CFG),
+        capital_gains(CapitalGainsInputs(asset_type="debt_fund_post_2023", buy_value=1, sell_value=5, holding_months=1, slab_rate_pct=30), CFG),
+        small_savings_growth(SmallSavingsInputs(scheme="ppf", mode="annual", amount=10, years=2), CFG),
+    ):
+        for part in (calc.inputs, calc.results):
+            produced |= {k for k, v in part.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+    unformatted = (declared | produced) - formatted - PLAIN_COUNTS
+    assert not unformatted, f"numeric field(s) {sorted(unformatted)} are in neither MONEY_FIELDS nor PERCENT_FIELDS: add them or list them as plain counts"
+
+
+def test_the_field_coverage_check_would_catch_a_new_unformatted_field():
+    from pydantic import BaseModel
+
+    class WithNewField(BaseModel):
+        cess_pct: float
+    assert _numeric_fields(WithNewField) == {"cess_pct"}

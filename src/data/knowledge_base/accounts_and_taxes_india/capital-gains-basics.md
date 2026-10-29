@@ -35,6 +35,14 @@ The central idea is the **holding period**, the length of time between acquiring
 
 In principle, the two groups are taxed under different rules. Short-term gains are often taxed in a way that is closer to ordinary income or at a separate special treatment. Long-term gains frequently get a separate treatment, sometimes with an allowance before tax applies, and sometimes with a method that adjusts the purchase cost for inflation for certain assets. Whether such features exist today, and what they look like, depends on current law. This is exactly the kind of detail that has changed in the past, so no specifics are given here.
 
+## STT and equity gains
+
+Securities transaction tax, or STT, is a tax collected on certain transactions in listed securities on recognised stock exchanges. It is separate from the tax on the profit itself. The reason it comes up in a capital gains discussion is that the special treatment of gains on listed shares and equity mutual funds can depend on whether this tax was paid on the transaction. Whether STT applies to a particular transaction, and at what rate, is set by law and changes over time, so check the official source for the current position.
+
+## Long-term and short-term capital gains (LTCG and STCG)
+
+LTCG stands for long-term capital gains and STCG for short-term capital gains. A gain is long term when the asset was held for longer than the holding period set for that type of asset, and short term when it was sold within that period. The two kinds are taxed under different rules. The holding-period thresholds and the tax rates come from the official source, and this article gives none of them.
+
 ## Key takeaway
 
 A capital gain is the profit made on selling an asset, and the holding period decides whether it is treated as short term or long term. Rates, thresholds and allowances change, so confirm them on the official site. This article is educational and is not tax advice.

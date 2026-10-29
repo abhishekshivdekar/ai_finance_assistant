@@ -350,10 +350,47 @@ def test_the_original_querys_best_chunk_keeps_first_place_when_it_outscores_the_
     assert [c.score for c in merged][1] == 0.8                                   # the better score of the two searches is kept
 
 
-def test_the_per_article_cap_decides_between_same_article_chunks_of_the_two_searches():
-    # Why "How does PPF work?" swapped ppf#5 / ppf#21 for ppf#0 / ppf#1 on the real index: two chunks per article at most.
-    original = [_hit("accounts_and_taxes_india/ppf#5", 0.69), _hit("accounts_and_taxes_india/ppf#21", 0.69)]
-    expanded = [_hit("accounts_and_taxes_india/ppf#0", 0.77), _hit("accounts_and_taxes_india/ppf#1", 0.70)]
+def test_a_heading_chunk_from_the_expansion_does_not_push_out_the_deposit_and_interest_chunks():
+    # The real "How does PPF work?" regression: "public provident fund" matched the title chunk ppf#0 (0.77) and the
+    # intro ppf#1, which took both per-article slots of ppf and pushed out ppf#5 / ppf#21.
+    base = "accounts_and_taxes_india/"
+    original = [_hit(base + "overview#10", 0.69), _hit(base + "ppf#5", 0.69), _hit(base + "ppf#21", 0.69),
+                _hit(base + "overview#9", 0.53), _hit(base + "nps#23", 0.53), _hit(base + "epf#5", 0.45)]
+    expanded = [_hit(base + "ppf#0", 0.77), _hit(base + "ppf#1", 0.70), _hit(base + "overview#10", 0.69),
+                _hit(base + "overview#9", 0.68), _hit(base + "epf#0", 0.66), _hit(base + "epf#1", 0.64)]
     fake, _ = _by_query({"How does PPF work?": original, "How does public provident fund work?": expanded})
     merged = merge_retrieval(fake, ["How does PPF work?"], "accounts_and_taxes_india")
-    assert [c.chunk_id for c in merged] == ["accounts_and_taxes_india/ppf#0", "accounts_and_taxes_india/ppf#1"]
+    ids = [c.chunk_id for c in merged]
+    assert ids == [base + name for name in ("overview#10", "ppf#5", "ppf#21", "overview#9", "nps#23", "epf#5")]
+    assert base + "ppf#0" not in ids and base + "ppf#1" not in ids
+
+
+def test_when_the_written_query_finds_nothing_the_expansion_fills_every_slot():
+    expanded = [_hit(f"accounts_and_taxes_india/a{i}#0", 0.7 - i / 100) for i in range(8)]
+    fake, _ = _by_query({"What is long-term capital gains tax?": expanded})
+    merged = merge_retrieval(fake, ["What is LTCG?"], "accounts_and_taxes_india")
+    assert [c.chunk_id for c in merged] == [f"accounts_and_taxes_india/a{i}#0" for i in range(get_config()["rag"]["top_k"])]
+
+
+def test_when_the_written_query_finds_fewer_than_top_k_the_expansion_fills_only_the_rest():
+    top_k = get_config()["rag"]["top_k"]
+    written = [_hit("accounts_and_taxes_india/w0#0", 0.4), _hit("accounts_and_taxes_india/w1#0", 0.35)]
+    expanded = [_hit(f"accounts_and_taxes_india/e{i}#0", 0.9 - i / 100) for i in range(top_k)]   # all outscore the written ones
+    fake, _ = _by_query({"What is LTCG?": written, "What is long-term capital gains tax?": expanded})
+    merged = merge_retrieval(fake, ["What is LTCG?"], "accounts_and_taxes_india")
+    ids = [c.chunk_id for c in merged]
+    assert len(ids) == top_k and ids[:2] == ["accounts_and_taxes_india/w0#0", "accounts_and_taxes_india/w1#0"]
+    assert ids[2:] == [f"accounts_and_taxes_india/e{i}#0" for i in range(top_k - 2)]
+
+
+def test_a_chunk_found_by_both_keeps_the_written_querys_score_even_when_the_expansion_scored_higher():
+    shared = "accounts_and_taxes_india/shared#3"
+    fake, _ = _by_query({"How does PPF work?": [_hit(shared, 0.5)], "How does public provident fund work?": [_hit(shared, 0.9)]})
+    merged = merge_retrieval(fake, ["How does PPF work?"], "accounts_and_taxes_india")
+    assert [(c.chunk_id, c.score) for c in merged] == [(shared, 0.5)]
+
+
+def test_a_chunk_below_the_threshold_is_dropped_even_from_the_written_query():
+    low = _hit("accounts_and_taxes_india/low#0", get_config()["rag"]["score_threshold"] - 0.01)
+    assert merge_retrieval(lambda q, topic=None: [low], ["What is a bond?"], None) == []
+

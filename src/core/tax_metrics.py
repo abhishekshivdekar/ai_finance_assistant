@@ -96,16 +96,6 @@ def fact_lines(facts: list[dict[str, Any]], cfg: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def quoted_fact_keys(text: str, facts: list[dict[str, Any]]) -> list[str]:
-    """Keys of the facts whose display text shares a number with `text` (the text must have no citation markers).
-
-    A coincidence (the text says 12 and a fact says 12 months) only adds a footer, which is the safe side.
-    Example: "taxed at 12.5%" matches the facts displayed as "12.5%".
-    """
-    found = numbers_in(text)
-    return [fact["key"] for fact in facts if numbers_in(fact["display"]) & found]
-
-
 def slab_rate_for(inputs: CapitalGainsInputs) -> Decimal:
     """The user's slab rate; calling the calculator without one for a slab-taxed gain is a programming error."""
     if inputs.slab_rate_pct is None:
@@ -250,8 +240,10 @@ PERCENT_FIELDS = ("slab_rate_pct", "rate_pct")
 def _as_text(key: str, value: Any, cfg: dict[str, Any]) -> Any:
     """An amount as text with the currency sign and western digit grouping, a rate with the percent sign; anything else as is.
 
-    Example: ("tax", 15500.0) -> "₹15,500.00"; ("rate_pct", 12.5) -> "12.5%". Text is easy to copy exactly,
-    so the number guard can compare it with the commentary (the same idea as Goal Planning's summary_input).
+    Example: ("tax", 15500.0) -> "₹15,500.00"; ("rate_pct", 12.5) -> "12.5%". The intent is that the model copies
+    the text as given and the number guard compares the commentary with the same text (the idea Goal Planning's
+    summary_input uses). A numeric field listed in neither MONEY_FIELDS nor PERCENT_FIELDS is passed through
+    unformatted; a test fails when a model or result field is missing from both lists.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return value

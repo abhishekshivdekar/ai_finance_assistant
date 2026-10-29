@@ -41,7 +41,6 @@ from src.core.tax_metrics import (
     fact_lines,
     figure_entry,
     footer,
-    quoted_fact_keys,
     small_savings_growth,
     summary_input,
 )
@@ -111,12 +110,12 @@ class TaxAgent(BaseAgent):
             self.log.warning("Answer contains numbers not in the chunks, facts or question: %s", sorted(invented))
             return discarded
 
+        # Matching a figure by number may widen the number whitelist above, but only a CITED figure
+        # adds the footer, the exclusions or a config_used entry.
         used = {facts[n - 1]["key"]: figure_entry(cfg, facts[n - 1]["key"]) for n in fact_cited}
-        # A number that matches a figure only decides whether the footer is added; config_used lists cited figures only.
-        shown = {**used, **{key: figure_entry(cfg, key) for key in quoted_fact_keys(bare, facts)}}
-        if shown:
-            answer = f"{answer}\n\n{footer(shown, cfg)}"
-            payload["exclusions"] = exclusions_for("capital_gains", cfg, equity=any(e["stt_condition"] for e in shown.values()))
+        if used:
+            answer = f"{answer}\n\n{footer(used, cfg)}"
+            payload["exclusions"] = exclusions_for("capital_gains", cfg, equity=any(e["stt_condition"] for e in used.values()))
         payload["fact_citations"] = fact_cited
         payload["config_used"] = used
         return self._result("ok", answer, payload, to_sources(cited_chunks))
@@ -132,7 +131,7 @@ class TaxAgent(BaseAgent):
         fallback, warn = " ".join(cfg["fallback_commentary"].split()), cfg["texts"]
         payload = summary_input(calc, cfg)
         try:
-            reply = self.llm.invoke(cfg["commentary_prompt"].format(results_json=json.dumps(payload, indent=2)))
+            reply = self.llm.invoke(cfg["commentary_prompt"].format(results_json=json.dumps(payload, indent=2, ensure_ascii=False)))
             text = str(getattr(reply, "content", reply)).strip()
         except Exception:
             self.log.warning("Tax commentary failed; using the fallback text", exc_info=True)

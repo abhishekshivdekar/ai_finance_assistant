@@ -10,15 +10,19 @@ import sys
 from src.rag.retriever import RetrievedChunk, expand_query, merge_retrieval, retrieve
 from src.utils.config import get_config
 
-QUESTIONS = ["What is LTCG?", "What is STT?"]
+QUESTIONS = [
+    "What is LTCG?", "What is STT?", "How does PPF work?", "What is the difference between PPF and NPS?",
+]
 TOPICS = ["accounts_and_taxes_india", None]
+SNIPPET = 120
 
 
 def show(label: str, chunks: list[RetrievedChunk]) -> None:
-    """Print one result list as title and score."""
+    """Print one result list: score, chunk id and the first SNIPPET characters of the text."""
     print(f"  {label}: {len(chunks)} chunk(s)")
     for chunk in chunks:
-        print(f"    {chunk.score:.2f}  {chunk.title}  ({chunk.chunk_id})")
+        text = " ".join(chunk.text.split())[:SNIPPET]
+        print(f"    {chunk.score:.2f}  {chunk.chunk_id}  {text}")
 
 
 def main() -> None:

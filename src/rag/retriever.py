@@ -22,6 +22,9 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 
+WRITTEN_FIRST = 1.0   # sort bonus: written-query chunks rank above expansion-only ones
+
+
 @dataclass(frozen=True)
 class RetrievedChunk:
     """A retrieved chunk with the metadata needed for citations."""
@@ -140,31 +143,43 @@ def expand_query(query: str, expansions: dict[str, str]) -> str | None:
 def merge_retrieval(
     retrieve_fn: Callable[..., list[RetrievedChunk]], queries: list[str], topic: str | None
 ) -> list[RetrievedChunk]:
-    """Retrieve for each query (and its acronym-expanded form), merge by chunk (best score), re-apply the shared rules.
+    """Retrieve for each query as written first, then fill the free slots from the acronym-expanded forms.
 
-    A query that holds an acronym such as LTCG is searched twice, as written and expanded (see
-    expand_query), because the articles use the long form. Example: "What is LTCG?" finds nothing
-    on its own but its expansion finds the capital-gains article.
+    A query that holds an acronym such as LTCG is also searched expanded (see expand_query), because
+    the articles use the long form. The expansion only FILLS: chunks found by a query as written come
+    first with their own scores, and a chunk the expansion also finds keeps the written query's score.
+    Example: "How does PPF work?" finds the deposit and interest chunks as written; its expansion
+    ("public provident fund") would rank the article's heading chunk first and push them out of the
+    two-per-article cap, so it may only add what is left. "What is LTCG?" finds nothing as written,
+    so its expansion fills every slot.
 
-    retrieve() already applied the threshold and caps per query; select_chunks
-    runs again on the merged list so the per-article and glossary caps and top_k
-    still hold after merging (no second implementation of those rules). Used by
-    the Finance Q&A agent (original + rewritten query) and the Tax agent (one query,
-    locked topic). Example: the same chunk found by both queries appears once with
-    its better score.
+    retrieve() already applied the threshold and caps per query; select_chunks runs again on the
+    merged list so the per-article and glossary caps and top_k still hold (no second implementation).
+    Its sort key is the score plus WRITTEN_FIRST for a written-query chunk (a cosine score is at most 1),
+    which keeps the written results ahead without a second sorting rule. Used by the Finance Q&A agent
+    (original + rewritten query) and the Tax agent (one query, locked topic).
     """
     rag = get_config()["rag"]
-    best: dict[str, RetrievedChunk] = {}
     expansions = rag.get("query_expansions") or {}
-    searches = list(dict.fromkeys(q for query in queries for q in (query, expand_query(query, expansions)) if q))
-    for query in searches:
-        for chunk in retrieve_fn(query, topic=topic):
-            known = best.get(chunk.chunk_id)
+    searches: dict[str, bool] = {}          # query text -> searched as written? (insertion order = search order)
+    for query in queries:
+        for text, is_written in ((query, True), (expand_query(query, expansions), False)):
+            if text:
+                searches[text] = searches.get(text, False) or is_written
+    found: dict[bool, dict[str, RetrievedChunk]] = {True: {}, False: {}}
+    for text, is_written in searches.items():
+        for chunk in retrieve_fn(text, topic=topic):
+            known = found[is_written].get(chunk.chunk_id)
             if known is None or chunk.score > known.score:
-                best[chunk.chunk_id] = chunk
-    hits = [({"chunk_id": cid}, chunk.score) for cid, chunk in best.items()]
+                found[is_written][chunk.chunk_id] = chunk
+    first = set(found[True])
+    best = {**found[False], **found[True]}   # a written-query chunk keeps its own score even if the expansion scored higher
+    hits = [
+        ({"chunk_id": cid}, chunk.score + (WRITTEN_FIRST if cid in first else 0.0))
+        for cid, chunk in best.items() if chunk.score >= rag["score_threshold"]
+    ]
     max_per_article, max_per_topic = diversity_caps(rag)
-    kept = select_chunks(hits, rag["top_k"], rag["score_threshold"], max_per_article, max_per_topic)
+    kept = select_chunks(hits, rag["top_k"], 0.0, max_per_article, max_per_topic)
     return [best[rec["chunk_id"]] for rec, _ in kept]
 
 
