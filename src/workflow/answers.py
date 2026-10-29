@@ -28,17 +28,16 @@ def _map_citations(text: str, rename: Callable[[int], str]) -> str:
     return CITATION.sub(swap, text)
 
 
-def merge_verbatim(results: list[AgentResult], cfg: dict[str, Any] | None = None) -> tuple[str, list[Source]]:
-    """Join the ok answers under headings, keeping each answer's own words, and make the [n] markers unique.
+def renumber_results(results: list[AgentResult], cfg: dict[str, Any]) -> tuple[list[tuple[str, str]], list[Source]]:
+    """[(label, text)] per result with unique [n] markers, plus the concatenated sources.
 
     An answer with sources has its markers shifted by the number of sources before it (agent A cites [1][2],
     agent B's [1] becomes [3]) and the source lists are concatenated in the same order. An answer without sources
     (News cites its numbered headline list) gets its markers labelled, "[1]" -> "[News 1]", so they cannot be
-    mistaken for a source number. Used for two or more ok results; also the safe path if a merge is rejected.
+    mistaken for a source number. Used before the LLM merge and for the verbatim join.
     """
-    cfg = cfg or workflow_cfg()
     messages = cfg["messages"]
-    sections: list[str] = []
+    sections: list[tuple[str, str]] = []
     sources: list[Source] = []
     for result in results:
         label = cfg["agent_labels"][result["agent"]]
@@ -48,8 +47,20 @@ def merge_verbatim(results: list[AgentResult], cfg: dict[str, Any] | None = None
             sources = [*sources, *result["sources"]]
         else:
             text = _map_citations(result["answer"], lambda n, label=label: messages["unsourced_marker"].format(label=label, n=n)[1:-1])
-        sections.append(f"{messages['section_heading'].format(label=label)}\n{text}")
-    return "\n\n".join(sections), sources
+        sections.append((label, text))
+    return sections, sources
+
+
+def join_sections(sections: list[tuple[str, str]], cfg: dict[str, Any]) -> str:
+    """The sections under their headings, each answer in its own words."""
+    return "\n\n".join(f"{cfg['messages']['section_heading'].format(label=label)}\n{text}" for label, text in sections)
+
+
+def merge_verbatim(results: list[AgentResult], cfg: dict[str, Any] | None = None) -> tuple[str, list[Source]]:
+    """Join the ok answers under headings with unique [n] markers: the safe path whenever an LLM merge is rejected."""
+    cfg = cfg or workflow_cfg()
+    sections, sources = renumber_results(results, cfg)
+    return join_sections(sections, cfg), sources
 
 
 def notes_for(results: list[AgentResult], cfg: dict[str, Any] | None = None) -> list[str]:

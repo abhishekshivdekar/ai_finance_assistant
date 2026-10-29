@@ -186,8 +186,9 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
     chars = wf["router_history_max_chars"]
     if isinstance(chars, bool) or not isinstance(chars, int) or chars < 1:
         raise ConfigError("workflow.router_history_max_chars must be a positive whole number.")
-    if not str(wf["router_prompt"]).strip():
-        raise ConfigError("workflow.router_prompt must not be empty.")
+    for prompt in ("router_prompt", "synthesizer_prompt", "safe_response_prompt"):
+        if not str(wf.get(prompt) or "").strip():
+            raise ConfigError(f"workflow.{prompt} must not be empty.")
     for pattern in wf["advice_patterns"]:
         try:
             re.compile(str(pattern))

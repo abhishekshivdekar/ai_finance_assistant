@@ -9,3 +9,19 @@ def _clear_config_cache():
     get_config.cache_clear()
     yield
     get_config.cache_clear()
+
+
+class OfflineLLM:
+    """Stands in for a real chat model in workflow tests that did not inject one: every call fails."""
+
+    def invoke(self, *args, **kwargs):
+        raise RuntimeError("offline test LLM: inject a fake LLM to script a reply")
+
+
+@pytest.fixture(autouse=True)
+def _workflow_never_reaches_the_network(monkeypatch):
+    """The graph's synthesizer / safe_response LLMs are created lazily through get_llm, and advice context comes from
+    the real retriever. Neither may run in a test unless the test injects a fake: the LLM stand-in raises and the
+    retriever finds nothing (so a merge falls back to the verbatim join and advice to its static text)."""
+    monkeypatch.setattr("src.workflow.nodes.get_llm", lambda **kwargs: OfflineLLM())
+    monkeypatch.setattr("src.workflow.graph.retrieve", lambda query, topic=None, **kwargs: [])

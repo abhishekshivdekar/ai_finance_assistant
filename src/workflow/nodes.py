@@ -14,15 +14,36 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from src.core.llm_factory import get_llm
 from src.core.models import AgentResult, Source
+from src.rag.retriever import RetrievedChunk, retrieve
 from src.utils.logger import get_logger
-from src.workflow.answers import add_disclaimer, merge_verbatim, notes_for
+from src.workflow.advice import educational_answer
+from src.workflow.answers import add_disclaimer, notes_for
+from src.workflow.merge import merge_with_llm
 from src.workflow.routing import Decision, plan_agents, reroute_target, workflow_cfg
 from src.workflow.state import GraphState, current_results
 
 log = get_logger(__name__)
 
 Node = Callable[[GraphState], dict[str, Any]]
+
+
+class LazyLLM:
+    """An LLM for one role that is created on first use (graphs that never merge or give advice never create it).
+
+    Design pattern: LAZY INITIALISATION behind the Factory. Example: LazyLLM("synthesizer").get() calls
+    get_llm(role="synthesizer") once; LazyLLM("synthesizer", fake).get() returns the fake without a factory call.
+    """
+
+    def __init__(self, role: str, llm: Any = None) -> None:
+        self.role, self._llm = role, llm
+
+    def get(self) -> Any:
+        """The LLM, created through get_llm on the first call."""
+        if self._llm is None:
+            self._llm = get_llm(role=self.role)
+        return self._llm
 
 
 def reply(answer: str, sources: list[Source] | None = None) -> dict[str, Any]:
@@ -84,11 +105,22 @@ def clarify_node(state: GraphState) -> dict[str, Any]:
     return reply("\n\n".join(asked) if asked else " ".join(workflow_cfg()["messages"]["clarify_low_confidence"].split()))
 
 
-def safe_response_node(state: GraphState) -> dict[str, Any]:
-    """Answer an advice request or an off-topic query without running any agent (static texts in this version)."""
-    messages = workflow_cfg()["messages"]
-    key = "advice_static" if "specific_advice" in (state.get("intents") or []) else "out_of_scope"
-    return finish(" ".join(messages[key].split()))
+def make_safe_response_node(llm: LazyLLM, retrieve_fn: Callable[..., list[RetrievedChunk]] = retrieve) -> Node:
+    """safe_response: no agent runs here. out_of_scope is a static text; specific_advice is an educational answer.
+
+    The educational answer (retrieved context, no recommendation, checked) falls back to the static advice text.
+    """
+
+    def node(state: GraphState) -> dict[str, Any]:
+        messages = workflow_cfg()["messages"]
+        if "specific_advice" not in (state.get("intents") or []):
+            return finish(" ".join(messages["out_of_scope"].split()))
+        found = educational_answer(state, llm.get(), retrieve_fn)
+        if found is None:
+            return finish(" ".join(messages["advice_static"].split()))
+        return finish(found[0], found[1])
+
+    return node
 
 
 def fallback_node(state: GraphState) -> dict[str, Any]:
@@ -96,17 +128,22 @@ def fallback_node(state: GraphState) -> dict[str, Any]:
     return finish(" ".join(workflow_cfg()["messages"]["fallback"].split()))
 
 
-def synthesizer_node(state: GraphState) -> dict[str, Any]:
-    """One ok result: its answer. Two or more: joined verbatim under headings. Only no_answer: that message.
+def make_synthesizer_node(llm: LazyLLM) -> Node:
+    """synthesizer: one ok result is its answer (no LLM call); two or more are merged by ONE LLM call.
 
-    Notes for needs_input / error results come from code. Nothing usable at all goes to the fallback.
+    The merge is checked in code and falls back to a verbatim join (merge_with_llm). Notes for needs_input /
+    error / no_answer results come from code. Only no_answer results: that message. Nothing usable: the fallback.
     """
-    results = current_results(state)
-    ok = [r for r in results if r["status"] == "ok"]
-    if ok:
-        answer, sources = (ok[0]["answer"], ok[0]["sources"]) if len(ok) == 1 else merge_verbatim(ok)
-        return finish("\n\n".join([answer, *notes_for(results)]), sources)
-    no_answer = [r for r in results if r["status"] == "no_answer"]
-    if no_answer:
-        return finish(no_answer[-1]["answer"])
-    return fallback_node(state)
+
+    def node(state: GraphState) -> dict[str, Any]:
+        results = current_results(state)
+        ok = [r for r in results if r["status"] == "ok"]
+        if ok:
+            answer, sources = (ok[0]["answer"], ok[0]["sources"]) if len(ok) == 1 else merge_with_llm(ok, llm.get())
+            return finish("\n\n".join([answer, *notes_for(results)]), sources)
+        no_answer = [r for r in results if r["status"] == "no_answer"]
+        if no_answer:
+            return finish(no_answer[-1]["answer"])
+        return fallback_node(state)
+
+    return node

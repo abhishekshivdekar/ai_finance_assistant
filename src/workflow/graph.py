@@ -18,8 +18,10 @@ from src.agents.news import NewsAgent
 from src.agents.portfolio import PortfolioAgent
 from src.agents.tax import TaxAgent
 from src.workflow.edges import route_after_agent, route_after_reroute, route_after_router, route_from_start
+from src.rag.retriever import retrieve
 from src.workflow.nodes import (
-    clarify_node, fallback_node, make_agent_node, make_router_node, reroute_node, safe_response_node, synthesizer_node,
+    LazyLLM, clarify_node, fallback_node, make_agent_node, make_router_node, make_safe_response_node, make_synthesizer_node,
+    reroute_node,
 )
 from src.workflow.routing import Decision, workflow_cfg
 from src.workflow.state import GraphState
@@ -39,8 +41,15 @@ def build_graph(
     classify: Callable[[GraphState], Decision],
     agents: dict[str, Any] | None = None,
     checkpointer: Any = None,
+    synthesizer_llm: Any = None,
+    safe_response_llm: Any = None,
+    retrieve_fn: Any = None,
 ) -> Any:
-    """Compile the graph. The checkpointer defaults to the in-memory MemorySaver (architecture 12.1)."""
+    """Compile the graph. The checkpointer defaults to the in-memory MemorySaver (architecture 12.1).
+
+    The two LLMs (roles synthesizer and safe_response) are created on first use unless a test injects them;
+    retrieve_fn (advice context) defaults to the shared retriever.
+    """
     agents = default_agents() if agents is None else agents
     names = list(workflow_cfg()["agent_intents"])
     builder = StateGraph(GraphState)
@@ -48,8 +57,9 @@ def build_graph(
     for name in names:
         builder.add_node(name, make_agent_node(agents[name]))
     builder.add_node("reroute", reroute_node)
-    for name, node in (("clarify", clarify_node), ("safe_response", safe_response_node),
-                       ("synthesizer", synthesizer_node), ("fallback", fallback_node)):
+    for name, node in (("clarify", clarify_node), ("fallback", fallback_node),
+                       ("safe_response", make_safe_response_node(LazyLLM("safe_response", safe_response_llm), retrieve_fn or retrieve)),
+                       ("synthesizer", make_synthesizer_node(LazyLLM("synthesizer", synthesizer_llm)))):
         builder.add_node(name, node)
 
     after_agent = {*names, "reroute", *FINAL_NODES}

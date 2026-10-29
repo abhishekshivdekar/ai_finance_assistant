@@ -111,7 +111,7 @@ def test_notes_use_the_agent_name_when_it_has_no_label():
 # ---- nodes used directly ----
 
 def test_the_synthesizer_with_nothing_to_present_falls_back():
-    update = nodes.synthesizer_node({"turn_id": "t1", "agent_outputs": [result("market", "error", error="x")]})
+    update = nodes.make_synthesizer_node(nodes.LazyLLM("synthesizer", object()))({"turn_id": "t1", "agent_outputs": [result("market", "error", error="x")]})
     assert " ".join(WF["messages"]["fallback"].split()) in update["final_answer"]
 
 
@@ -168,6 +168,8 @@ def test_a_valid_workflow_block_loads(tmp_path):
     lambda w: w.update(router_history_max_chars=0),
     lambda w: w.update(router_history_max_chars=True),
     lambda w: w.update(router_prompt="  "),
+    lambda w: w.update(synthesizer_prompt=""),
+    lambda w: w.pop("safe_response_prompt"),
     lambda w: w.update(advice_patterns=["(unclosed"]),
     lambda w: w.update(ticker_aliases=["apple"]),
     lambda w: w["ticker_aliases"].update(broken=""),
