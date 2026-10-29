@@ -258,7 +258,7 @@ def test_summary_input_has_inputs_results_rates_and_caveats_but_no_dates_or_sour
     calc = cg(holding_months=13)
     data = summary_input(calc, CFG)
     assert set(data) == {"calculation", "inputs", "results", "rates", "caveats"}
-    assert data["rates"]["equity_ltcg_pct"] == 10 and CFG["stt_assumption"] in data["caveats"]
+    assert data["rates"]["equity_ltcg_pct"] == "10%" and CFG["stt_assumption"] in data["caveats"]
     assert "2026" not in str(data) and "incometax" not in str(data)
 
 
@@ -311,3 +311,27 @@ def test_the_savings_commentary_input_has_no_capital_gains_caveats():
     caveats = " ".join(summary_input(calc, CFG)["caveats"])
     assert not any(word in caveats for word in STT_WORDS) and "income tax slabs" not in caveats and "set-off" not in caveats
     assert "annual compounding" in caveats and "lock-in" in caveats and "check the official scheme rules" in caveats
+
+
+def test_summary_input_writes_amounts_and_rates_as_text_with_the_currency_sign_and_grouping():
+    data = summary_input(cg(buy_value=1234567.5, sell_value=2000000, expenses=0, holding_months=6), CFG)
+    assert data["inputs"]["buy_value"] == "₹1,234,567.50" and data["inputs"]["expenses"] == "₹0.00"
+    assert data["inputs"]["holding_months"] == 6 and data["inputs"]["asset_type"] == "equity_fund"
+    assert data["results"]["gain_or_loss"] == "₹765,432.50" and data["results"]["rate_pct"] == "15%"
+    assert data["results"]["term"] == "short_term" and data["inputs"]["slab_rate_pct"] is None
+    debt = summary_input(cg(asset_type="debt_fund_post_2023", slab_rate_pct=30.5), CFG)
+    assert debt["inputs"]["slab_rate_pct"] == "30.5%" and debt["results"]["rate_pct"] == "30.5%"
+    assert data["rates"] == {"cess_pct": "10%", "equity_stcg_pct": "15%", "holding_months_equity": "12 months"} or \
+        data["rates"] == {"cess_pct": "10%", "holding_months_equity": "12 months", "equity_stcg_pct": "15%"}
+
+
+def test_savings_summary_input_is_text_too_and_keeps_the_scheme_and_years():
+    data = summary_input(savings(amount=1000.5), CFG)
+    assert data["inputs"]["amount"] == "₹1,000.50" and data["inputs"]["years"] == 2 and data["inputs"]["scheme"] == "ppf"
+    assert data["results"]["final_value"].startswith("₹") and data["results"]["rate_pct"] == "10%" and data["results"]["scheme"] == "ppf"
+
+
+def test_the_figure_entry_carries_the_short_source():
+    from src.core.tax_metrics import figure_entry
+    entry = figure_entry(CFG, "cess_pct")
+    assert entry["source_short"] == CFG["figures"]["cess_pct"]["source_short"] and entry["source_short"] != entry["source"]

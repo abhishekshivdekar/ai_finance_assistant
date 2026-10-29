@@ -77,7 +77,7 @@ class TaxAgent(BaseAgent):
 
     def _answer_question(self, question: str, cfg: dict[str, Any]) -> AgentResult:
         """Retrieve from the locked topic, answer from chunks and facts, then check citations and numbers."""
-        payload = self._base_payload("question", cfg, exclusions_for("capital_gains", cfg, equity=True))
+        payload = self._base_payload("question", cfg, [])
         if not question:
             return self._result("needs_input", cfg["question_needs_input"], payload)
         chunks = merge_retrieval(self.retrieve_fn, [question], cfg["topic"])
@@ -111,11 +111,12 @@ class TaxAgent(BaseAgent):
             self.log.warning("Answer contains numbers not in the chunks, facts or question: %s", sorted(invented))
             return discarded
 
-        keys = [facts[n - 1]["key"] for n in fact_cited]
-        keys += [key for key in quoted_fact_keys(bare, facts) if key not in keys]
-        used = {key: figure_entry(cfg, key) for key in keys}
-        if used:
-            answer = f"{answer}\n\n{footer(used, cfg)}"
+        used = {facts[n - 1]["key"]: figure_entry(cfg, facts[n - 1]["key"]) for n in fact_cited}
+        # A number that matches a figure only decides whether the footer is added; config_used lists cited figures only.
+        shown = {**used, **{key: figure_entry(cfg, key) for key in quoted_fact_keys(bare, facts)}}
+        if shown:
+            answer = f"{answer}\n\n{footer(shown, cfg)}"
+            payload["exclusions"] = exclusions_for("capital_gains", cfg, equity=any(e["stt_condition"] for e in shown.values()))
         payload["fact_citations"] = fact_cited
         payload["config_used"] = used
         return self._result("ok", answer, payload, to_sources(cited_chunks))

@@ -98,8 +98,8 @@ def test_a_fact_citation_adds_the_fixed_label_as_of_date_and_tax_paid_note():
     _, _, result = ask("Equity fund gains held longer are taxed at 10% [F2] after an exemption of 100000 [F3].")
     assert result["status"] == "ok"
     data = result["data"]
-    # the test figures repeat 10 (equity long-term, cess, PPF), so those facts are footnoted too: the safe side
-    assert data["fact_citations"] == [2, 3] and set(data["config_used"]) == {"equity_ltcg_pct", "equity_ltcg_exemption", "cess_pct", "ppf_pct"}
+    # the test figures repeat 10 (equity long-term, cess, PPF); only the cited figures are listed
+    assert data["fact_citations"] == [2, 3] and set(data["config_used"]) == {"equity_ltcg_pct", "equity_ltcg_exemption"}
     assert data["config_used"]["equity_ltcg_pct"]["as_of"] == "2026-10-29" and data["config_used"]["equity_ltcg_pct"]["source"]
     assert "illustrative, verify before relying (as of 2026-10-29)" in result["answer"]
     assert result["answer"].endswith("Assumes the securities transaction tax was paid on the sale of listed equity and equity funds.")
@@ -217,7 +217,10 @@ def test_the_commentary_prompt_holds_only_computed_data():
     llm, _ = calc(EQUITY)
     prompt = llm.calls[0]
     payload = json.loads(prompt.split(JSON_MARKER, 1)[1])
-    assert set(payload) == {"calculation", "inputs", "results", "rates", "caveats"} and payload["results"]["total_tax"] == 5500.0
+    assert set(payload) == {"calculation", "inputs", "results", "rates", "caveats"} and payload["results"]["total_tax"] == "₹5,500.00"
+    assert payload["inputs"]["buy_value"] == "₹100,000.00" and payload["inputs"]["holding_months"] == 13
+    assert payload["results"]["rate_pct"] == "10%" and payload["rates"]["equity_ltcg_pct"] == "10%"
+    assert "copy them exactly as written" in " ".join(prompt.split()).lower()
     assert "2026" not in prompt and "incometax" not in prompt and CFG["stt_assumption"] in payload["caveats"]
     assert "never tell the reader what to buy, sell or hold" in prompt.replace("\n", " ").replace("  ", " ")
 
@@ -321,7 +324,8 @@ def test_default_retrieve_function_is_the_shared_retriever():
 def test_a_quoted_fact_number_with_only_a_chunk_citation_still_gets_the_footer():
     _, _, result = ask("Equity fund gains held long are taxed at 15% [1].")
     assert result["status"] == "ok" and result["data"]["fact_citations"] == []
-    assert set(result["data"]["config_used"]) == {"equity_stcg_pct"}
+    assert result["data"]["config_used"] == {}                                   # matched by number only: not listed
+    assert result["data"]["exclusions"] == [CFG["stt_assumption"], *CFG["exclusions"]["capital_gains"]]
     assert "illustrative, verify before relying (as of 2026-10-29)" in result["answer"]
     assert result["answer"].endswith("equity funds.")
 
@@ -386,3 +390,43 @@ def test_an_acronym_question_is_searched_as_written_and_in_plain_words_on_the_lo
 def test_a_needs_input_result_already_carries_the_exclusions_of_the_requested_calculation(params, expected):
     _, result = calc(params)
     assert result["status"] == "needs_input" and result["data"]["exclusions"] == expected
+
+
+def test_an_answer_quoting_a_rate_and_citing_only_one_fact_lists_only_that_fact():
+    cfg = tax_cfg()
+    cfg["figures"]["other_ltcg_pct"]["value"], cfg["figures"]["other_ltcg_pct"]["display"] = 10, "10%"   # like 12.5 in two figures
+    original = tax_module.get_config
+    tax_module.get_config = lambda: full_config(cfg)
+    try:
+        result = TaxAgent(llm=FakeLLM("Long-term equity gains are taxed at 10% [F2]."), retrieve_fn=FakeRetrieve([chunk(1)])).run(
+            {"turn_id": "t1", "query": QUESTION})
+    finally:
+        tax_module.get_config = original
+    assert result["status"] == "ok" and result["data"]["fact_citations"] == [2]
+    assert set(result["data"]["config_used"]) == {"equity_ltcg_pct"} and "other_ltcg_pct" not in result["data"]["config_used"]
+    assert "illustrative, verify before relying" in result["answer"] and result["answer"].endswith("equity funds.")
+
+
+def test_a_definition_answer_without_a_figure_or_a_fact_citation_has_no_exclusions_and_no_footer():
+    _, _, result = ask("Capital gains are the profit made when an asset is sold for more than it cost [1].")
+    data = result["data"]
+    assert result["status"] == "ok" and data["exclusions"] == [] and data["config_used"] == {} and data["label"] == CFG["label"]
+    assert "illustrative, verify" not in result["answer"]
+
+
+def test_a_matched_non_equity_figure_gets_the_footer_and_the_capital_gains_list_without_the_tax_paid_line():
+    _, _, result = ask("The Sukanya Samriddhi rate is 8% [1].")
+    data = result["data"]
+    assert data["config_used"] == {} and "illustrative, verify before relying" in result["answer"]
+    assert data["exclusions"] == CFG["exclusions"]["capital_gains"] and "transaction tax" not in result["answer"]
+
+
+@pytest.mark.parametrize("reply, ok", [
+    ("The total tax is ₹5,500.00 on a gain of ₹150,000.00.", True),
+    ("The total tax is 5,500 on a gain of 150000.", True),
+    ("The total tax is ₹5,600.00.", False),
+    ("A holding of 13 months at 10% gives ₹5,500.00 in total, 1.5 lakh gain.", False),     # 1.5 is not a computed number
+])
+def test_the_commentary_guard_compares_with_the_pre_formatted_amounts(reply, ok):
+    _, result = calc(EQUITY, reply=reply)
+    assert (result["data"]["warnings"] == []) is ok and result["answer"].startswith(reply) is ok

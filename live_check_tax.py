@@ -31,16 +31,11 @@ CALCULATIONS = {
 }
 
 
-def short_source(source: str) -> str:
-    """The first part of a long source string: "incometax.gov.in (verify); cross-checked ..." -> "incometax.gov.in"."""
-    return source.split(";")[0].split(" (")[0].split(",")[0].strip()
-
-
 def show_config_used(config_used: dict) -> None:
-    """Print each figure used with its display text, as_of date, short source and verify flag."""
+    """Print each figure used with its display text, as_of date, short source and verify flag (source_short from config)."""
     print("\n--- Config values used ---")
     for key, entry in config_used.items():
-        print(f"  {key}: {entry['display']} ({entry['label']}); as of {entry['as_of']}; source: {short_source(entry['source'])}; verify: {entry['verify']}")
+        print(f"  {key}: {entry['display']} ({entry['label']}); as of {entry['as_of']}; source: {entry['source_short']}; verify: {entry['verify']}")
 
 
 def show(title: str, state: dict) -> None:
@@ -64,7 +59,7 @@ def show(title: str, state: dict) -> None:
         print(f"\n--- Facts cited by the model ({len(cited)} of {len(data['facts'])} offered) ---")
         for fact in data["facts"]:
             if fact["number"] in cited:
-                print(f"  {fact['id']}: {fact['label']} = {fact['display']}; as of {fact['as_of']}; source: {short_source(fact['source'])}")
+                print(f"  {fact['id']}: {fact['label']} = {fact['display']}; as of {fact['as_of']}; source: {fact['source_short']}")
     if result["sources"]:
         print("\n--- Sources ---")
         for source in result["sources"]:

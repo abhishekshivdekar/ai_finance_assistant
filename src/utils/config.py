@@ -85,7 +85,7 @@ def _validate_rag(rag: dict[str, Any]) -> None:
 
 
 TAX_TOP_KEYS = (
-    "topic", "label", "figures", "units", "asset_types", "equity_asset_types", "slab_asset_types", "schemes",
+    "topic", "label", "currency_symbol", "figures", "units", "asset_types", "equity_asset_types", "slab_asset_types", "schemes",
     "input_limits", "stt_assumption", "exclusions", "errors", "needs_input_message",
     "question_needs_input", "no_answer_message", "discarded_message", "no_answer_sentinel", "footer",
     "fallback_commentary", "texts", "system_prompt", "fact_line", "fact_condition", "commentary_prompt",
@@ -134,6 +134,8 @@ def _validate_tax(tax: dict[str, Any]) -> None:
             raise ConfigError(f"tax.figures.{key}.as_of must be an ISO date (YYYY-MM-DD).") from exc
         if not str(fig.get("source") or "").strip() or not str(fig.get("label") or "").strip():
             raise ConfigError(f"tax.figures.{key} needs a label and a source.")
+        if not isinstance(fig.get("source_short"), str) or not fig["source_short"].strip():
+            raise ConfigError(f"tax.figures.{key}.source_short must be a short non-empty source text.")
         if not str(fig.get("display") or "").strip():
             raise ConfigError(f"tax.figures.{key}.display must be a non-empty text such as '12.5%'.")
         if not isinstance(fig.get("verify"), bool):

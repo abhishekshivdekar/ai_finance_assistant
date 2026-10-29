@@ -46,6 +46,14 @@ This glossary explains words that investors in India often see when opening acco
 
 **Income tax return (ITR)** - The form in which a taxpayer reports income and tax details to the Income Tax Department for a financial year.
 
+**Securities transaction tax (STT)** - A tax collected on certain transactions in listed securities on recognised exchanges. Whether it applies to a given transaction, and at what rate, is set by law and changes over time, so check the official source for the current position.
+
+**Capital gain** - The profit made when an asset such as a share, a mutual fund unit or a property is sold for more than it cost. A sale below the cost gives a capital loss instead.
+
+**Long-term capital gains (LTCG)** - A capital gain on an asset that was held for longer than a set holding period before it was sold. The idea is that the longer an asset is held, the more it counts as a long-term holding. The length of the period depends on the type of asset and is set by law.
+
+**Short-term capital gains (STCG)** - A capital gain on an asset that was sold within the holding period instead of after it. It is the other side of long-term gains, and the two kinds are taxed under different rules. The holding period depends on the type of asset and is set by law.
+
 ## Why these terms matter
 
 Opening an account or reading about tax brings these words up quickly. Knowing what they mean makes official instructions easier to follow. This glossary is for education only and is not tax advice.

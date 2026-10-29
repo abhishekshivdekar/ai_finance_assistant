@@ -338,3 +338,22 @@ def test_the_real_table_covers_the_required_acronyms_in_plain_words():
     for acronym in ("LTCG", "STCG", "STT", "PPF", "NPS", "ELSS", "EPF", "TDS", "SIP", "NAV", "ETF", "FD", "KYC", "IPO", "P/E"):
         assert table[acronym] and table[acronym].replace(" ", "").replace("-", "").isalpha(), acronym
     assert table["LTCG"] == "long-term capital gains tax"
+
+
+def test_the_original_querys_best_chunk_keeps_first_place_when_it_outscores_the_expansion():
+    original = [_hit("accounts_and_taxes_india/ppf#5", 0.9), _hit("accounts_and_taxes_india/overview#10", 0.8)]
+    expanded = [_hit("accounts_and_taxes_india/ppf#0", 0.7), _hit("accounts_and_taxes_india/overview#10", 0.75)]
+    fake, _ = _by_query({"How does PPF work?": original, "How does public provident fund work?": expanded})
+    merged = merge_retrieval(fake, ["How does PPF work?"], "accounts_and_taxes_india")
+    assert [c.chunk_id for c in merged] == [
+        "accounts_and_taxes_india/ppf#5", "accounts_and_taxes_india/overview#10", "accounts_and_taxes_india/ppf#0"]
+    assert [c.score for c in merged][1] == 0.8                                   # the better score of the two searches is kept
+
+
+def test_the_per_article_cap_decides_between_same_article_chunks_of_the_two_searches():
+    # Why "How does PPF work?" swapped ppf#5 / ppf#21 for ppf#0 / ppf#1 on the real index: two chunks per article at most.
+    original = [_hit("accounts_and_taxes_india/ppf#5", 0.69), _hit("accounts_and_taxes_india/ppf#21", 0.69)]
+    expanded = [_hit("accounts_and_taxes_india/ppf#0", 0.77), _hit("accounts_and_taxes_india/ppf#1", 0.70)]
+    fake, _ = _by_query({"How does PPF work?": original, "How does public provident fund work?": expanded})
+    merged = merge_retrieval(fake, ["How does PPF work?"], "accounts_and_taxes_india")
+    assert [c.chunk_id for c in merged] == ["accounts_and_taxes_india/ppf#0", "accounts_and_taxes_india/ppf#1"]

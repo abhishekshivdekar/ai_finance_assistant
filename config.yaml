@@ -447,6 +447,7 @@ news:                         # News agent and Google News RSS source (architect
 tax:                          # Tax Education agent (architecture section 2.6). Every figure is illustrative and must be verified.
   topic: accounts_and_taxes_india      # the question path is locked to this knowledge-base topic
   label: illustrative, verify before relying
+  currency_symbol: "₹"                 # written before amounts in the commentary input
   figures:                             # the ONLY place a rate, limit or threshold may appear (value + as_of + source + verify)
     equity_stcg_pct:
       label: Short-term capital gains tax rate on listed equity and equity funds
@@ -455,6 +456,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "20%"
       as_of: "2026-10-29"
       source: &tax_source "incometax.gov.in (verify); cross-checked against Taxgarden, Tata Mutual Fund post-Budget 2026 note, TaxGuru; secondary sources"
+      source_short: &tax_short "Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in"
       verify: true
       stt_condition: true
     equity_ltcg_pct:
@@ -464,6 +466,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "12.5%"
       as_of: "2026-10-29"
       source: *tax_source
+      source_short: *tax_short
       verify: true
       stt_condition: true
     equity_ltcg_exemption:
@@ -473,6 +476,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "₹1,25,000 (₹1.25 lakh) per financial year"
       as_of: "2026-10-29"
       source: *tax_source
+      source_short: *tax_short
       verify: true
       stt_condition: true
     holding_months_equity:
@@ -482,6 +486,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "12 months"
       as_of: "2026-10-29"
       source: *tax_source
+      source_short: *tax_short
       verify: true
     holding_months_other:
       label: Property, unlisted shares and other assets count as long-term when held for more than this many months
@@ -490,6 +495,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "24 months"
       as_of: "2026-10-29"
       source: *tax_source
+      source_short: *tax_short
       verify: true
     other_ltcg_pct:
       label: Long-term capital gains tax rate on property, unlisted shares and other assets (no indexation)
@@ -498,6 +504,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "12.5%"
       as_of: "2026-10-29"
       source: *tax_source
+      source_short: *tax_short
       verify: true
     cess_pct:
       label: Health and education cess charged on the tax
@@ -506,6 +513,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "4%"
       as_of: "2026-10-29"
       source: "incometax.gov.in (verify); not cross-checked; verify"
+      source_short: "Not cross-checked; verify on incometax.gov.in"
       verify: true
     ppf_pct:
       label: Public Provident Fund interest rate (current quarter)
@@ -514,6 +522,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "7.1%"
       as_of: "2026-10-29"
       source: &savings_source "Business Today 30 Sep 2026, Ministry of Finance announcement; verify"
+      source_short: &savings_short "Business Today, 30 Sep 2026; verify"
       verify: true
     nsc_pct:
       label: National Savings Certificate interest rate (current quarter)
@@ -522,6 +531,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "7.7%"
       as_of: "2026-10-29"
       source: *savings_source
+      source_short: *savings_short
       verify: true
     ssy_pct:
       label: Sukanya Samriddhi Yojana interest rate (current quarter)
@@ -530,6 +540,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       display: "8.2%"
       as_of: "2026-10-29"
       source: *savings_source
+      source_short: *savings_short
       verify: true
   units: {pct: "%", inr: " INR", months: " months"}
   asset_types: [listed_equity, equity_fund, property_or_unlisted, other, debt_fund_post_2023]
@@ -625,6 +636,8 @@ tax:                          # Tax Education agent (architecture section 2.6). 
 
     Rules:
     - Use only numbers that appear in the JSON. Do not calculate or estimate anything new.
+    - Amounts and rates in the JSON are already written as text (with the currency sign, digit grouping or a percent sign).
+      Copy them exactly as written; do not round, shorten or reformat them (no "lakh" or "crore").
     - Say that the result is illustrative and that the rates must be verified on the official site.
     - Mention the exclusions in the JSON in one short sentence.
     - Educational only: never tell the reader what to buy, sell or hold, and give no personal advice.

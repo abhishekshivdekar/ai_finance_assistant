@@ -52,7 +52,7 @@ def figure_entry(cfg: dict[str, Any], key: str) -> dict[str, Any]:
     fig = cfg["figures"][key]
     return {
         "label": fig["label"], "value": fig["value"], "display": fig["display"], "unit": fig["unit"], "as_of": str(fig["as_of"]),
-        "source": fig["source"], "verify": fig["verify"], "stt_condition": bool(fig.get("stt_condition", False)),
+        "source": fig["source"], "source_short": fig["source_short"], "verify": fig["verify"], "stt_condition": bool(fig.get("stt_condition", False)),
     }
 
 
@@ -240,12 +240,35 @@ def small_savings_growth(inputs: SmallSavingsInputs, cfg: dict[str, Any]) -> Tax
     )
 
 
+MONEY_FIELDS = (
+    "buy_value", "sell_value", "expenses", "ltcg_exemption_already_used", "amount", "gain_or_loss", "exemption_applied",
+    "taxable_gain", "tax", "cess", "total_tax", "total_deposited", "final_value", "interest_earned",
+)
+PERCENT_FIELDS = ("slab_rate_pct", "rate_pct")
+
+
+def _as_text(key: str, value: Any, cfg: dict[str, Any]) -> Any:
+    """An amount as text with the currency sign and western digit grouping, a rate with the percent sign; anything else as is.
+
+    Example: ("tax", 15500.0) -> "₹15,500.00"; ("rate_pct", 12.5) -> "12.5%". Text is easy to copy exactly,
+    so the number guard can compare it with the commentary (the same idea as Goal Planning's summary_input).
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return value
+    if key in MONEY_FIELDS:
+        return cfg["currency_symbol"] + fmt(_d(value))
+    if key in PERCENT_FIELDS:
+        return plain(_d(value)) + cfg["units"]["pct"]
+    return value
+
+
 def summary_input(calc: TaxCalculation, cfg: dict[str, Any]) -> dict[str, Any]:
-    """What the commentary LLM sees: inputs, results (without the yearly table), the rates used and the caveats."""
+    """What the commentary LLM sees: inputs, results (without the yearly table) and the rates used, with
+    amounts and rates pre-formatted as text, plus the caveats."""
     return {
         "calculation": calc.calculation,
-        "inputs": calc.inputs,
-        "results": {k: v for k, v in calc.results.items() if k != "yearly"},
-        "rates": {key: entry["value"] for key, entry in calc.config_used.items()},
+        "inputs": {k: _as_text(k, v, cfg) for k, v in calc.inputs.items()},
+        "results": {k: _as_text(k, v, cfg) for k, v in calc.results.items() if k != "yearly"},
+        "rates": {key: entry["display"] for key, entry in calc.config_used.items()},
         "caveats": [*calc.notes, *calc.assumptions, *calc.exclusions],
     }

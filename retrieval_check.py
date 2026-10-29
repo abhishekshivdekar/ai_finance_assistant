@@ -1,6 +1,6 @@
 """Retrieval-only check for query expansion (LOCAL embeddings and the local index; no LLM, no API money).
 
-Run from the project root:  python retrieval_check.py  ["extra question" ...]
+Run from the project root:  python retrieval_check.py  ["question" ...]   (no arguments: the default questions)
 For each question it prints the retrieval scores before (the question as written, `retrieve`) and
 after (`merge_retrieval`, which also searches the acronym-expanded query from rag.query_expansions),
 once for the tax topic and once for all topics.
@@ -23,7 +23,7 @@ def show(label: str, chunks: list[RetrievedChunk]) -> None:
 
 def main() -> None:
     expansions = get_config()["rag"].get("query_expansions") or {}
-    for question in QUESTIONS + sys.argv[1:]:
+    for question in sys.argv[1:] or QUESTIONS:
         print(f"\n=== {question!r} -> expanded: {expand_query(question, expansions)!r}")
         for topic in TOPICS:
             print(f" topic={topic}")

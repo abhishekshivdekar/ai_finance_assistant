@@ -57,7 +57,7 @@ def test_valid_tax_config_loads(tmp_path):
     assert get_config(_tax_config(tmp_path, lambda t: None))["tax"]["topic"] == "accounts_and_taxes_india"
 
 
-@pytest.mark.parametrize("field", ["as_of", "source", "verify", "label", "value", "unit"])
+@pytest.mark.parametrize("field", ["as_of", "source", "source_short", "verify", "label", "value", "unit"])
 def test_every_figure_needs_all_its_fields(tmp_path, field):
     def drop(tax):
         del tax["figures"]["cess_pct"][field]
@@ -188,3 +188,20 @@ def test_the_real_display_texts_show_the_figure_value():
         assert float(fig["value"]) in numbers_in(fig["display"]), key
     exemption = get_config()["tax"]["figures"]["equity_ltcg_exemption"]["display"]
     assert numbers_in(exemption) == {125000.0, 1.25}
+
+
+@pytest.mark.parametrize("bad", ["", "  ", None, 5])
+def test_every_figure_needs_a_short_source_text(tmp_path, bad):
+    with pytest.raises(ConfigError, match="equity_ltcg_pct.source_short"):
+        get_config(_tax_config(tmp_path, lambda t: t["figures"]["equity_ltcg_pct"].__setitem__("source_short", bad)))
+
+
+def test_the_real_short_sources_are_the_agreed_texts():
+    figures = get_config()["tax"]["figures"]
+    secondary = "Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in"
+    for key in ("equity_stcg_pct", "equity_ltcg_pct", "equity_ltcg_exemption", "holding_months_equity", "holding_months_other", "other_ltcg_pct"):
+        assert figures[key]["source_short"] == secondary, key
+    for key in ("ppf_pct", "nsc_pct", "ssy_pct"):
+        assert figures[key]["source_short"] == "Business Today, 30 Sep 2026; verify", key
+    assert figures["cess_pct"]["source_short"] == "Not cross-checked; verify on incometax.gov.in"
+    assert get_config()["tax"]["currency_symbol"] == "₹"
