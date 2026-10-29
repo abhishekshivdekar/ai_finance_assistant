@@ -26,6 +26,8 @@ llm:
       model: gpt-6-luna
     market_summary:             # Market agent: plain-language summary of computed trend metrics
       model: gpt-6-luna
+    goal_summary:               # Goal Planning agent: short commentary on computed projections
+      model: gpt-6-luna
 
 pricing:                      # USD per 1M tokens, keyed by model ID
   gpt-6-luna:
@@ -241,6 +243,78 @@ market_analysis:              # Market agent (architecture section 2.3). All val
 
     JSON:
     {metrics_json}
+
+goal_planning:                # Goal Planning agent (architecture section 2.4). All values are ILLUSTRATIVE, not predictions.
+  currency: INR               # amounts are never converted
+  inflation_adjust_default: true   # goal_params["inflation_adjust"] overrides it
+  min_horizon_years: 1
+  max_horizon_years: 40
+  max_months: 600             # search limit for "months to reach the goal" (must cover max_horizon_years)
+  max_step_up_pct: 15         # largest yearly increase of the monthly contribution
+  max_amount: 1000000000000   # largest accepted amount (keeps the arithmetic finite)
+  risk_profiles: [low, medium, high]
+  scenarios: [conservative, expected, optimistic]   # lowest return first
+  assumptions:
+    label: Illustrative assumptions, not predictions or guaranteed returns.
+    as_of: "2026-10-29"
+    source: Illustrative planning assumptions chosen by the project author for teaching; not forecasts.
+    returns_pct:              # annual EFFECTIVE return per risk profile
+      low: {conservative: 4.0, expected: 6.0, optimistic: 8.0}
+      medium: {conservative: 5.0, expected: 9.0, optimistic: 12.0}
+      high: {conservative: 3.0, expected: 11.0, optimistic: 15.0}
+    inflation:
+      annual_pct: 5.0
+      as_of: "2026-10-29"
+      source: Illustrative planning assumptions chosen by the project author for teaching; not forecasts.
+    deposit_timing_note: Deposits are assumed at the end of each month.
+    step_up_note: A yearly step-up raises the monthly contribution every 12 months (from month 13).
+    rate_note: Annual effective returns are converted to a monthly rate; nothing is guaranteed.
+  labels:
+    goal_future_money: Goal in future money (adjusted for inflation)
+    projection_todays_money: Projection in today's money (adjusted for inflation)
+  errors:
+    not_a_number: "{field} must be a number."
+    must_be_positive: "{field} must be greater than zero."
+    must_not_be_negative: "{field} cannot be negative."
+    too_large: "{field} is too large (the limit is {limit})."
+    horizon_whole: "The horizon must be a whole number of years."
+    horizon_range: "The horizon must be between {low} and {high} years."
+    risk_profile: "The risk profile must be one of: {options}."
+    step_up_range: "The yearly step-up must be between 0 and {limit} percent."
+    inflation_flag: "inflation_adjust must be true or false."
+  needs_input_message: "Please check the goal details before I can plan:"
+  not_reached_note: "Not reached within {months} months at the current contribution."
+  already_met_note: "The goal is already met by the current savings."
+  summary_fallback: >
+    The table shows how your savings could grow under three illustrative
+    scenarios, how much you would need to save each month to reach the goal in
+    each, and how long the current plan would take. These are illustrative
+    assumptions, not predictions or guaranteed returns, and this is educational
+    information, not personal advice.
+  summary_prompt: |
+    You are a finance education assistant explaining a savings-goal projection to a beginner.
+    Below is a JSON summary of numbers that were already calculated by software.
+
+    Format:
+    - Write ONE short paragraph, then two or three short bullet lines (start each with "- ").
+    - Plain beginner language. Describe what the numbers show; do not give advice.
+
+    Rules:
+    - Use ONLY numbers that appear in the JSON, copied exactly as written. Do not
+      calculate, round, or invent a number, and do not convert any amount to
+      lakh, crore or any other form (keep the western grouping with commas).
+    - Say clearly that the results come from illustrative assumptions (see
+      "assumptions") and are not predictions or guaranteed returns.
+    - If "inflation" says it was applied, say which figures are in future money
+      and which are in today's money, using the labels in the JSON.
+    - Never predict future returns or markets, never recommend a product or fund,
+      and never say "you should"; use observation wording such as "in the
+      expected scenario the savings reach ..." or "a monthly amount of ... would
+      be needed".
+    - If a scenario says the goal is not reached, say so briefly.
+
+    JSON:
+    {results_json}
 
 agents:
   error_message: "Sorry, something went wrong while preparing this answer. Please try again."

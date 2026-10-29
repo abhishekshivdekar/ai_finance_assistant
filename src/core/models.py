@@ -48,10 +48,23 @@ class PortfolioPayload(TypedDict, total=False):
 
 
 class GoalPayload(TypedDict, total=False):
-    """Goal planning data: scenario projections and required contribution."""
+    """Goal planning data: scenario results, chart rows and the assumptions behind them.
 
+    `projections` are flat rows {scenario, year, value, value_todays_money} for a line
+    chart. `assumptions` (illustrative label, as_of, source, rates, timing notes) is
+    always filled from config, never by the LLM. Per-scenario dicts are keyed by name.
+    """
+
+    inputs: dict[str, Any]
+    target_amount: float
+    scenarios: list[dict[str, Any]]
     projections: list[dict[str, Any]]
-    required_monthly_contribution: float
+    required_monthly_contribution: dict[str, float]
+    months_to_goal: dict[str, int | None]
+    shortfall: dict[str, float]
+    inflation: dict[str, Any]
+    assumptions: dict[str, Any]
+    warnings: list[str]
 
 
 class TaxPayload(TypedDict, total=False):

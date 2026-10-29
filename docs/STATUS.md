@@ -10,9 +10,10 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - **Finance Q&A agent:** `src/agents/finance_qa.py` (commit `8037c30`).
 - **Portfolio agent:** `src/agents/portfolio.py`, metrics in `src/core/portfolio_metrics.py`, instrument_type/asset_class split, concurrent quotes, expense-ratio coverage (commits `3558497`, `1113286`, `99b0697`).
 - **Market agent:** `src/agents/market.py`; metrics in `src/core/market_metrics.py`, request/fetch in `src/core/market_history.py`, models in `src/core/market_models.py`; role `market_summary` and block `market_analysis:` in `config.yaml`; `GraphState` now has typed `market_params` and `topic_filter`. `live_check_market_agent.py` is written but **not run** (not verified against the real provider and LLM). Review follow-ups done: short-history flag, `sma_windows` validation, payload `source`, concurrency test.
+- **Goal Planning agent:** `src/agents/goal_planning.py`; math in `src/core/goal_metrics.py`, validation in `src/core/goal_inputs.py`, models in `src/core/goal_models.py`; role `goal_summary` and block `goal_planning:` in `config.yaml`; `GoalPayload` extended; config validation for the block in `src/utils/config.py`. `live_check_goal_planning.py` is written but **not run** (not verified against the real LLM). Spec: `docs/architecture.md` section 2.4.
 
 ## Next
-- Goal Planning, News, Tax agents.
+- News, Tax agents.
 - Router, LangGraph workflow, clarify node, facade.
 - Persistence.
 - Streamlit UI (`src/web_app/` only has `__init__.py` today).
@@ -31,8 +32,16 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Summary prompt (`market_analysis.summary_prompt`): one short paragraph per ticker, at most 3 numbers each, one closing sentence explaining moving average and drawdown. The number-guard rule is unchanged.
 - yfinance `Pandas4Warning`: cause was `yfinance/__init__.py:45`, which adds a `default` DeprecationWarning filter for `^yfinance` when it is imported; `Pandas4Warning` is a DeprecationWarning and the provider imports yfinance lazily, so that filter landed in front of ours. Fix: `load_yfinance()` in `src/data/market/yfinance_provider.py` imports yfinance and then applies our filter; no yfinance upgrade needed (installed 1.7.0, pandas 3.1.0). Not verified against a live call (live checks not run).
 - `CachedProvider`: no new lock. `TTLCache` already guards every read and write with a `threading.Lock`; a concurrency test at `CachedProvider` level was added. Two threads asking for the same uncached key can both call the live provider (a duplicate fetch, not a wrong result); left as is.
+- Goal Planning: scenario returns (low 4/6/8, medium 5/9/12, high 3/11/15 percent) and inflation (5 percent) are illustrative figures chosen by the project author, labelled with `as_of` 2026-10-29 and `source` in config; not forecasts. Source string deliberately names no external body.
+- Goal Planning: annual effective returns converted to monthly `(1+r)^(1/12)-1`; deposits at month end; step-up applied every 12 months (from month 13). These appear in the payload's `assumptions` block and in architecture 2.4.
+- Goal Planning: required monthly contribution uses the linear closed form `(target - FV(0)) / FV_unit`, exact with or without step-up, instead of a search (round-trip tested in `tests/test_goal_metrics.py`).
+- Goal Planning: `inflation_adjust` reads `goal_amount` as today's money; the target is the goal in future money, and shortfall, required contribution and months use that target. Default from `goal_planning.inflation_adjust_default` (true); `goal_params["inflation_adjust"]` overrides.
+- Goal Planning: LLM role is `goal_summary` (the doc said `default`; doc changed). The number guard is still imported from `portfolio_metrics`.
+- Goal Planning: commentary input uses western digit grouping (`1,234,567.00`).
 
 ## Open to-dos
+- UI formats amounts in Indian lakh/crore grouping while the LLM input stays western grouping; the number guard (`numbers_in`) does not parse lakh grouping.
+- Run `live_check_goal_planning.py` once (spends API money; only when asked).
 - Resolve the `<!-- VERIFY -->` markers in the knowledge base against official sites: **21 markers in 15 files** (counted with grep).
 - Portfolio tab needs a per-holding asset-class dropdown (UI not built yet).
 - UI shows sources per chunk with article title and snippet.
@@ -48,4 +57,4 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - README known limitation to add: the number guard accepts any number present anywhere in the input, so a coincidental match is not detected.
 
 ## Last updated
-2026-10-29, Market agent polish: summary prompt format, live check table, Pandas4Warning filter (see `git log -1` for the commit).
+2026-10-29, Goal Planning agent: pure projection math, guarded commentary, assumptions block (see `git log -1` for the commit).

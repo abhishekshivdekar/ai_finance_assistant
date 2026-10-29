@@ -141,10 +141,21 @@ All agents extend `BaseAgent` (section 3). Every agent provides information and 
 - **Uses:** market data layer for history, pure-Python metric functions, LLM role `market_summary` (own role so usage is counted per agent).
 
 ### 2.4 Goal Planning
-- **Purpose:** risk-aware projections toward a goal (retirement, house, etc.).
-- **Inputs:** goal amount, horizon, current savings, monthly contribution, risk profile (low/medium/high). Risk profile is pre-filled from the profile store when saved.
-- **Outputs:** `GoalPayload`: projection table for conservative/expected/optimistic scenarios, required monthly contribution, commentary.
-- **Uses:** deterministic compound-growth calculator. Default return and inflation assumptions per risk profile are in `config.yaml` and overridable in the UI. LLM `default` explains results.
+- **Purpose:** risk-aware, illustrative projections toward a goal (retirement, house, etc.). Never a prediction or a promise of returns.
+- **Principle:** every number is computed in deterministic Python (`src/core/goal_metrics.py`). The agent makes one LLM call (role `goal_summary`) to write short commentary from the already-computed results as JSON; the LLM never calculates or invents a number. The output guard in `BaseAgent.run()` may make one more call to reword, so at most two calls happen per request.
+- **Inputs:** `state["goal_params"]` = `goal_amount`, `horizon_years`, `current_savings`, `monthly_contribution`, `risk_profile` (`low`/`medium`/`high`), optional `annual_step_up_pct` (default 0, capped by `goal_planning.max_step_up_pct`), optional `inflation_adjust` (default `goal_planning.inflation_adjust_default`, currently `true`; the request overrides it). Validation (`src/core/goal_inputs.py`): finite numbers only, `goal_amount` > 0, savings and contribution >= 0 (both may be 0: the result then shows what is needed), a whole-number horizon within `min_horizon_years`..`max_horizon_years`, a known risk profile. Any problem gives `needs_input` with every message listed and the LLM is not called. Risk profile is pre-filled from the profile store when saved (UI step, not built yet).
+- **Currency:** `goal_planning.currency` (INR); amounts are never converted.
+- **Math (pure functions, formulas in the docstrings):**
+  - monthly rate from the annual **effective** rate: `(1 + annual/100)^(1/12) - 1`.
+  - month-by-month projection, **deposits at the end of each month**: `balance = balance x (1 + monthly) + contribution`; with a step-up the contribution is multiplied by `(1 + step_up/100)` **every 12 months** (from month 13), so it is exact.
+  - year-end table (year 0 to the horizon) per scenario (`conservative`, `expected`, `optimistic`); shortfall = target - final value (negative = surplus).
+  - **required monthly contribution:** the final value is linear in the starting contribution, `FV(c) = FV(0) + c x FV_unit`, so `c = (target - FV(0)) / FV_unit` is exact for any rate and step-up (no search needed); with no step-up it equals the textbook annuity formula; 0 if savings alone reach the target.
+  - **months to goal** at the current contribution: first month the balance reaches the target, 0 if already met, `None` with a note if not within `goal_planning.max_months`.
+  - **inflation** (when on): the entered goal is read as today's money, the **target** is the goal in future money (`goal x (1 + i)^years`), and the projection is also given in today's money (`value / (1 + i)^years`). Both figures are labelled. All comparisons (shortfall, required contribution, months) use the target.
+- **Assumptions (`goal_planning.assumptions` in config):** annual return per risk profile for the three scenarios, an inflation figure, each with `as_of` and a named `source`, labelled "illustrative, not predictions". Config load fails if a profile's returns decrease from conservative to optimistic, or if `max_months` does not cover `max_horizon_years` (`src/utils/config.py`).
+- **Commentary step:** the prompt (`goal_planning.summary_prompt`) receives only `summary_input()` JSON with every number pre-formatted as text in **western digit grouping** (`1,234,567.00`), because the number guard cannot read lakh/crore grouping. It asks for beginner language, one short paragraph plus two or three bullet lines, a statement that results are illustrative assumptions, no predictions, no product recommendations, no "you should", and numbers copied exactly (no lakh/crore or rounded forms). The shared number guard (`numbers_in` / `collect_numbers`) rejects commentary with any number not in the JSON; on an LLM error, an empty reply or an unknown number the fixed `summary_fallback` (no numbers) is used, status stays `ok` and a warning is added.
+- **Outputs:** `GoalPayload` (`src/core/models.py`): `inputs`, `target_amount`, `scenarios` (return, final value, shortfall, required contribution, months to goal, note, value in today's money when inflation is on), `projections` (flat `{scenario, year, value, value_todays_money}` rows for a line chart), `required_monthly_contribution`, `months_to_goal` and `shortfall` (each keyed by scenario), `inflation` (both goal figures and labels, `{}` when off), `assumptions` and `warnings`. The `assumptions` block (`illustrative`, `label`, `as_of`, `source`, currency, returns, inflation, **deposit timing: end of each month**, **step-up: every 12 months**, rate convention) is built from config in code, so it is in the payload whatever the LLM does.
+- **Uses:** deterministic compound-growth calculator, LLM role `goal_summary` (own role so usage is counted per agent).
 
 ### 2.5 News Synthesizer
 - Summarises recent yfinance headlines for a ticker (US or `.NS`) with a summary prompt. No new dependency. Headlines are listed with source and time; the summary does not predict prices.
@@ -492,6 +503,7 @@ llm:
     portfolio_summary:              # Portfolio agent summary (section 2.2)
       model: <default-model-id>
     market_summary:                 # Market agent summary (section 2.3)
+    goal_summary:                   # Goal Planning commentary (section 2.4)
       model: <default-model-id>
 
 portfolio:                          # starting values, labelled "illustrative"
@@ -529,6 +541,19 @@ market_analysis:                    # starting values, labelled "illustrative" (
   unavailable_message: ...
   summary_fallback: ...
   summary_prompt: ...
+
+goal_planning:                      # illustrative, not predictions (section 2.4)
+  currency: INR
+  inflation_adjust_default: true
+  min_horizon_years: 1
+  max_horizon_years: 40
+  max_months: 600                   # must cover max_horizon_years
+  max_step_up_pct: 15
+  max_amount: 1000000000000
+  risk_profiles: [low, medium, high]
+  scenarios: [conservative, expected, optimistic]     # lowest return first
+  assumptions:                      # label, as_of, source, returns_pct per profile, inflation {annual_pct, as_of, source}, timing notes
+  labels / errors / needs_input_message / not_reached_note / already_met_note / summary_fallback / summary_prompt: ...
 ```
 
 - `get_llm(role="default")` reads `llm.roles.<role>` and merges over `llm.*`; unknown or missing role falls back to the default.
@@ -575,7 +600,7 @@ Three layers:
 | Folder | Modules |
 |---|---|
 | `src/utils/` | `config.py`, `logger.py` (exist) |
-| `src/core/` | `llm_factory.py` (exists; add `role`), `usage_tracker.py`, `models.py` (AgentResult, payloads, Source, MarketResult), `portfolio_models.py`, `portfolio_metrics.py`, `portfolio_valuation.py`, `market_models.py`, `market_metrics.py`, `market_history.py`, `profile_repository.py`, `tracing.py` |
+| `src/core/` | `llm_factory.py` (exists; add `role`), `usage_tracker.py`, `models.py` (AgentResult, payloads, Source, MarketResult), `portfolio_models.py`, `portfolio_metrics.py`, `portfolio_valuation.py`, `market_models.py`, `market_metrics.py`, `market_history.py`, `goal_models.py`, `goal_inputs.py`, `goal_metrics.py`, `profile_repository.py`, `tracing.py` |
 | `src/data/` | `knowledge_base/*.md`, `sample_portfolios/` (US and `.NS`), `market_snapshot.json` (US and `.NS`) |
 | `src/rag/` | `ingest.py`, `embeddings.py`, `retriever.py`, `vector_store.py` (interface and FAISS), `vector_store/` |
 | `src/agents/` | `base_agent.py`, `finance_qa.py`, `portfolio.py`, `market.py`, `goal_planning.py`, `news.py`, `tax.py` |

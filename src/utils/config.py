@@ -35,11 +35,27 @@ def _validate_sma_windows(windows: Any) -> None:
         )
 
 
+def _validate_goal_planning(goal: dict[str, Any]) -> None:
+    """goal_planning: every risk profile needs all scenarios, lowest return first; limits must be consistent."""
+    returns = goal["assumptions"]["returns_pct"]
+    for profile in goal["risk_profiles"]:
+        values = [returns[profile][name] for name in goal["scenarios"]]
+        if values != sorted(values):
+            raise ConfigError(f"goal_planning returns for {profile!r} must not decrease from conservative to optimistic.")
+    if goal["max_months"] < goal["max_horizon_years"] * 12:
+        raise ConfigError("goal_planning.max_months must cover max_horizon_years.")
+    if goal["min_horizon_years"] < 1 or goal["min_horizon_years"] > goal["max_horizon_years"]:
+        raise ConfigError("goal_planning horizon limits must satisfy 1 <= min <= max.")
+
+
 def _validate(cfg: dict[str, Any]) -> None:
     """Fail clearly on settings that would otherwise break an agent later."""
     market = cfg.get("market_analysis")
     if market is not None:
         _validate_sma_windows(market.get("sma_windows"))
+    goal = cfg.get("goal_planning")
+    if goal is not None:
+        _validate_goal_planning(goal)
 
 
 @lru_cache(maxsize=1)
