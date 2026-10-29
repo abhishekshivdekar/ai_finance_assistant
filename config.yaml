@@ -32,6 +32,8 @@ llm:
       model: gpt-6-luna
     tax_summary:                # Tax Education agent: grounded answers and calculator commentary
       model: gpt-6-luna
+    safe_response:              # workflow safe_response node: educational framing for advice requests
+      model: gpt-6-luna
 
 pricing:                      # USD per 1M tokens, keyed by model ID
   gpt-6-luna:
@@ -94,8 +96,41 @@ market_data:
   history_periods: [1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max]
   snapshot_path: src/data/market_snapshot.json
 
-workflow:
+workflow:                     # LangGraph router and nodes (architecture sections 3.2, 4)
   max_history_turns: 10
+  router_min_confidence: 0.6  # below this the router's answer goes to clarify (architecture 4.3)
+  max_route_attempts: 2       # re-route hops per turn (architecture 4.4)
+  recursion_limit: 25         # LangGraph backstop, passed by the facade
+  max_agents_per_turn: 2      # router intents beyond this many agents are dropped
+  intents: [finance_qa, portfolio, market, goal_planning, news, tax_education, clarify, out_of_scope, specific_advice]
+  agent_intents: [finance_qa, portfolio, market, goal_planning, news, tax_education]   # intents with an agent node (node name = intent)
+  hint_nodes: [finance_qa, portfolio, market, goal_planning, news, tax_education]      # intent_hint values the graph accepts
+  reroute:                    # agent -> candidates tried when it answers no_answer / wrong_agent; `needs` = state key that must be set
+    finance_qa:
+      - {agent: market, needs: market_params}
+      - {agent: news, needs: news_params}
+  agent_labels:               # shown as section headings and in notes
+    finance_qa: Concepts
+    portfolio: Portfolio
+    market: Market
+    goal_planning: Goal planning
+    news: News
+    tax_education: Tax
+  messages:
+    clarify_low_confidence: >
+      I'm not sure what you would like to know. Could you say a little more, for example which
+      stock, topic or goal you mean?
+    out_of_scope: >
+      I can only help with personal finance and investing topics, so I can't help with that one.
+      Ask me about things like how a mutual fund works, a stock's recent trend or a savings goal.
+    advice_static: >
+      I can't tell you what to buy, sell or hold. I can explain how people usually think about
+      such a decision, such as risk, time horizon and diversification, if you ask about those.
+    fallback: "Sorry, I couldn't prepare an answer this time. Please try again in a moment."
+    needs_input_note: "Note: {label} needs more information. {message}"
+    error_note: "Note: the {label} part of your question could not be answered right now. Please try again later."
+    section_heading: "**{label}**"
+    unsourced_marker: "[{label} {n}]"   # a [n] in an answer whose agent returns no sources (News) must not clash with other [n]
 
 output_guard:
   patterns:                   # case-insensitive regexes, see architecture section 3.3

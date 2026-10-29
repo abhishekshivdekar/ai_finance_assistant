@@ -151,6 +151,42 @@ def _validate_tax(tax: dict[str, Any]) -> None:
             raise ConfigError(f"tax.{section} has {sorted(extra)}, which are not in tax.asset_types.")
 
 
+WORKFLOW_MESSAGES = (
+    "clarify_low_confidence", "out_of_scope", "advice_static", "fallback", "needs_input_note", "error_note",
+    "section_heading", "unsourced_marker",
+)
+WORKFLOW_REQUIRED_INTENTS = ("clarify", "out_of_scope", "specific_advice")
+
+
+def _validate_workflow(wf: dict[str, Any]) -> None:
+    """workflow: thresholds in range, intent lists consistent, re-route targets real, every message present."""
+    confidence = wf["router_min_confidence"]
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1:
+        raise ConfigError("workflow.router_min_confidence must be a number between 0 and 1.")
+    for key, minimum in (("max_route_attempts", 0), ("recursion_limit", 1), ("max_agents_per_turn", 1), ("max_history_turns", 1)):
+        value = wf[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise ConfigError(f"workflow.{key} must be a whole number of at least {minimum}.")
+    intents, agents = list(wf["intents"]), list(wf["agent_intents"])
+    if not set(WORKFLOW_REQUIRED_INTENTS) <= set(intents):
+        raise ConfigError(f"workflow.intents must include {', '.join(WORKFLOW_REQUIRED_INTENTS)}.")
+    if not agents or not set(agents) <= set(intents):
+        raise ConfigError("workflow.agent_intents must be a non-empty subset of workflow.intents.")
+    if not set(wf["hint_nodes"]) <= set(agents):
+        raise ConfigError("workflow.hint_nodes must be a subset of workflow.agent_intents.")
+    if set(agents) - set(wf["agent_labels"]):
+        raise ConfigError("workflow.agent_labels needs a label for every agent in workflow.agent_intents.")
+    for source, candidates in wf["reroute"].items():
+        if source not in agents:
+            raise ConfigError(f"workflow.reroute.{source} is not an agent in workflow.agent_intents.")
+        for candidate in candidates:
+            if candidate.get("agent") not in agents or not str(candidate.get("needs") or "").strip():
+                raise ConfigError(f"workflow.reroute.{source} needs entries with an agent from workflow.agent_intents and a `needs` key.")
+    missing = [key for key in WORKFLOW_MESSAGES if not str(wf["messages"].get(key) or "").strip()]
+    if missing:
+        raise ConfigError(f"workflow.messages is missing {missing}.")
+
+
 def _validate(cfg: dict[str, Any]) -> None:
     """Fail clearly on settings that would otherwise break an agent later."""
     market = cfg.get("market_analysis")
@@ -168,6 +204,9 @@ def _validate(cfg: dict[str, Any]) -> None:
     tax = cfg.get("tax")
     if tax is not None:
         _validate_tax(tax)
+    workflow = cfg.get("workflow")
+    if workflow is not None:
+        _validate_workflow(workflow)
 
 
 @lru_cache(maxsize=1)

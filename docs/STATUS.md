@@ -13,10 +13,11 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - **News agent:** `src/agents/news.py`, Google News RSS source in `src/data/news/`; see Decisions.
 - **Goal Planning agent:** `src/agents/goal_planning.py`; math in `src/core/goal_metrics.py`, validation in `src/core/goal_inputs.py`, models in `src/core/goal_models.py`; role `goal_summary` and block `goal_planning:` in `config.yaml`; `GoalPayload` extended; config validation for the block in `src/utils/config.py`. `live_check_goal_planning.py` is written but **not run** (not verified against the real LLM). Spec: `docs/architecture.md` section 2.4. Review follow-ups done (huge-number validation, number-guard whitelist, strings moved to config, negative-rate config check).
 
+- **Workflow skeleton (commit 1 of 4):** `src/workflow/{routing,edges,nodes,answers,graph,turn}.py`; block `workflow:` in `config.yaml` with `_validate_workflow`; role `safe_response` added. Graph with fake agents and an injected `classify`; every edge of architecture 4.4, re-route cap, per-turn hygiene and the disclaimer-once rule are tested. Router LLM, LLM merge, LLM safe_response, facade and live check are not built yet. See architecture "Workflow skeleton (decisions the doc didn't specify)".
 - **Tax Education agent:** `src/agents/tax.py` (`TaxAgent`, name `tax_education`, role `tax_summary`); calculators in `src/core/tax_metrics.py`, input checks in `src/core/tax_inputs.py`, models in `src/core/tax_models.py`; block `tax:` in `config.yaml` (figures with value/as_of/source/verify), `_validate_tax` in `src/utils/config.py`, typed `tax_params` in `GraphState`, `TaxPayload` extended, `merge_retrieval()` shared with Finance Q&A, fact citations `[Fn]` in `src/core/citations.py`. Spec: architecture 2.6. `live_check_tax.py` is written but **not run** (not verified against the real LLM and index). Router, workflow node and UI are not built.
 
 ## Next
-- Router, LangGraph workflow, clarify node, facade.
+- Workflow commits 2-4 (plan approved, each stops for review): 2 real router (structured output, entities, aliases, advice patterns), 3 synthesizer LLM merge + safe_response LLM, 4 facade `run_query` + `live_check_workflow.py`.
 - Persistence.
 - Streamlit UI (`src/web_app/` only has `__init__.py` today).
 - README completion, benchmarks, demo video.
@@ -86,5 +87,5 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Known issue, filler chunks: with no topic filter (Finance Q&A), `goals_and_retirement/compound-interest-explained#14` ("costs and charges ... transaction charges") fills a free slot for "What is STT?" (0.53) and "What is LTCG?" (0.51) because the acronym expansion fills up to `top_k` (`retrieval_check.py`). It is not a Tax agent issue (topic locked). Not fixed; the grounded prompt is the only defence.
 
 ## Last updated
-Workflow commit 0 (number guard moved to `src/core/number_guard.py`) is done; the router + LangGraph step is split into commits 0-4 (plan approved; commit 1 is next).
+Workflow commit 1 (graph skeleton with fake agents; see `git log -1`). Before it: commit 0 (number guard moved to `src/core/number_guard.py`). Commits 2-4 wait for review.
 2026-10-29, Tax follow-ups 4 (see `git log -1`). Previous: Tax follow-ups 3. Tax live-check fixes; Tax review follow-ups. Previous: Tax Education agent (calculators, grounded Q&A with facts, config figures; see `git log -1`). Previous step: News agent review follow-ups (UTF-8 only feeds, normalised cache key, max_items warning, prompt wording, README technology choices; see `git log -1` for the commit).

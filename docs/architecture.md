@@ -237,7 +237,7 @@ class GraphState(TypedDict):
     agents_to_run: list[str]      # ordered queue (single writer: router)
     route_attempts: int           # re-route counter (section 4.4)
     agent_outputs: Annotated[list[AgentResult], operator.add]
-    errors: Annotated[list[str], operator.add]
+    errors: Annotated[list[ErrorEntry], operator.add]      # {turn_id, message}
     sources: list[Source]         # single writer: synthesizer
     market_freshness: dict | None
     portfolio: list[dict] | None  # from Portfolio tab / profile store
@@ -311,6 +311,7 @@ No agent may give a personalised buy/sell/hold recommendation.
 | `safe_response` | handles `out_of_scope` and `specific_advice`; may call the retriever for educational framing; appends the disclaimer |
 | `synthesizer` | merges 1-2 agent outputs into one answer (no extra LLM call when one agent ran); appends the disclaimer |
 | `fallback` | graceful message when routing fails or all agents fail; appends the disclaimer |
+| `reroute` | internal bookkeeping node (not an agent): counts one re-route hop and queues the target agent (section 4.4) |
 
 ### 4.2 Entry: every request goes through LangGraph
 A conditional edge at `START` checks `state["intent_hint"]`:
@@ -324,6 +325,7 @@ Intents: `finance_qa`, `portfolio`, `market`, `goal_planning`, `news`, `tax_educ
 - **No mixed routing:** if `specific_advice` is present, alone or alongside other intents, the whole query goes only to `safe_response`. No other agent runs.
 - `safe_response` gives educational framing ("here is how people think about evaluating a stock...") and may use the retriever, then appends the disclaimer. It makes no recommendation.
 - **Low confidence** (below `workflow.router_min_confidence` in config) goes to `clarify`.
+- **Priority** (edge `route_after_router`): `specific_advice` anywhere, then `out_of_scope` when no agent intent is left, then `clarify` (intent or low confidence), then the first agent in `agents_to_run`, else `fallback`. `out_of_scope` next to a real agent intent is dropped and the agents run. The queue (`plan_agents`) is empty whenever `specific_advice` is present and holds at most `workflow.max_agents_per_turn` agents.
 - **Why:** one simple rule is easy to test and cannot leak advice through another agent. Splitting the educational part from the advice part is **[Later]**.
 - Router output that fails validation falls back to `finance_qa`; if that also fails, `fallback`.
 - **[Later] Hybrid router:** keyword rules handle obvious cases ("should I buy", clear ticker lookups) with no LLM call; the LLM runs only when the query is ambiguous.
@@ -339,11 +341,14 @@ agent node -> (conditional on AgentResult.status of the latest result):
       (only results with the current turn_id are considered)
       ok            -> next agent in agents_to_run | synthesizer
       wrong_agent / no_answer -> re-route (below) | else next agent | synthesizer
-      needs_input   -> clarify
+      needs_input   -> next agent in agents_to_run (the queue goes on); at the end of the queue see below
       error         -> next agent | fallback if every result is error, or nothing ran
-at the end of the queue: synthesizer if any result is ok or no_answer, else fallback
+at the end of the queue: synthesizer if any result is ok (it adds a note for each needs_input / error result);
+      else clarify if any result is needs_input; else synthesizer if any result is no_answer; else fallback
 safe_response, synthesizer, fallback, clarify -> END
 ```
+
+**needs_input (decision the doc didn't specify):** a `needs_input` result is an ordinary non-ok result. The queue goes on; at the end, if any result is `ok` the synthesizer answers and appends each `needs_input` message as a code-written note (`workflow.messages.needs_input_note`); if no result is `ok` and at least one is `needs_input`, the graph goes to `clarify`, which shows the agents' own messages. A single agent (or a tab hint) with `needs_input` therefore still ends in `clarify`.
 
 **Re-routing example:** `finance_qa` returns `no_answer` for "what is NVDA doing today", but the query contains a ticker, so the conditional edge sends it to `market`. `route_attempts` is incremented on each re-route and **capped at 2 hops**; at the cap the graph goes to `synthesizer` or `fallback`. LangGraph's recursion limit (set in config) is only a backstop.
 
@@ -733,6 +738,8 @@ Three stores, each with one job:
 - **Eval on the production path and the merge sort key (Tax follow-ups 4):** `run_rag_eval.py` now measures `merge_retrieval()` over `retrieve()` (via `production_chunks()`), not `select_chunks()` alone, so acronym expansion is part of the numbers; `retrieve()` and `merge_retrieval()` take an optional `rag` settings dict (the eval passes its own top_k, threshold and caps; the agents pass none). On the new path the config row is unchanged: development 1.000 / MRR 0.865 (0 misses of 121), held-out 1.000 / MRR 0.753, near-miss 4, off-topic 0; the 400/120 and 400/60 rows are also unchanged. The merge sorts by (found by a query as written, score) through the optional `rank` argument of `select_chunks()`; the earlier `WRITTEN_FIRST` score bonus is gone. The eval prints the held-out and near-miss questions in full (`question_report`). The score-gap diagnostic searches the expanded form too, so the median answerable score reads 0.640 instead of 0.636. A test on the real saved index (`tests/test_rag_real_index.py`, skipped without the index or the cached model) guards the PPF, STT and LTCG cases.
 - **Tax agent (decisions the doc didn't specify):** `small_savings_assumptions` is merged into `tax.exclusions.small_savings` (the `assumptions` list of a savings result is now empty); exclusions are per calculation and the tax-paid line only for equity asset types; short-term gains on property, unlisted and other assets are taxed at the slab rate the user enters (no config rate; `slab_rate_pct` is required, as for debt funds); long-term means strictly more than the configured months; the question path does not rewrite the query (one role, one LLM call) and ignores the Chat topic dropdown; all config figures are offered as facts (no relevance filter); an answer with no valid citation or an invented number is `no_answer` with `tax.discarded_message`, not returned uncited as Finance Q&A does; `[Fn]` citations are dropped when invalid but not renumbered; the footer with the label, as_of dates and tax-paid assumption is appended by code; the securities-transaction-tax assumption is listed first in the exclusions of every output; the agent name is `tax_education` (the router intent); the shared number guard (`numbers_in` / `collect_numbers`) reads Indian digit grouping and `N lakh` / `N crore` as N; `_validate_tax` raises `ConfigError` for any missing key the code reads and checks the asset-type lists are subsets of `asset_types`; the fact line shows the `display` text instead of value and unit; `merge_retrieval()` moved from `FinanceQAAgent` to `src/rag/retriever.py` so both agents share it; `is_number` is exported from `goal_inputs.py` for the tax input checks; tests use a synthetic `tax` config (`tests/tax_cfg.py`) so hand-computed cases survive when the real figures are corrected.
 - **News agent (decisions the doc didn't specify):** citations are dropped when invalid but not renumbered, because the full numbered headline list is always shown; a summary with no valid citation counts as failed; the query wins over the ticker; a provider failure is `no_answer`, not `error`; only http(s) links are kept; news reuses the quote TTL (`market_data.cache_ttl_minutes`); `get_news` takes a search phrase; news cache keys and the fetched phrase are the same normalised text (casefold, collapsed whitespace), so the search sent to Google is lower-case; non-UTF-8 feeds are rejected rather than transcoded; the provider error classes live in `src/data/errors.py` (re-exported by `provider.py`) so the news layer does not import the market package.
+
+- **Workflow skeleton (decisions the doc didn't specify, commit 1):** the graph is built by `build_graph(classify, agents=None, checkpointer=None)` in `src/workflow/graph.py` (Dependency Injection: tests pass fake agents and a fake `classify`; the router node itself is a thin wrapper, the real LLM router is the next commit); the pure routing functions are in `src/workflow/routing.py` and `edges.py`; `agents_to_run` is written by the router node and, for a re-route, by the `reroute` node (the doc said single writer: router); re-route candidates and the params they need come from `workflow.reroute` in config (`finance_qa` -> `market` needs `market_params`, `news` needs `news_params`), a candidate that already ran or is already queued is skipped; every agent node name equals its intent name and `workflow.hint_nodes` lists the accepted `intent_hint` values (an unknown hint is logged and ignored); `new_turn_input()` in `src/workflow/turn.py` builds the full fresh input and a test fails when a `GraphState` key is neither set there nor an append-reducer; all final nodes append the answer to `messages` as an `AIMessage`; `clarify` makes no LLM call (the agents' `needs_input` messages, or `workflow.messages.clarify_low_confidence`) and adds no disclaimer; `safe_response` uses static texts for now (an LLM-framed advice answer is the next-but-one commit); two or more ok results are joined VERBATIM under `workflow.agent_labels` headings with the `[n]` markers made unique (`merge_verbatim` in `src/workflow/answers.py`: shifted by the number of earlier sources, labelled for News, which has no source list), the LLM merge comes later and will fall back to this text; `wrong_agent` results are not presented (only `ok` and `no_answer` are); the MemorySaver import path was checked in `.venv` (`langgraph.checkpoint.memory.MemorySaver`, an alias of `InMemorySaver`) and structured output was checked with a mocked HTTP transport: `ChatOpenAI.with_structured_output(Schema)` (method `json_schema`) parses the reply, the usage callback still sees the token counts, and non-JSON output raises `pydantic.ValidationError`.
 
 ## Open questions
 
