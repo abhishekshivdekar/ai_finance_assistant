@@ -267,3 +267,77 @@ def test_summary_input_wording_comes_from_the_config():
     data = gm.summary_input(gm.build_plan(inputs(horizon_years=3), cfg), cfg)
     assert data["inflation"] == "no inflation" and data["horizon"] == "3 yrs"
     assert gm.summary_input(gm.build_plan(inputs(horizon_years=1), CFG), CFG)["horizon"] == "1 year"
+
+
+# ---- months to goal with a goal that keeps rising with inflation ----
+
+LIVE_GOAL_1 = dict(goal_amount=10_000_000.0, horizon_years=15, current_savings=500_000.0, monthly_contribution=20_000.0,
+                   risk_profile="medium", annual_step_up_pct=5.0, inflation_adjust=True)
+
+
+def test_live_check_goal_1_months_use_the_rising_goal():
+    plan = gm.build_plan(GoalInputs(**LIVE_GOAL_1), CFG)
+    assert {s.name: s.months_to_goal for s in plan.scenarios} == {"conservative": 488, "expected": 283, "optimistic": 223}
+    assert all(not s.goal_met for s in plan.scenarios)             # shortfall at the horizon is unchanged
+
+
+@pytest.mark.parametrize("changes", [
+    {},
+    {"risk_profile": "low", "monthly_contribution": 80_000.0, "annual_step_up_pct": 0.0},
+    {"risk_profile": "high", "goal_amount": 3_000_000.0, "current_savings": 0.0},
+    {"horizon_years": 5, "monthly_contribution": 60_000.0, "annual_step_up_pct": 10.0},
+])
+def test_real_value_reaches_the_goal_at_the_returned_month_and_not_one_month_earlier(changes):
+    i = GoalInputs(**{**LIVE_GOAL_1, **changes})
+    inflation = CFG["assumptions"]["inflation"]["annual_pct"]
+    for s in gm.build_plan(i, CFG).scenarios:
+        k = s.months_to_goal
+        assert k is not None and k > 0
+        balances = [i.current_savings] + gm.project(i.current_savings, i.monthly_contribution, i.annual_step_up_pct,
+                                                    s.annual_return_pct, k)
+        real = lambda month: balances[month] / (1 + inflation / 100) ** (month / 12)
+        assert real(k) >= i.goal_amount and real(k - 1) < i.goal_amount
+
+
+def test_rising_goal_takes_longer_than_a_goal_fixed_at_the_horizon():
+    fixed_target = gm.future_money(10_000_000.0, 5.0, 15)
+    for s in gm.build_plan(GoalInputs(**LIVE_GOAL_1), CFG).scenarios:
+        fixed = gm.months_to_goal(fixed_target, 500_000.0, 20_000.0, 5.0, s.annual_return_pct, 600)
+        assert fixed is None or s.months_to_goal >= fixed
+
+
+def test_months_to_goal_with_inflation_hand_case():
+    # 0% return, 1,000 a month, goal 12,000 in today's money, 12% inflation:
+    # month 12 needs 12,000 x 1.12 = 13,440 > 12,000; month 13 needs 12,000 x 1.12 ** (13/12) ~ 13,567 > 13,000 ...
+    assert gm.months_to_goal(12_000, 0, 1_000, 0, 0, 600, 12.0) is not None
+    assert gm.months_to_goal(12_000, 0, 1_000, 0, 0, 600, 0.0) == 12
+    assert gm.months_to_goal(12_000, 0, 1_000, 0, 0, 600, 12.0) > 12
+
+
+@pytest.mark.parametrize("inflation_pct", [0.0, 5.0])
+def test_inflation_off_still_compares_with_the_fixed_goal(inflation_pct):
+    cfg = copy.deepcopy(CFG)
+    cfg["assumptions"]["inflation"]["annual_pct"] = inflation_pct       # the configured rate must not matter when off
+    i = GoalInputs(**{**LIVE_GOAL_1, "inflation_adjust": False})
+    plan = gm.build_plan(i, cfg)
+    assert plan.target_amount == 10_000_000.0
+    for s in plan.scenarios:
+        assert s.months_to_goal == gm.months_to_goal(10_000_000.0, 500_000.0, 20_000.0, 5.0, s.annual_return_pct, 600)
+        assert s.final_value_todays_money is None
+
+
+def test_not_reached_within_the_maximum_months_with_inflation_gives_none_and_the_note():
+    i = GoalInputs(**{**LIVE_GOAL_1, "goal_amount": 10.0 ** 12, "monthly_contribution": 100.0})
+    for s in gm.build_plan(i, CFG).scenarios:
+        assert s.months_to_goal is None
+        assert s.months_note == CFG["not_reached_note"].format(months=CFG["max_months"])
+
+
+def test_required_contribution_and_shortfall_still_use_the_target_at_the_horizon():
+    plan = gm.build_plan(GoalInputs(**LIVE_GOAL_1), CFG)
+    target = gm.future_money(10_000_000.0, 5.0, 15)
+    assert plan.target_amount == pytest.approx(target)
+    for s in plan.scenarios:
+        assert s.shortfall == pytest.approx(target - s.final_value)
+        assert s.required_monthly_contribution == pytest.approx(
+            gm.required_contribution(target, 500_000.0, 5.0, s.annual_return_pct, 180))

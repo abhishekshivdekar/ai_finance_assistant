@@ -11,8 +11,10 @@ Conventions (also written into the payload's assumptions block):
 - a yearly step-up raises the contribution every 12 months (from month 13):
       contribution[k] = start * (1 + step_up_pct / 100) ** ((k - 1) // 12)
 - inflation: future_money = x * (1 + i) ** years;  todays_money = x / (1 + i) ** years.
-  When inflation_adjust is on, the goal is read as today's money, so the TARGET
-  is the goal in future money and all comparisons use that target.
+  When inflation_adjust is on, the goal is read as today's money. At the horizon the
+  TARGET is the goal in future money; shortfall and required contribution use it.
+  Months to goal are different: the goal keeps rising, so month k counts as reached
+  when balance_k >= goal * (1 + i) ** (k / 12).
 All rates and limits come from the `goal_planning:` config block; results are
 illustrative projections, never predictions.
 """
@@ -70,12 +72,18 @@ def required_contribution(goal: float, savings: float, step_up_pct: float, annua
     return (goal - base) / final_value(0.0, 1.0, step_up_pct, annual_pct, months)
 
 
-def months_to_goal(goal: float, savings: float, contribution: float, step_up_pct: float, annual_pct: float, max_months: int) -> int | None:
-    """The first month whose balance reaches `goal` (0 if `savings` already does); None if not within max_months."""
+def months_to_goal(goal: float, savings: float, contribution: float, step_up_pct: float, annual_pct: float,
+                   max_months: int, inflation_pct: float = 0.0) -> int | None:
+    """The first month k whose balance reaches the goal (0 if `savings` already does); None if not within max_months.
+
+    With inflation the goal is a price in today's money that keeps rising, so month k
+    is compared with goal * (1 + inflation) ** (k / 12), not with a target fixed at the
+    horizon. With inflation_pct 0 the goal is a fixed amount.
+    """
     if savings >= goal:
         return 0
     for month, balance in enumerate(project(savings, contribution, step_up_pct, annual_pct, max_months), start=1):
-        if balance >= goal:
+        if balance >= future_money(goal, inflation_pct, month / MONTHS_PER_YEAR):
             return month
     return None
 
@@ -113,8 +121,8 @@ def _scenario(name: str, annual_pct: float, inputs: GoalInputs, target: float, c
     args = (inputs.current_savings, inputs.monthly_contribution, inputs.annual_step_up_pct, annual_pct)
     balances = project(*args, months)
     final = balances[-1]
-    reach = months_to_goal(target, *args, cfg["max_months"])
     inflation = cfg["assumptions"]["inflation"]["annual_pct"]
+    reach = months_to_goal(inputs.goal_amount, *args, cfg["max_months"], inflation if inputs.inflation_adjust else 0.0)
     return ScenarioResult(
         name=name, annual_return_pct=annual_pct, final_value=final,
         final_value_todays_money=todays_money(final, inflation, inputs.horizon_years) if inputs.inflation_adjust else None,
