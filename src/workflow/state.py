@@ -44,6 +44,8 @@ class GraphState(TypedDict):
     market_freshness: dict[str, Any] | None
     portfolio: list[dict[str, Any]] | None  # from Portfolio tab / profile store
     goal_params: dict[str, Any] | None  # from Goals tab
+    market_params: dict[str, Any] | None  # from Market tab: {"tickers": [...], "period": "6mo"}
+    topic_filter: str | None  # set by the Chat tab dropdown; the facade passes it to the retriever
     final_answer: str
 
 

@@ -158,7 +158,7 @@ class FinanceQAAgent(BaseAgent):
 
         rewritten = self._rewrite(question)
         queries = [question] if rewritten == question else [question, rewritten]
-        chunks = self._retrieve(queries, state.get("topic_filter"))  # type: ignore[misc]
+        chunks = self._retrieve(queries, state.get("topic_filter"))
         payload: QAPayload = {"rewritten_query": rewritten, "retrieved": len(chunks)}
         no_answer = self._result("no_answer", cfg["no_answer_message"].strip(), [], payload)
         if not chunks:

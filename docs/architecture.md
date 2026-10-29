@@ -121,11 +121,23 @@ All agents extend `BaseAgent` (section 3). Every agent provides information and 
 - **Uses:** market data layer for prices, pure-Python metric functions, LLM role `portfolio_summary` (own role so usage is counted per agent).
 
 ### 2.3 Market Analysis
-- **Purpose:** explain current price, trend, and basic stats for a ticker or index.
-- **Inputs:** ticker(s) extracted by the router or Market tab.
-- **Outputs:** `MarketPayload` (quote table with currency, price history, trend analysis, freshness `as_of`, `source`, `is_stale`), commentary.
-- **Trend analysis (computed in code, never by the LLM):** 1-month and 6-month percent change, and the position within the 52-week range, from `get_history`. `change_pct = (latest close - close at start of period) / close at start of period x 100`. `range_position_pct = (price - 52-week low) / (52-week high - 52-week low) x 100`, where 0 means at the low and 100 at the high. They are returned as `trend` in `MarketPayload` (`change_1m_pct`, `change_6m_pct`, `range_52w_position_pct`, `low_52w`, `high_52w`). A value is `None` ("not available") when the history is too short, and the figures carry the same freshness and currency labels as the quote. The LLM only explains these numbers in plain language.
-- **Uses:** market data layer (yfinance), LLM `default` for explanation only.
+- **Purpose:** explain recent price behaviour (trend, volatility, drawdown, position against moving averages) of one or more tickers or indices. Educational only: observations, never predictions or buy/sell/hold wording.
+- **Principle:** every number is computed in deterministic Python (`src/core/market_metrics.py`). The LLM is called at most once, to write a short plain-language summary from the already-computed metrics, and never calculates or invents a number.
+- **Inputs:** `state["market_params"] = {"tickers": [...], "period": "6mo"}` (set by the Market tab or the router). Tickers are validated with `validate_symbol`, de-duplicated and capped at `market_analysis.max_tickers`; the period is one of `market_analysis.periods` (`1mo`, `3mo`, `6mo`, `1y`) and falls back to `default_period` with a warning. Invalid tickers are skipped with a warning; no valid ticker gives `needs_input`.
+- **Data (`src/core/market_history.py`):** one `get_history(ticker, fetch_period)` call per ticker (`fetch_period: 1y`) through the injected provider (the shared `CachedProvider`, so cache, retry, stale-cache and sample-data fallbacks apply), fetched concurrently (`ThreadPoolExecutor`, at most `market_analysis.max_workers` threads, input order kept, one failing ticker never affects the others). The same year of daily closes is **sliced in code** to the requested period (`period_days`: the rows within that many calendar days of the last row). Each ticker is reported in its own currency and nothing is added across tickers or currencies.
+- **Metrics (pure functions; thresholds in `config.yaml` under `market_analysis:`, labelled "illustrative"):**
+  - **Latest price and day change** (full year): last close, and `(last - previous close)` with its percent of the previous close. There is no separate `get_quote` call.
+  - **Period return** (requested period slice): `(last close / first close - 1) x 100`.
+  - **Simple moving averages** (full year, `sma_windows`, default 20 and 50 trading days): mean of the last `w` closes, and `price vs SMA = (price / SMA - 1) x 100`. A window longer than the history is omitted with a warning.
+  - **Annualised volatility** (period slice): sample standard deviation of the daily simple returns x `sqrt(trading_days)` x 100 (`trading_days: 252`); needs at least three closes.
+  - **Maximum drawdown** (period slice): the largest fall from a running peak, `min(close / running peak - 1) x 100` (0 or negative).
+  - **52-week range** (full year, closes): high, low, `% below high = (1 - price / high) x 100` and `% above low = (price / low - 1) x 100`. Omitted with a warning only when the fetched history spans fewer than `week52_min_days` calendar days (for example a recent listing), whatever period was requested.
+  - **Trend label:** `Uptrend` if the short average is above the long one by more than `trend.sma_gap_pct` percent and the period return is at least `+trend.return_threshold_pct`; `Downtrend` for the mirror image; otherwise `Sideways`. The averages describe the latest data, so the label reflects the latest averages and the selected period's return, not only the selected window. Omitted with a warning if an average is unavailable.
+  - A metric without enough data is `None` ("not available") with a warning; it never fails the ticker. An unavailable ticker is a warning and the others are still processed; if none can be analysed the status is `no_answer` and the LLM is not called. Stale cache and sample prices are flagged on the ticker and in the warnings.
+  - **Comparison table** (more than one ticker): return, volatility, drawdown and trend per ticker in input order, with no ranking.
+- **Summary step:** one call with the `market_summary` role. The prompt (`market_analysis.summary_prompt`) receives only the computed metrics as JSON with every number pre-formatted as text (`summary_input`; label numbers such as "20-day average" and "52-week high" are inside the values so the model may repeat them), and asks for beginner language, observation wording ("the price is below its short-term average"), no predictions and no buy/sell/hold wording. The **number guard** (`numbers_in` / `collect_numbers`, shared with the Portfolio agent) rejects a summary containing any number that is not in that JSON. If the call fails, the reply is empty or the guard rejects it, the fixed `market_analysis.summary_fallback` text is used, `status` stays `ok` and a warning is added.
+- **Outputs:** `status="ok"` with `answer` = the summary and `data` = `MarketPayload` (`metrics`: `MarketMetrics` as a dict with `period`, `tickers`, `warnings`, `as_of`, `uses_stale_or_sample`; `comparison`; `history`: flat `{ticker, date, close}` rows of the selected period for charts; `as_of`; `is_stale`; `warnings`). No valid ticker gives `needs_input`; nothing analysable gives `no_answer`.
+- **Uses:** market data layer for history, pure-Python metric functions, LLM role `market_summary` (own role so usage is counted per agent).
 
 ### 2.4 Goal Planning
 - **Purpose:** risk-aware projections toward a goal (retirement, house, etc.).
@@ -208,6 +220,7 @@ class GraphState(TypedDict):
     market_freshness: dict | None
     portfolio: list[dict] | None  # from Portfolio tab / profile store
     goal_params: dict | None      # from Goals tab
+    market_params: dict | None    # from Market tab: {"tickers": [...], "period": "6mo"}
     topic_filter: str | None      # set by the Chat tab dropdown; the facade passes it to the retriever
     final_answer: str
 ```
@@ -477,6 +490,8 @@ llm:
       model: <default-model-id>
     portfolio_summary:              # Portfolio agent summary (section 2.2)
       model: <default-model-id>
+    market_summary:                 # Market agent summary (section 2.3)
+      model: <default-model-id>
 
 portfolio:                          # starting values, labelled "illustrative"
   max_holdings: 50
@@ -495,6 +510,23 @@ portfolio:                          # starting values, labelled "illustrative"
   unpriced_message: ...
   summary_fallback: ...
   summary_prompt: ...               # contains the {metrics_json} placeholder
+
+market_analysis:                    # starting values, labelled "illustrative" (section 2.3)
+  max_tickers: 4
+  max_workers: 4                    # concurrent history fetches
+  default_period: 6mo
+  periods: [1mo, 3mo, 6mo, 1y]
+  period_days: {1mo: 30, 3mo: 91, 6mo: 182, 1y: 365}
+  period_labels: {1mo: 1 month, 3mo: 3 months, 6mo: 6 months, 1y: 1 year}
+  fetch_period: 1y                  # one history call per ticker, sliced in code
+  sma_windows: [20, 50]             # trading days, short first
+  trading_days: 252                 # to annualise volatility
+  week52_min_days: 350
+  trend: {return_threshold_pct: 3.0, sma_gap_pct: 0.5}
+  needs_input_message: ...          # fixed texts and the summary prompt live here too (section 2.3)
+  unavailable_message: ...
+  summary_fallback: ...
+  summary_prompt: ...
 ```
 
 - `get_llm(role="default")` reads `llm.roles.<role>` and merges over `llm.*`; unknown or missing role falls back to the default.
@@ -541,7 +573,7 @@ Three layers:
 | Folder | Modules |
 |---|---|
 | `src/utils/` | `config.py`, `logger.py` (exist) |
-| `src/core/` | `llm_factory.py` (exists; add `role`), `usage_tracker.py`, `models.py` (AgentResult, payloads, Source, MarketResult), `portfolio_models.py`, `portfolio_metrics.py`, `portfolio_valuation.py`, `profile_repository.py`, `tracing.py` |
+| `src/core/` | `llm_factory.py` (exists; add `role`), `usage_tracker.py`, `models.py` (AgentResult, payloads, Source, MarketResult), `portfolio_models.py`, `portfolio_metrics.py`, `portfolio_valuation.py`, `market_models.py`, `market_metrics.py`, `market_history.py`, `profile_repository.py`, `tracing.py` |
 | `src/data/` | `knowledge_base/*.md`, `sample_portfolios/` (US and `.NS`), `market_snapshot.json` (US and `.NS`) |
 | `src/rag/` | `ingest.py`, `embeddings.py`, `retriever.py`, `vector_store.py` (interface and FAISS), `vector_store/` |
 | `src/agents/` | `base_agent.py`, `finance_qa.py`, `portfolio.py`, `market.py`, `goal_planning.py`, `news.py`, `tax.py` |
@@ -577,7 +609,7 @@ Rules: the LLM and network are always mocked. No real API calls in tests. Covera
 | Market data | cache hit/miss, retry count and backoff (patched `sleep`), stale fallback, sample fallback labelling, freshness flags, currency present |
 | RAG | chunk sizes and overlap, metadata survives to results, threshold gives "no match", manifest mismatch warning, tiny fixture index and a fake embedding |
 | **(a) RAG evaluation harness** | the harness itself: hit-rate@k and MRR computed correctly on a tiny fixture; sweep runs over a parameter grid; off-topic questions score below the threshold on the fixture. Uses the fake embedding, no network |
-| Agents | `BaseAgent` returns a plain answer and converts exceptions to error results; each agent with a fake LLM and stubbed tools; portfolio, goal and tax math as pure unit tests (tax values read from a test config); Tax Education retrieval is filtered to its topic |
+| Agents | `BaseAgent` returns a plain answer and converts exceptions to error results; each agent with a fake LLM and stubbed tools; portfolio, market (return, volatility, drawdown, SMA, trend), goal and tax math as pure unit tests (tax values read from a test config); Tax Education retrieval is filtered to its topic |
 | **(b) Nodes, state and reducers** | each node returns only its own result in a list; **after a two-agent run, both agents' results are present in `agent_outputs`, in order**; `errors` accumulates; single-writer fields are replaced; synthesizer reads the list and never fails on an empty `ok` list; **per-turn hygiene (same thread, checkpointer on):** a second turn never sees the first turn's results, `intent_hint` from a tab submit does not leak into the next chat message, `route_attempts` resets to 0 each turn, every result carries the current `turn_id`; `no_answer` only gives the synthesizer's no_answer message with the disclaimer, and all-`error` gives `fallback` |
 | **(c) Router and routing** | **golden set of 30 to 40 labelled queries** (fake LLM returning the label under test, plus checks on the parsing, guardrail and `intent_hint` bypass); `specific_advice` always goes only to `safe_response`; re-routing works (`no_answer` with a ticker goes to `market`); **loop guard: never more than 2 hops**; all-failed goes to `fallback`; low confidence and `needs_input` go to `clarify` |
 | **(d) Caching** | TTL expiry, stale fallback after failure, no caching past TTL (including market-dependent LLM answers), `CachedProvider` is transparent (same results and interface as the wrapped provider), exact-match LLM cache key includes role, model and prompt |

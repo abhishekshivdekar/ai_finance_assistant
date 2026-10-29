@@ -24,6 +24,8 @@ llm:
       model: gpt-6-luna
     portfolio_summary:          # Portfolio agent: plain-language summary of computed metrics
       model: gpt-6-luna
+    market_summary:             # Market agent: plain-language summary of computed trend metrics
+      model: gpt-6-luna
 
 pricing:                      # USD per 1M tokens, keyed by model ID
   gpt-6-luna:
@@ -166,6 +168,65 @@ portfolio:                    # Portfolio agent (architecture section 2.2). All 
       never say "you should".
     - If the JSON lists warnings (a missing price, or a stale or sample price),
       mention them briefly.
+
+    JSON:
+    {metrics_json}
+
+market_analysis:              # Market agent (architecture section 2.3). All values illustrative.
+  max_tickers: 4              # tickers beyond this are ignored (bounds the number of history calls)
+  max_workers: 4              # histories are fetched concurrently with at most this many threads
+  default_period: 6mo
+  periods: [1mo, 3mo, 6mo, 1y]
+  period_days:                # calendar days that each period covers (return, volatility, drawdown use this slice)
+    1mo: 30
+    3mo: 91
+    6mo: 182
+    1y: 365
+  period_labels:              # wording for the summary
+    1mo: 1 month
+    3mo: 3 months
+    6mo: 6 months
+    1y: 1 year
+  fetch_period: 1y            # one history call per ticker; SMAs and the 52-week range use all of it
+  sma_windows: [20, 50]       # trading days: short first, long last (the trend label compares these two)
+  trading_days: 252           # trading days per year, to annualise volatility
+  week52_min_days: 350        # calendar days the fetched history must span to report the 52-week range
+  trend:
+    return_threshold_pct: 3.0 # period return needed (up or down) for an Uptrend or Downtrend label
+    sma_gap_pct: 0.5          # gap between the short and long average (percent of the long one) that counts as a difference
+  needs_input_message: >
+    Add at least one ticker (for example AAPL or RELIANCE.NS) to analyse.
+  unavailable_message: >
+    I couldn't get price history for any of the tickers right now, so I can't
+    analyse them. Please check the tickers or try again later.
+  summary_fallback: >
+    Here are the numbers calculated from the price history: the latest price and
+    daily change, the return over the selected period, moving averages,
+    volatility, the largest fall from a peak and a trend label. A plain-language
+    summary was not available this time, so please read the table directly.
+    This is educational information, not a prediction or personal advice.
+  summary_prompt: |
+    You are a finance education assistant explaining recent price behaviour to a beginner.
+    Below is a JSON summary of numbers that were already calculated by software.
+    Write a short plain-language summary in one paragraph (no lists, no headings).
+
+    Rules:
+    - Use ONLY numbers that appear in the JSON, copied exactly as written. Never
+      calculate, round, convert or invent a number, and never convert currencies.
+      Each ticker is reported in its own currency.
+    - Describe what the numbers show, using observation wording, for example "the
+      price is below its short-term average" or "the price fell from its peak
+      during the period". Use the wording from the JSON for the averages and for
+      the 52-week range, with the numbers exactly as written there.
+    - The trend label is based on the latest averages and the return over the
+      selected period; say so briefly if you mention it.
+    - If there are several tickers, you may compare their numbers side by side, but
+      never rank them or call one better or worse.
+    - Never predict future prices, never say what will happen, and never tell the
+      reader to buy, sell, hold or "consider" anything. This is educational
+      information, not personal advice.
+    - If the JSON lists warnings (a missing price, stale or sample data, or a
+      metric that was left out), mention them briefly.
 
     JSON:
     {metrics_json}
