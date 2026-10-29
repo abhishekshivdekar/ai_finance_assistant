@@ -25,7 +25,7 @@ from typing import Any
 
 from src.agents.base_agent import BaseAgent
 from src.core.goal_inputs import parse_goal_params
-from src.core.goal_metrics import build_plan, summary_input
+from src.core.goal_metrics import below_inflation_text, build_plan, summary_input
 from src.core.goal_models import GoalPlan
 from src.core.models import AgentResult, GoalPayload
 from src.core.portfolio_metrics import collect_numbers, numbers_in
@@ -105,6 +105,8 @@ class GoalPlanningAgent(BaseAgent):
         plan = build_plan(inputs, cfg)
         commentary, note = self._comment(plan, cfg)
         scenarios = plan.scenarios
+        flags = [cfg["texts"]["below_inflation_warning"].format(scenario=s.name, sentence=below_inflation_text(s, cfg))
+                 for s in scenarios if s.below_inflation]
         payload: GoalPayload = {
             "inputs": inputs.model_dump(mode="json"),
             "target_amount": plan.target_amount,
@@ -116,6 +118,6 @@ class GoalPlanningAgent(BaseAgent):
             "shortfall": {s.name: s.shortfall for s in scenarios},
             "inflation": inflation_block(plan, cfg),
             "assumptions": assumptions_block(plan, cfg),
-            "warnings": [note] if note else [],
+            "warnings": [*flags, *([note] if note else [])],
         }
         return self._result("ok", commentary, payload)

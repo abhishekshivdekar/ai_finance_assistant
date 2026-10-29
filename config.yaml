@@ -295,6 +295,16 @@ goal_planning:                # Goal Planning agent (architecture section 2.4). 
     commentary_discarded: The plain-language commentary was discarded because it contained numbers that were not calculated.
     goal_today: "The goal of {amount} is stated in today's money."
     goal_inflated: "With inflation of {rate} a year over {years}, the same goal would need about {amount} in future money."
+    goal_price_at_end: "The goal price at the end of the horizon is {amount}; the surplus or shortfall and the required monthly amount are measured against it."
+    goal_price_rising: "The goal price keeps rising with inflation; the time to reach the goal is the first month the balance covers the price of that month."
+    below_inflation: "At {rate} a year this scenario grows slower than the {inflation} rise in prices, so the savings buy less over time."
+    below_inflation_warning: "{scenario} scenario: {sentence}"
+    status_met_now: "The current savings already cover the goal price, and at the end of the horizon there is a {outcome}."
+    status_met_later: "The balance first covers the goal price after {when}, and at the end of the horizon there is a {outcome}."
+    status_met_none: "The balance does not cover the goal price within the maximum period, yet at the end of the horizon there is a {outcome}."
+    status_short_now: "The current savings cover the goal price today, but at the end of the horizon there is a {outcome}."
+    status_short_later: "The balance first covers the goal price after {when}, but at the end of the horizon there is a {outcome}."
+    status_short_none: "The balance does not cover the goal price within the maximum period, and at the end of the horizon there is a {outcome}."
   errors:
     not_a_number: "{field} must be a number."
     must_be_positive: "{field} must be greater than zero."
@@ -308,6 +318,7 @@ goal_planning:                # Goal Planning agent (architecture section 2.4). 
   needs_input_message: "Please check the goal details before I can plan:"
   not_reached_note: "Not reached within {months} months at the current contribution."
   already_met_note: "The goal is already met by the current savings."
+  below_inflation_months_note: "Months show the first month the balance covers the then-current goal price; with a return below inflation it can fall below that price again later."
   summary_fallback: >
     The table shows how your savings could grow under three illustrative
     scenarios, how much you would need to save each month to reach the goal in
@@ -344,6 +355,11 @@ goal_planning:                # Goal Planning agent (architecture section 2.4). 
       expected scenario the savings reach ..." or "a monthly amount of ... would
       be needed".
     - If a scenario says the goal is not reached, say so briefly.
+    - For each scenario, describe the outcome using its status sentence in your own words,
+      keeping both facts (when the balance first covers the goal price, and the surplus or
+      shortfall at the end of the horizon). Never say the goal is "reached" or "met" when
+      the scenario has a shortfall at the end of the horizon.
+    - If a scenario has a below-inflation sentence, mention it briefly in plain words.
     - Do not repeat dates or numbers from the assumptions notes; refer to them in words.
 
     JSON:

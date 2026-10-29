@@ -137,9 +137,35 @@ def test_the_prompt_asks_for_plain_words_per_scenario_results_and_a_closing_sent
     assert "Use observation wording only" in prompt
 
 
-def test_the_inflation_part_of_the_json_is_two_plain_sentences():
+def test_the_inflation_part_of_the_json_is_four_plain_sentences():
     llm, _ = run({**PARAMS, "inflation_adjust": True})
-    assert set(sent_json(llm)["inflation"]) == {"goal_in_todays_money_text", "goal_in_future_money_text"}
+    assert set(sent_json(llm)["inflation"]) == {
+        "goal_in_todays_money_text", "goal_in_future_money_text",
+        "goal_price_at_end_of_horizon_text", "rising_goal_price_text"}
+
+
+def test_below_inflation_scenario_gets_a_payload_flag_a_warning_and_a_sentence_for_the_llm():
+    llm, result = run({**PARAMS, "risk_profile": "low", "inflation_adjust": True},   # low/conservative is 4% < 5% inflation
+                      FakeLLM("These are illustrative assumptions, not predictions."))
+    data = result["data"]
+    flags = {s["name"]: s["below_inflation"] for s in data["scenarios"]}
+    assert flags == {"conservative": True, "expected": False, "optimistic": False}
+    assert data["warnings"] == [CFG["texts"]["below_inflation_warning"].format(
+        scenario="conservative", sentence=CFG["texts"]["below_inflation"].format(rate="4.0%", inflation="5.0%"))]
+    items = {i["scenario"]: i for i in sent_json(llm)["scenarios"]}
+    assert "grows slower than the 5.0% rise in prices" in items["conservative"]["below_inflation_text"]
+    assert all("below_inflation_text" not in items[n] for n in ("expected", "optimistic"))
+    assert all(i["status_text"] for i in items.values())
+    assert CFG["below_inflation_months_note"] in data["scenarios"][0]["months_note"]
+
+
+def test_text_copied_from_the_below_inflation_fields_passes_the_number_guard():
+    params = {**PARAMS, "risk_profile": "low", "inflation_adjust": True}
+    probe, _ = run(params)
+    item = sent_json(probe)["scenarios"][0]
+    reply = f"{item['below_inflation_text']} {item['status_text']}"
+    _, result = run(params, FakeLLM(reply))
+    assert result["answer"] == reply and CFG["texts"]["commentary_discarded"] not in result["data"]["warnings"]
 
 
 # ---- the new precomputed text passes the number guard ----

@@ -275,10 +275,86 @@ LIVE_GOAL_1 = dict(goal_amount=10_000_000.0, horizon_years=15, current_savings=5
                    risk_profile="medium", annual_step_up_pct=5.0, inflation_adjust=True)
 
 
-def test_live_check_goal_1_months_use_the_rising_goal():
-    plan = gm.build_plan(GoalInputs(**LIVE_GOAL_1), CFG)
+def explicit_cfg(returns: dict[str, float], inflation_pct: float, profile: str = "medium"):
+    """Config copy with the given returns for `profile` and the given inflation, so a test never depends on config.yaml rates."""
+    cfg = copy.deepcopy(CFG)
+    cfg["assumptions"]["returns_pct"][profile] = dict(returns)
+    cfg["assumptions"]["inflation"]["annual_pct"] = inflation_pct
+    return cfg
+
+
+def test_months_to_goal_with_explicit_rates_and_rising_goal():
+    cfg = explicit_cfg({"conservative": 5.0, "expected": 9.0, "optimistic": 12.0}, 5.0)
+    plan = gm.build_plan(GoalInputs(**LIVE_GOAL_1), cfg)
     assert {s.name: s.months_to_goal for s in plan.scenarios} == {"conservative": 488, "expected": 283, "optimistic": 223}
     assert all(not s.goal_met for s in plan.scenarios)             # shortfall at the horizon is unchanged
+    assert not any(s.below_inflation for s in plan.scenarios)      # 5% is not below 5%
+
+
+# ---- returns below inflation: savings above today's goal, first crossing only ----
+
+SAVINGS_ABOVE_TODAYS_GOAL = dict(goal_amount=100_000.0, horizon_years=5, current_savings=110_000.0, monthly_contribution=0.0,
+                                 risk_profile="medium", inflation_adjust=True)       # target at 5% inflation: 127,628
+
+
+def test_savings_above_todays_goal_with_returns_above_inflation_is_consistent():
+    cfg = explicit_cfg({"conservative": 8.0, "expected": 10.0, "optimistic": 12.0}, 5.0)
+    for s in gm.build_plan(GoalInputs(**SAVINGS_ABOVE_TODAYS_GOAL), cfg).scenarios:
+        assert s.months_to_goal == 0 and s.goal_met and s.shortfall < 0 and not s.below_inflation
+        assert s.months_note == cfg["already_met_note"]
+        text = gm.status_text(s, "", cfg)
+        assert text.startswith("The current savings already cover the goal price") and "surplus of" in text
+
+
+def test_savings_above_todays_goal_with_returns_below_inflation_states_both_facts():
+    cfg = explicit_cfg({"conservative": 0.0, "expected": 1.0, "optimistic": 2.0}, 5.0)
+    plan = gm.build_plan(GoalInputs(**SAVINGS_ABOVE_TODAYS_GOAL), cfg)
+    for s in plan.scenarios:
+        assert s.below_inflation and s.months_to_goal == 0 and not s.goal_met and s.shortfall > 0
+        assert cfg["already_met_note"] in s.months_note and cfg["below_inflation_months_note"] in s.months_note
+        text = gm.status_text(s, "", cfg)
+        assert "cover the goal price today" in text and "shortfall of" in text
+        assert "reached" not in text and "already met" not in text
+        assert "grows slower than the 5.0% rise in prices" in gm.below_inflation_text(s, cfg)
+    item = gm.summary_input(plan, cfg)["scenarios"][0]
+    assert item["below_inflation_text"] and item["status_text"] == gm.status_text(plan.scenarios[0], "", cfg)
+
+
+def test_a_balance_that_crosses_and_later_falls_back_is_flagged_and_worded_as_both_facts():
+    cfg = explicit_cfg({"conservative": 0.0, "expected": 0.0, "optimistic": 0.0}, 12.0)
+    i = GoalInputs(goal_amount=12_000.0, horizon_years=40, current_savings=0.0, monthly_contribution=1_000.0,
+                   risk_profile="medium", inflation_adjust=True)
+    s = gm.build_plan(i, cfg).scenarios[0]
+    k = s.months_to_goal
+    assert k is not None and 0 < k < 40 * 12 and s.below_inflation and not s.goal_met
+    assert gm.project(0, 1_000.0, 0, 0, k)[-1] >= gm.future_money(12_000.0, 12.0, k / 12)       # crossed at month k ...
+    assert s.shortfall > 0                                                                     # ... but short at the end
+    text = gm.status_text(s, gm.years_months_text(k, cfg), cfg)
+    assert text.startswith("The balance first covers the goal price after") and "shortfall of" in text and "reached" not in text
+
+
+def test_status_text_when_the_goal_is_not_covered_within_the_maximum_period():
+    i = GoalInputs(**{**LIVE_GOAL_1, "goal_amount": 10.0 ** 12, "monthly_contribution": 100.0})
+    plan = gm.build_plan(i, CFG)
+    assert all("does not cover the goal price within the maximum period" in x["status_text"]
+               for x in gm.summary_input(plan, CFG)["scenarios"])
+
+
+def test_status_text_when_covered_later_and_met_at_the_horizon():
+    cfg = explicit_cfg({"conservative": 10.0, "expected": 10.0, "optimistic": 10.0}, 5.0)
+    i = GoalInputs(**{**LIVE_GOAL_1, "monthly_contribution": 100_000.0})
+    s = gm.build_plan(i, cfg).scenarios[0]
+    assert s.goal_met and s.months_to_goal and s.months_to_goal > 0
+    assert gm.status_text(s, "X", cfg).startswith("The balance first covers the goal price after X, and")
+
+
+def test_summary_input_labels_both_comparison_figures_only_when_inflation_is_on():
+    on = gm.summary_input(gm.build_plan(GoalInputs(**LIVE_GOAL_1), CFG), CFG)["inflation"]
+    assert on["goal_price_at_end_of_horizon_text"].startswith("The goal price at the end of the horizon is ")
+    assert on["rising_goal_price_text"].startswith("The goal price keeps rising with inflation")
+    off = gm.summary_input(gm.build_plan(GoalInputs(**{**LIVE_GOAL_1, "inflation_adjust": False}), CFG), CFG)
+    assert off["inflation"] == CFG["texts"]["inflation_not_applied"]
+    assert "goal price at the end of the horizon" not in str(off).lower() and "keeps rising with inflation" not in str(off)
 
 
 @pytest.mark.parametrize("changes", [

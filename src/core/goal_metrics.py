@@ -14,7 +14,10 @@ Conventions (also written into the payload's assumptions block):
   When inflation_adjust is on, the goal is read as today's money. At the horizon the
   TARGET is the goal in future money; shortfall and required contribution use it.
   Months to goal are different: the goal keeps rising, so month k counts as reached
-  when balance_k >= goal * (1 + i) ** (k / 12).
+  when balance_k >= goal * (1 + i) ** (k / 12). This equals the horizon target at
+  month = horizon * 12. Only the FIRST crossing is reported: when the return is below
+  inflation the balance can cross and later fall back below the rising price, so such
+  scenarios are flagged (`below_inflation`).
 All rates and limits come from the `goal_planning:` config block; results are
 illustrative projections, never predictions.
 """
@@ -98,11 +101,16 @@ def todays_money(amount: float, inflation_pct: float, years: float) -> float:
     return amount / (1 + inflation_pct / 100) ** years
 
 
-def _months_note(reach: int | None, cfg: dict[str, Any]) -> str | None:
-    """A note for 'not reached' or 'already met'; None for a normal result."""
+def _months_note(reach: int | None, below_inflation: bool, cfg: dict[str, Any]) -> str | None:
+    """A note for 'not reached', 'already met' and/or 'below inflation'; None for a normal result."""
+    notes = []
     if reach is None:
-        return cfg["not_reached_note"].format(months=cfg["max_months"])
-    return cfg["already_met_note"] if reach == 0 else None
+        notes.append(cfg["not_reached_note"].format(months=cfg["max_months"]))
+    elif reach == 0:
+        notes.append(cfg["already_met_note"])
+    if below_inflation:
+        notes.append(cfg["below_inflation_months_note"])
+    return " ".join(notes) or None
 
 
 def required_label(goal_met: bool, step_up_pct: float, cfg: dict[str, Any]) -> str:
@@ -123,13 +131,14 @@ def _scenario(name: str, annual_pct: float, inputs: GoalInputs, target: float, c
     final = balances[-1]
     inflation = cfg["assumptions"]["inflation"]["annual_pct"]
     reach = months_to_goal(inputs.goal_amount, *args, cfg["max_months"], inflation if inputs.inflation_adjust else 0.0)
+    below = inputs.inflation_adjust and annual_pct < inflation
     return ScenarioResult(
         name=name, annual_return_pct=annual_pct, final_value=final,
         final_value_todays_money=todays_money(final, inflation, inputs.horizon_years) if inputs.inflation_adjust else None,
         shortfall=target - final, goal_met=final >= target,
         required_monthly_contribution=required_contribution(
             target, inputs.current_savings, inputs.annual_step_up_pct, annual_pct, months),
-        months_to_goal=reach, months_note=_months_note(reach, cfg),
+        months_to_goal=reach, months_note=_months_note(reach, below, cfg), below_inflation=below,
         required_label=required_label(final >= target, inputs.annual_step_up_pct, cfg),
     ), year_end_values(inputs.current_savings, balances)
 
@@ -191,6 +200,23 @@ def _time_text(s: ScenarioResult, horizon_months: int, cfg: dict[str, Any]) -> t
     return years_months_text(s.months_to_goal, cfg), compare
 
 
+def below_inflation_text(s: ScenarioResult, cfg: dict[str, Any]) -> str:
+    """Plain sentence for a scenario whose return is below the inflation rate."""
+    inflation = cfg["assumptions"]["inflation"]["annual_pct"]
+    return cfg["texts"]["below_inflation"].format(rate=f"{s.annual_return_pct:.1f}%", inflation=f"{inflation:.1f}%")
+
+
+def status_text(s: ScenarioResult, time_text: str, cfg: dict[str, Any]) -> str:
+    """One sentence stating both facts: when the balance first covers the goal price, and the outcome at the horizon.
+
+    The template is picked by (goal met at the horizon?, first-crossing month). None of
+    the wording says "reached", so a crossing followed by a shortfall is not contradictory.
+    """
+    when = "now" if s.months_to_goal == 0 else "none" if s.months_to_goal is None else "later"
+    key = f"status_{'met' if s.goal_met else 'short'}_{when}"
+    return cfg["texts"][key].format(when=time_text, outcome=surplus_or_shortfall_text(s.shortfall, cfg))
+
+
 def _scenario_summary(s: ScenarioResult, horizon_months: int, cfg: dict[str, Any]) -> dict[str, Any]:
     """One scenario with every number pre-formatted as text."""
     time_text, compare = _time_text(s, horizon_months, cfg)
@@ -202,7 +228,10 @@ def _scenario_summary(s: ScenarioResult, horizon_months: int, cfg: dict[str, Any
         "monthly_amount_meaning": s.required_label,
         "years_months_to_goal": time_text,
         "time_compared_with_horizon": compare,
+        "status_text": status_text(s, time_text, cfg),
     }
+    if s.below_inflation:
+        item["below_inflation_text"] = below_inflation_text(s, cfg)
     if s.final_value_todays_money is not None:
         item["projected_value_at_end_in_todays_money"] = _money(s.final_value_todays_money)
     return item
@@ -219,6 +248,8 @@ def summary_input(plan: GoalPlan, cfg: dict[str, Any]) -> dict[str, Any]:
             "goal_in_future_money_text": t["goal_inflated"].format(
                 rate=f"{a['inflation']['annual_pct']:.1f}%", years=years_months_text(i.horizon_years * MONTHS_PER_YEAR, cfg),
                 amount=_money(plan.target_amount)),
+            "goal_price_at_end_of_horizon_text": t["goal_price_at_end"].format(amount=_money(plan.target_amount)),
+            "rising_goal_price_text": t["goal_price_rising"],
         }
     return {
         "currency": cfg["currency"], "risk_profile": i.risk_profile, "horizon": years_months_text(i.horizon_years * MONTHS_PER_YEAR, cfg),

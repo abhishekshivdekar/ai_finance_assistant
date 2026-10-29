@@ -42,6 +42,7 @@ class ScenarioResult(_Frozen):
     required_label: str                          # how to describe that amount (plain, step-up or goal already met)
     months_to_goal: int | None                   # at the current contribution; None = not reached
     months_note: str | None = None
+    below_inflation: bool = False                # inflation on and this return is below it: the savings buy less over time
 
 
 class GoalPlan(_Frozen):

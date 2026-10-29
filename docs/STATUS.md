@@ -26,6 +26,7 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Goal Planning: the number guard's whitelist leaves out the `assumptions` entry (as_of, timing notes, source), so an invented "10 years" or "13 months" is rejected; computed values and the user's inputs still pass. The prompt asks the LLM not to repeat numbers from the notes.
 - Goal Planning: the three commentary warnings and the "not applied" text moved to `goal_planning.texts`; the summary horizon now uses `years_months_text` (so 1 year reads "1 year").
 - Goal Planning bug fix: with inflation on, `months_to_goal` compares month k with `goal_today x (1+i)^(k/12)` (`months_to_goal(..., inflation_pct)` in `src/core/goal_metrics.py`), not with the target fixed at the horizon. Shortfall, `goal_met` and required contribution are unchanged (measured at the horizon). Live-check goal 1 gives 488 / 283 / 223 months (conservative / expected / optimistic), tested. `time_compared_with_horizon` wording left as is. Documented in architecture 2.4.
+- Goal Planning below-inflation fix: `months_to_goal` is the first crossing only. The rising goal uses `(1+i)^(k/12)`, equal to the horizon target at month `horizon x 12`; with a return below inflation a balance can cross and later fall back below (also: savings above today's goal but below the inflated target gave "already met" next to a shortfall). Such scenarios get `below_inflation` (strictly below; `ScenarioResult` in `src/core/goal_models.py`, set in `_scenario` in `src/core/goal_metrics.py`), a `below_inflation_months_note`, a `below_inflation_text` in the commentary input and a payload warning (`src/agents/goal_planning.py`). Every scenario gets a precomputed `status_text` (`status_text()` in `goal_metrics.py`, six templates in `goal_planning.texts.status_*`, no "reached" wording) stating both facts. With inflation on, `summary_input` carries two more labelled sentences (goal price at the end of the horizon; goal price keeps rising). Maths unchanged. Architecture 2.4 updated. The 488 / 283 / 223 test now passes returns and inflation explicitly (`explicit_cfg` in `tests/test_goal_metrics.py`) and is renamed.
 - Config load rejects negative scenario returns and negative inflation (`src/utils/config.py`).
 - Portfolio: `Holding` now rejects `inf` for `quantity`, `avg_cost`, `expense_ratio_pct` (`allow_inf_nan=False`); before, `inf` passed the `gt=0` / `ge=0` checks. Huge ints and `nan` were already rejected by pydantic. Market `parse_request` cannot raise on huge/inf/nan values (regression test added); it only echoes odd values in warnings.
 - Portfolio: `instrument_type` (what it is) is separate from `asset_class` (what it behaves like); risk, allocation and the single-class penalty use `asset_class` only (`docs/architecture.md` section 2.2).
@@ -49,7 +50,6 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Goal Planning: commentary input has precomputed text (`years_months_to_goal`, `surplus_or_shortfall_text`, `time_compared_with_horizon`, two plain inflation sentences); the old `labels` object is no longer sent to the LLM. Maths unchanged.
 
 ## Open to-dos
-- Goal Planning edge: when a scenario's return is below inflation it can reach the rising goal early (months within the horizon) yet show a shortfall at the horizon, so "within the horizon" and "shortfall" can appear together. Decide whether to word that case differently.
 - UI formats amounts in Indian lakh/crore grouping while the LLM input stays western grouping; the number guard (`numbers_in`) does not parse lakh grouping.
 - Run `live_check_goal_planning.py` once (spends API money; only when asked).
 - Resolve the `<!-- VERIFY -->` markers in the knowledge base against official sites: **21 markers in 15 files** (counted with grep).
@@ -67,4 +67,4 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - README known limitation to add: the number guard accepts any number present anywhere in the input, so a coincidental match is not detected.
 
 ## Last updated
-2026-10-29, Goal Planning months-to-goal fix: with inflation on, the goal keeps rising month by month (see `git log -1` for the commit).
+2026-10-29, Goal Planning below-inflation edge case: flag, status_text and labelled comparison figures (see `git log -1` for the commit).
