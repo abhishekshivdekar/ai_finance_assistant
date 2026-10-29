@@ -92,7 +92,7 @@ def test_merge_verbatim_leaves_text_without_markers_alone():
     assert text == "**Market**\nUp 3 percent.\n\n**Portfolio**\nBalanced." and sources == []
 
 
-def test_notes_cover_needs_input_and_error_only():
+def test_notes_cover_needs_input_error_and_no_answer_only():
     notes = notes_for([
         result("market", "needs_input", "Which ticker?"), result("news", "error", "boom", error="boom"),
         result("finance_qa", "no_answer"), result("portfolio"),
@@ -100,6 +100,7 @@ def test_notes_cover_needs_input_and_error_only():
     assert notes == [
         WF["messages"]["needs_input_note"].format(label="Market", message="Which ticker?"),
         " ".join(WF["messages"]["error_note"].format(label="News").split()),
+        " ".join(WF["messages"]["no_answer_note"].format(label="Concepts", message="text").split()),
     ]
 
 
@@ -163,6 +164,14 @@ def test_a_valid_workflow_block_loads(tmp_path):
     lambda w: w.update(reroute={"finance_qa": [{"agent": "market", "needs": ""}]}),
     lambda w: w["messages"].pop("fallback"),
     lambda w: w["messages"].update(out_of_scope="  "),
+    lambda w: w["messages"].pop("no_answer_note"),
+    lambda w: w.update(router_history_max_chars=0),
+    lambda w: w.update(router_history_max_chars=True),
+    lambda w: w.update(router_prompt="  "),
+    lambda w: w.update(advice_patterns=["(unclosed"]),
+    lambda w: w.update(ticker_aliases=["apple"]),
+    lambda w: w["ticker_aliases"].update(broken=""),
+    lambda w: w["ticker_aliases"].update({"": "AAPL"}),
 ])
 def test_a_broken_workflow_block_is_rejected(tmp_path, change):
     with pytest.raises(ConfigError):

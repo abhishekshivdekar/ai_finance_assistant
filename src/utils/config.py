@@ -7,6 +7,7 @@ the same dict back instead of re-reading the file.
 from __future__ import annotations
 
 import os
+import re
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -152,7 +153,7 @@ def _validate_tax(tax: dict[str, Any]) -> None:
 
 
 WORKFLOW_MESSAGES = (
-    "clarify_low_confidence", "out_of_scope", "advice_static", "fallback", "needs_input_note", "error_note",
+    "clarify_low_confidence", "out_of_scope", "advice_static", "fallback", "needs_input_note", "error_note", "no_answer_note",
     "section_heading", "unsourced_marker",
 )
 WORKFLOW_REQUIRED_INTENTS = ("clarify", "out_of_scope", "specific_advice")
@@ -182,6 +183,19 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
         for candidate in candidates:
             if candidate.get("agent") not in agents or not str(candidate.get("needs") or "").strip():
                 raise ConfigError(f"workflow.reroute.{source} needs entries with an agent from workflow.agent_intents and a `needs` key.")
+    chars = wf["router_history_max_chars"]
+    if isinstance(chars, bool) or not isinstance(chars, int) or chars < 1:
+        raise ConfigError("workflow.router_history_max_chars must be a positive whole number.")
+    if not str(wf["router_prompt"]).strip():
+        raise ConfigError("workflow.router_prompt must not be empty.")
+    for pattern in wf["advice_patterns"]:
+        try:
+            re.compile(str(pattern))
+        except re.error as exc:
+            raise ConfigError(f"workflow.advice_patterns has an invalid regex {pattern!r}: {exc}") from exc
+    aliases = wf["ticker_aliases"]
+    if not isinstance(aliases, dict) or any(not str(k).strip() or not isinstance(v, str) or not v.strip() for k, v in aliases.items()):
+        raise ConfigError("workflow.ticker_aliases must map a name to a non-empty symbol.")
     missing = [key for key in WORKFLOW_MESSAGES if not str(wf["messages"].get(key) or "").strip()]
     if missing:
         raise ConfigError(f"workflow.messages is missing {missing}.")

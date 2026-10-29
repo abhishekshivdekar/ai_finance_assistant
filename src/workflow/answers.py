@@ -53,7 +53,7 @@ def merge_verbatim(results: list[AgentResult], cfg: dict[str, Any] | None = None
 
 
 def notes_for(results: list[AgentResult], cfg: dict[str, Any] | None = None) -> list[str]:
-    """One code-written note per needs_input / error result (used when other agents did answer)."""
+    """One code-written note per needs_input / error / no_answer result (used when other agents did answer)."""
     cfg = cfg or workflow_cfg()
     messages = cfg["messages"]
     notes: list[str] = []
@@ -63,4 +63,6 @@ def notes_for(results: list[AgentResult], cfg: dict[str, Any] | None = None) -> 
             notes.append(" ".join(messages["needs_input_note"].format(label=label, message=result["answer"]).split()))
         elif result["status"] == "error":
             notes.append(" ".join(messages["error_note"].format(label=label).split()))
+        elif result["status"] == "no_answer":
+            notes.append(" ".join(messages["no_answer_note"].format(label=label, message=result["answer"]).split()))
     return notes

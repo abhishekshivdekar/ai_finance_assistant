@@ -192,7 +192,8 @@ def test_no_answer_and_wrong_agent_reroute_when_the_router_found_a_ticker(status
     visited, state = run(graph, "what is NVDA doing today")
     assert visited == ["router", "finance_qa", "reroute", "market", "synthesizer"]
     assert state["route_attempts"] == 1 and "Apple is at 190." in state["final_answer"]
-    assert "finance_qa" not in state["final_answer"]
+    noted = MSG["no_answer_note"].format(label="Concepts", message=f"finance_qa {status}") in state["final_answer"]
+    assert noted is (status == "no_answer")                      # a no_answer is noted; a wrong_agent result is not presented
 
 
 def test_no_answer_without_a_ticker_is_presented_by_the_synthesizer_with_the_disclaimer():
@@ -409,3 +410,34 @@ def test_build_graph_uses_the_default_agents_when_none_are_given(monkeypatch):
     monkeypatch.setattr(graph_module, "default_agents", lambda: fakes)
     _, state = run(build_graph(Classify(["market"])))
     assert "From the default set." in state["final_answer"]
+
+
+# ---- no_answer notes next to an ok answer ----
+
+def test_an_ok_answer_next_to_a_no_answer_gets_a_note_with_the_no_answer_text_and_one_disclaimer():
+    fakes = agents(market=FakeAgent("market", "no_answer", answer="No price data right now."),
+                   finance_qa=FakeAgent("finance_qa", answer="A P/E ratio is price over earnings."))
+    visited, state = run(build_graph(Classify(["market", "finance_qa"]), fakes))
+    assert visited == ["router", "market", "finance_qa", "synthesizer"]
+    answer = state["final_answer"]
+    assert answer.startswith("A P/E ratio is price over earnings.")
+    assert MSG["no_answer_note"].format(label="Market", message="No price data right now.") in answer
+    assert count(answer, DISCLAIMER) == 1
+
+
+def test_a_no_answer_alone_presents_its_message_without_a_note():
+    fakes = agents(finance_qa=FakeAgent("finance_qa", "no_answer", answer="The knowledge base has no good match."))
+    _, state = run(build_graph(Classify(["finance_qa"]), fakes))
+    assert state["final_answer"] == f"The knowledge base has no good match.\n\n{DISCLAIMER}"
+    assert "had no answer" not in state["final_answer"]
+
+
+@pytest.mark.parametrize("confidence", [0.0, 0.3, 1.0])
+def test_a_low_confidence_out_of_scope_is_a_refusal_not_a_clarify(confidence):
+    visited, state = run(build_graph(Classify(["out_of_scope"], confidence=confidence), agents()))
+    assert visited == ["router", "safe_response"] and " ".join(MSG["out_of_scope"].split()) in state["final_answer"]
+
+
+def test_out_of_scope_next_to_an_agent_with_low_confidence_still_goes_to_clarify():
+    visited, _ = run(build_graph(Classify(["out_of_scope", "market"], confidence=0.1), agents()))
+    assert visited == ["router", "clarify"]
