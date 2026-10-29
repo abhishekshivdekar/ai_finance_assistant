@@ -93,14 +93,29 @@ def test_the_llm_sees_only_numbered_titles_and_publishers():
 
 
 def test_ticker_is_turned_into_the_configured_phrase():
-    assert run({"ticker": "RELIANCE.NS"})[1].queries == ["Reliance Industries"]
-    assert run({"ticker": "INFY.NS"}, )[1].queries == ["Infosys"]
+    assert run({"ticker": "RELIANCE.NS"})[1].queries == ["Reliance Industries stock"]
+    assert run({"ticker": "INFY.NS"}, )[1].queries == ["Infosys stock"]
+    assert run({"ticker": "AAPL"})[1].queries == ["Apple Inc AAPL stock"]
     assert run({"ticker": "MARUTI.NS"})[1].queries == ["MARUTI NSE stock"]
 
 
 def test_max_items_limits_what_is_summarised_and_listed():
     llm, _, result = run({"ticker": "AAPL", "max_items": 2}, llm=FakeLLM("- A [1][2]."))
     assert len(result["data"]["items"]) == 2 and len(sent_json(llm)) == 2
+
+
+def test_a_non_int_max_items_uses_the_default_and_adds_a_warning():
+    _, _, result = run({"ticker": "AAPL", "max_items": "two"})
+    assert len(result["data"]["items"]) == len(ITEMS)
+    assert result["data"]["warnings"] == [CFG["messages"]["max_items_ignored"].format(default=CFG["max_items"])]
+
+
+def test_the_prompt_for_one_headline_asks_for_fewer_bullets_and_no_invented_themes():
+    llm, _, _ = run({"ticker": "AAPL"}, provider=FakeProvider(data=ITEMS[:1]), llm=FakeLLM("- Index closed [1]."))
+    prompt = " ".join(llm.calls[0].split())
+    assert len(sent_json(llm)) == 1
+    assert "up to 4 bullets" in prompt and "use fewer when there are few headlines" in prompt
+    assert "never add themes that the headlines do not show" in prompt
 
 
 # ---- statuses without an LLM call ----

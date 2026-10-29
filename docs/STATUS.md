@@ -63,12 +63,13 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Run `live_check_news.py` once (spends API money and uses the network; only when asked).
 - Run `live_check_market_agent.py` once (spends API money; only when asked).
 - Review `smoke_test.py` (exists at the repo root).
-- Document tech choices in the README: FAISS vs Pinecone, yfinance vs Alpha Vantage, OpenAI vs Gemini, Google News RSS (chosen because the yfinance news path returned nothing usable per the project author, and the RSS feed supports free search phrases like "Nifty 50"; stdlib only, no new dependency; see architecture section 6).
 - Rotate the OpenAI key if not done (not verified; cannot be checked from the repo).
 - Pin `requirements.txt` at the end (all entries are unpinned today).
 - At the workflow step, run the number check on text reworded by the output guard (`guard_answer` rewording is not checked today).
 - Once the synthesizer is wired, verify the disclaimer end to end (agents return answers without it; not verified for any agent today).
 - README known limitation to add: the number guard accepts any number present anywhere in the input, so a coincidental match is not detected.
 
+- News review follow-ups (this step): `query_overrides` are "company + stock" phrases (`AAPL` -> "Apple Inc AAPL stock", `^NSEI` -> "Nifty 50 index"); feeds must be plain UTF-8 and the DTD check runs on decoded text (`decode_utf8` in `src/core/news_parse.py`); `CachedProvider._get_news` uses one normalised (casefold, collapsed whitespace) phrase for the key and the fetch, so Google receives the lower-case phrase; a non-int `max_items` uses the config default and adds a warning (`NewsRequest.warning`); the prompt asks for up to 4 bullets and no invented themes; README has "Technology choices". The README line about the OpenAI choice records that the author chose it; the original reason is not in the repo (not verified).
+
 ## Last updated
-2026-10-29, News agent (Google News RSS source, guarded summary, tests; see `git log -1` for the commit).
+2026-10-29, News agent review follow-ups (UTF-8 only feeds, normalised cache key, max_items warning, prompt wording, README technology choices; see `git log -1` for the commit).

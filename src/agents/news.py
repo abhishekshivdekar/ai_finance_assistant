@@ -92,7 +92,8 @@ class NewsAgent(BaseAgent):
 
         summary, cited, note = self._summarise(items, cfg)
         stale = bool(found.is_stale)
-        warnings = ([cfg["messages"]["stale"].format(source=found.source)] if stale else []) + ([note] if note else [])
+        warnings = ([cfg["messages"]["stale"].format(source=found.source)] if stale else [])
+        warnings += [w for w in (request.warning, note) if w]
         payload: NewsPayload = {
             "query": request.query, "items": items,
             "as_of": found.as_of.isoformat() if found.as_of else "",

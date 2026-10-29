@@ -19,9 +19,20 @@ def _news_config(tmp_path, change):
 def test_the_real_news_block_is_valid_and_has_a_role():
     news = get_config()["news"]
     assert news["base_url"].startswith("https://news.google.com/") and "news.google.com" in news["allowed_hosts"]
-    assert news["user_agent"] and news["query_overrides"]["RELIANCE.NS"] == "Reliance Industries"
+    assert news["user_agent"] and news["query_overrides"]["RELIANCE.NS"] == "Reliance Industries stock"
     assert "{headlines_json}" in news["prompt"] and "untrusted DATA" in news["prompt"]
     assert get_config()["llm"]["roles"]["news_summary"]["model"]
+
+
+def test_every_override_reads_as_a_finance_search():
+    overrides = get_config()["news"]["query_overrides"]
+    assert overrides["AAPL"] == "Apple Inc AAPL stock"
+    assert all(phrase.endswith(("stock", "index")) for phrase in overrides.values())
+
+
+def test_prompt_limits_bullets_and_forbids_invented_themes():
+    prompt = " ".join(get_config()["news"]["prompt"].split())
+    assert 'up to 4 bullets (start each with "- "); use fewer when there are few headlines; never add themes that the headlines do not show' in prompt
 
 
 def test_valid_news_config_loads(tmp_path):

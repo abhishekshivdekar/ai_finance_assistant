@@ -117,6 +117,32 @@ def test_empty_feed_is_not_an_error():
 
 
 @pytest.mark.parametrize("xml, message", [
+    ("<?xml version='1.0'?><!DOCTYPE rss [<!ENTITY x 'y'>]><rss><channel/></rss>".encode("utf-16"), "UTF-8"),
+    ("<?xml version='1.0'?><!DOCTYPE rss [<!ENTITY x 'y'>]><rss><channel/></rss>".encode("utf-16-le"), "plain UTF-8"),
+    ("<!DOCTYPE rss><rss><channel/></rss>".encode("utf-16-be"), "plain UTF-8"),
+    (b"\xef\xbb\xbf<rss><channel/></rss>", "byte-order mark"),
+    (b"<rss><channel><item><title>\xff</title></item></channel></rss>", "not valid UTF-8"),
+    (b"<?xml version='1.0' encoding='UTF-16'?><rss><channel/></rss>", "other than UTF-8"),
+    (b"<?xml version='1.0' encoding=\"ISO-8859-1\"?><rss><channel/></rss>", "other than UTF-8"),
+])
+def test_only_plain_utf8_is_accepted(xml, message):
+    with pytest.raises(np_.FeedError, match=message):
+        np_.parse_feed(xml, NOW, CFG)
+
+
+@pytest.mark.parametrize("declaration", ["encoding='UTF-8'", 'encoding="utf8"', "encoding='utf_8'", ""])
+def test_a_utf8_declaration_or_none_is_accepted(declaration):
+    xml = f"<?xml version='1.0' {declaration}?><rss><channel/></rss>".encode("utf-8")
+    assert np_.parse_feed(xml, NOW, CFG) == []
+
+
+def test_a_doctype_in_non_ascii_utf8_text_is_still_found():
+    xml = "<!-- é --><!DOCTYPE rss><rss><channel/></rss>".encode("utf-8")
+    with pytest.raises(np_.FeedError, match="DTD"):
+        np_.parse_feed(xml, NOW, CFG)
+
+
+@pytest.mark.parametrize("xml, message", [
     (b"<rss><channel><item>", "not valid XML"),
     (b"not xml at all", "not valid XML"),
     (b"<rss></rss>", "no channel"),

@@ -22,6 +22,7 @@ class NewsRequest:
     query: str | None
     max_items: int
     message: str | None = None
+    warning: str | None = None
 
 
 def ticker_query(symbol: str, cfg: dict[str, Any]) -> str:
@@ -33,23 +34,26 @@ def ticker_query(symbol: str, cfg: dict[str, Any]) -> str:
     return cfg["query_templates"][kind].format(symbol=symbol.removeprefix("^").removesuffix(".NS"))
 
 
-def _limit(raw: Any, cfg: dict[str, Any]) -> int:
-    """The requested headline count clamped to 1..news.max_items; anything else means the maximum."""
+def _limit(raw: Any, cfg: dict[str, Any]) -> tuple[int, str | None]:
+    """(headline count clamped to 1..news.max_items, warning). Absent means the maximum; a non-int means the maximum plus a warning."""
+    default = int(cfg["max_items"])
+    if raw is None:
+        return default, None
     if isinstance(raw, int) and not isinstance(raw, bool):
-        return max(1, min(raw, cfg["max_items"]))
-    return int(cfg["max_items"])
+        return max(1, min(raw, default)), None
+    return default, cfg["messages"]["max_items_ignored"].format(default=default)
 
 
 def resolve_query(params: Any, cfg: dict[str, Any]) -> NewsRequest:
     """Validate news_params and build the search phrase (never raises)."""
     params = params if isinstance(params, dict) else {}
-    limit = _limit(params.get("max_items"), cfg)
+    limit, warning = _limit(params.get("max_items"), cfg)
     messages = cfg["messages"]
     try:
         if str(params.get("query") or "").strip():
-            return NewsRequest(validate_news_query(params["query"]), limit)
+            return NewsRequest(validate_news_query(params["query"]), limit, warning=warning)
         if str(params.get("ticker") or "").strip():
-            return NewsRequest(ticker_query(validate_symbol(params["ticker"]), cfg), limit)
+            return NewsRequest(ticker_query(validate_symbol(params["ticker"]), cfg), limit, warning=warning)
     except InvalidSymbolError as exc:
-        return NewsRequest(None, limit, messages["invalid_input"].format(detail=exc))
-    return NewsRequest(None, limit, messages["needs_input"])
+        return NewsRequest(None, limit, messages["invalid_input"].format(detail=exc), warning)
+    return NewsRequest(None, limit, messages["needs_input"], warning)

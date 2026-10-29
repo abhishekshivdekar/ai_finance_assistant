@@ -9,6 +9,14 @@ Multi-agent financial education assistant (LangGraph + RAG + Streamlit).
 2. Copy `.env.example` to `.env` and add your `GOOGLE_API_KEY`
 3. Run `smoke_test.py`
 
+## Technology choices
+
+- **FAISS (not Pinecone or Chroma):** a local index file with no server or account, which is enough for 60 articles. It sits behind a `VectorStore` interface, so Chroma or Pinecone can be swapped in through config (architecture section 5).
+- **yfinance (not Alpha Vantage):** free, no API key for quotes and history, covers US and NSE (`.NS`) tickers. Alpha Vantage is a later option behind the same provider interface (architecture section 6).
+- **OpenAI model (`llm.provider: openai`, model set in `config.yaml`):** chosen by the project author, with the per-token prices in `config.yaml` used to track a limited budget. Gemini is also supported by `get_llm()`; changing provider or model is a config edit, not a code change.
+- **Google News RSS (not yfinance news):** the yfinance news feed returned nothing in testing, and the RSS search feed also takes free phrases such as "Nifty 50". It needs no new dependency (standard library only).
+- **Local sentence-transformers embeddings (`all-MiniLM-L6-v2`):** run on the local machine, so indexing and retrieval cost no API tokens and the RAG evaluation harness can run offline.
+
 ## RAG tuning results
 
 The retrieval settings were chosen with the evaluation harness in `tests/rag_eval/` (run with `run_rag_eval.py`; it uses the local embedder, so it costs no API tokens). The harness uses the same `select_chunks()` function as the app, so it measures what the app does. Scores are the share of questions whose labelled article is in the top `top_k` (hit rate) and the mean reciprocal rank of the first correct article (MRR). The development set has 121 questions; the held-out set has 10 independent questions.

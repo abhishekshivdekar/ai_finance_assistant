@@ -21,11 +21,29 @@ from urllib.parse import urlparse
 _TAG = re.compile(r"<[^>]*>")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _NON_ALNUM = re.compile(r"[\W_]+")
-_DTD = re.compile(rb"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
+_DTD = re.compile(r"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
+_DECLARED_ENCODING = re.compile(r"^<\?xml[^>]*\bencoding\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
 
 
 class FeedError(ValueError):
-    """The response is not a usable RSS feed (malformed XML, DTD/entities, no channel)."""
+    """The response is not a usable RSS feed (not UTF-8, malformed XML, DTD/entities, no channel)."""
+
+
+def decode_utf8(xml_bytes: bytes) -> str:
+    """The body as text, only when it is plain UTF-8 (no BOM, no NUL bytes, no other declared encoding).
+
+    Checks run on decoded text, so a UTF-16 payload cannot hide a DOCTYPE from the later DTD check.
+    """
+    try:
+        text = xml_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise FeedError("The news feed is not valid UTF-8.") from exc
+    if text.startswith("\ufeff") or "\x00" in text:
+        raise FeedError("The news feed must be plain UTF-8 (no byte-order mark, no NUL characters).")
+    declared = _DECLARED_ENCODING.match(text)
+    if declared and declared.group(1).lower().replace("_", "-") not in ("utf-8", "utf8"):
+        raise FeedError("The news feed declares an encoding other than UTF-8.")
+    return text
 
 
 def clean_text(text: str | None) -> str:
@@ -76,7 +94,8 @@ def parse_feed(xml_bytes: bytes, now: datetime, cfg: dict[str, Any]) -> list[dic
 
     An empty feed returns []. Raises FeedError for a response that is not a usable feed.
     """
-    if _DTD.search(xml_bytes):
+    text = decode_utf8(xml_bytes)
+    if _DTD.search(text):
         raise FeedError("The news feed contains a DTD or entity declaration.")
     try:
         root = ET.fromstring(xml_bytes)

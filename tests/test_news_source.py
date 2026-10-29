@@ -79,6 +79,16 @@ def test_malformed_xml_becomes_a_permanent_error(body):
         source(Recorder(body)).fetch("x")
 
 
+@pytest.mark.parametrize("body", [
+    b"\xef\xbb\xbf" + RSS,
+    RSS.decode("ascii").encode("utf-16"),
+    "<!DOCTYPE rss><rss><channel/></rss>".encode("utf-16-le"),
+])
+def test_a_non_utf8_or_bom_response_is_a_permanent_error(body):
+    with pytest.raises(PermanentProviderError):
+        source(Recorder(body)).fetch("x")
+
+
 def test_an_empty_feed_is_not_an_error():
     assert source(Recorder(b"<rss><channel></channel></rss>")).fetch("zzz") == []
 

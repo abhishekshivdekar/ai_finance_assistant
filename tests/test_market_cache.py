@@ -118,6 +118,15 @@ def test_history_uses_longer_ttl():
     assert inner.calls["history"] == 2
 
 
+def test_news_with_different_case_and_spacing_hits_one_cache_entry_and_one_fetch():
+    provider, inner, _ = _provider()
+    fetched = []
+    inner._get_news = lambda phrase: fetched.append(phrase) or MarketResult([], None, START, "live")
+    provider.get_news("Nifty 50")
+    provider.get_news("NIFTY  50")
+    assert fetched == ["nifty 50"]
+
+
 def test_history_cached_per_period_and_news_cached():
     provider, inner, _ = _provider()
     provider.get_history("AAPL", "1mo")

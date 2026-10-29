@@ -7,9 +7,9 @@ CFG = get_config()["news"]
 
 
 def test_ticker_with_an_override_uses_the_configured_phrase():
-    assert resolve_query({"ticker": "RELIANCE.NS"}, CFG).query == "Reliance Industries"
-    assert resolve_query({"ticker": " aapl "}, CFG).query == "Apple"
-    assert resolve_query({"ticker": "^NSEI"}, CFG).query == "Nifty 50"
+    assert resolve_query({"ticker": "RELIANCE.NS"}, CFG).query == "Reliance Industries stock"
+    assert resolve_query({"ticker": " aapl "}, CFG).query == "Apple Inc AAPL stock"
+    assert resolve_query({"ticker": "^NSEI"}, CFG).query == "Nifty 50 index"
 
 
 @pytest.mark.parametrize("symbol, expected", [
@@ -54,6 +54,23 @@ def test_too_long_query_is_rejected():
 ])
 def test_max_items_is_clamped_to_the_config_range(raw, expected):
     assert resolve_query({"ticker": "AAPL", "max_items": raw}, CFG).max_items == expected
+
+
+@pytest.mark.parametrize("raw", ["5", True, 2.5, [3]])
+def test_a_non_int_max_items_uses_the_default_and_warns(raw):
+    request = resolve_query({"ticker": "AAPL", "max_items": raw}, CFG)
+    assert request.max_items == CFG["max_items"]
+    assert request.warning == CFG["messages"]["max_items_ignored"].format(default=CFG["max_items"])
+
+
+@pytest.mark.parametrize("params", [{"ticker": "AAPL"}, {"ticker": "AAPL", "max_items": None}, {"ticker": "AAPL", "max_items": 3}])
+def test_a_missing_or_int_max_items_gives_no_warning(params):
+    assert resolve_query(params, CFG).warning is None
+
+
+def test_the_warning_is_kept_when_the_input_itself_needs_fixing():
+    assert resolve_query({"ticker": "???", "max_items": "x"}, CFG).warning
+    assert resolve_query({"max_items": "x"}, CFG).warning
 
 
 def test_limit_is_also_returned_with_a_message():
