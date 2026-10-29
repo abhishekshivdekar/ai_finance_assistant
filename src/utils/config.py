@@ -72,13 +72,46 @@ TAX_FIGURE_KEYS = (
 )
 
 
+TAX_TOP_KEYS = (
+    "topic", "label", "figures", "units", "asset_types", "equity_asset_types", "slab_asset_types", "schemes",
+    "input_limits", "stt_assumption", "exclusions", "small_savings_assumptions", "errors", "needs_input_message",
+    "question_needs_input", "no_answer_message", "discarded_message", "no_answer_sentinel", "footer",
+    "fallback_commentary", "texts", "system_prompt", "fact_line", "fact_condition", "commentary_prompt",
+)
+TAX_SUB_KEYS = {
+    "input_limits": ("max_amount", "max_months", "max_years", "max_pct"),
+    "errors": ("not_a_number", "must_be_positive", "must_not_be_negative", "too_large", "whole_number",
+               "unknown_choice", "slab_rate_needed", "unknown_calculation"),
+    "texts": (
+        "commentary_unavailable", "commentary_empty", "commentary_discarded", "loss_note", "exemption_note",
+        "approximate_note", "slab_taxed_note", "step_gain", "step_term_long", "step_term_short", "step_term_slab",
+        "step_exemption", "step_taxable", "step_tax", "step_cess", "step_total", "step_loss",
+        "step_savings_rate", "step_savings_formula", "step_savings_year",
+    ),
+}
+
+
 def _validate_tax(tax: dict[str, Any]) -> None:
-    """tax: every figure the code reads exists and carries a label, a number, an ISO as_of date, a source and a verify flag."""
+    """tax: every key the code reads exists, and every figure has a label, a number, a display text, an ISO as_of date, a source and a verify flag."""
+    for key in TAX_TOP_KEYS:
+        if key not in tax:
+            raise ConfigError(f"tax.{key} is missing.")
+    for section, keys in TAX_SUB_KEYS.items():
+        if not isinstance(tax[section], dict):
+            raise ConfigError(f"tax.{section} must be a mapping.")
+        for key in keys:
+            if key not in tax[section]:
+                raise ConfigError(f"tax.{section}.{key} is missing.")
+    for section in ("figures", "units", "schemes"):
+        if not isinstance(tax[section], dict):
+            raise ConfigError(f"tax.{section} must be a mapping.")
     figures = tax["figures"]
     for key in TAX_FIGURE_KEYS:
         if key not in figures:
             raise ConfigError(f"tax.figures.{key} is missing.")
     for key, fig in figures.items():
+        if not isinstance(fig, dict):
+            raise ConfigError(f"tax.figures.{key} must be a mapping.")
         value = fig.get("value")
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
             raise ConfigError(f"tax.figures.{key}.value must be a number, zero or more.")
@@ -88,6 +121,8 @@ def _validate_tax(tax: dict[str, Any]) -> None:
             raise ConfigError(f"tax.figures.{key}.as_of must be an ISO date (YYYY-MM-DD).") from exc
         if not str(fig.get("source") or "").strip() or not str(fig.get("label") or "").strip():
             raise ConfigError(f"tax.figures.{key} needs a label and a source.")
+        if not str(fig.get("display") or "").strip():
+            raise ConfigError(f"tax.figures.{key}.display must be a non-empty text such as '12.5%'.")
         if not isinstance(fig.get("verify"), bool):
             raise ConfigError(f"tax.figures.{key}.verify must be true or false.")
         if fig.get("unit") not in tax["units"]:
@@ -95,6 +130,10 @@ def _validate_tax(tax: dict[str, Any]) -> None:
     for scheme, key in tax["schemes"].items():
         if key not in figures:
             raise ConfigError(f"tax.schemes.{scheme} points at {key!r}, which is not a figure.")
+    for section in ("equity_asset_types", "slab_asset_types"):
+        extra = set(tax[section]) - set(tax["asset_types"])
+        if extra:
+            raise ConfigError(f"tax.{section} has {sorted(extra)}, which are not in tax.asset_types.")
 
 
 def _validate(cfg: dict[str, Any]) -> None:

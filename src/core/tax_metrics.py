@@ -6,14 +6,16 @@ config holding round made-up rates gives the same answer every time, so a test c
 expected tax by hand without touching the real (to-be-verified) rates.
 
 No rate, limit or threshold appears in this file: every figure is read from cfg["figures"]
-(value, as_of, source, verify). Amounts use Decimal and are rounded half-up to two places only
-for display, so 0.1 + 0.2 style errors cannot reach a result.
+(value, as_of, source, verify, display). Amounts use Decimal, so 0.1 + 0.2 style errors cannot reach
+a result. Rounding is half-up to two places and happens once per reported amount: the tax and the
+total are rounded from the exact (unrounded) tax and cess, never from each other.
 """
 from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from src.core.portfolio_metrics import numbers_in
 from src.core.tax_models import CapitalGainsInputs, SmallSavingsInputs, TaxCalculation
 
 _HUNDRED = Decimal(100)
@@ -46,10 +48,10 @@ def fmt(value: Decimal) -> str:
 
 
 def figure_entry(cfg: dict[str, Any], key: str) -> dict[str, Any]:
-    """One config figure with everything the reader needs to judge it: label, value, unit, as_of, source, verify."""
+    """One config figure with everything the reader needs to judge it: label, value, display, unit, as_of, source, verify."""
     fig = cfg["figures"][key]
     return {
-        "label": fig["label"], "value": fig["value"], "unit": fig["unit"], "as_of": str(fig["as_of"]),
+        "label": fig["label"], "value": fig["value"], "display": fig["display"], "unit": fig["unit"], "as_of": str(fig["as_of"]),
         "source": fig["source"], "verify": fig["verify"], "stt_condition": bool(fig.get("stt_condition", False)),
     }
 
@@ -77,15 +79,25 @@ def build_facts(cfg: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def fact_lines(facts: list[dict[str, Any]], cfg: dict[str, Any]) -> str:
-    """The facts as prompt lines: label, value, unit, as_of, source, verify and, for equity figures, the tax-paid condition."""
+    """The facts as prompt lines: label, display text, as_of, source, verify and, for equity figures, the tax-paid condition."""
     lines = []
     for fact in facts:
         condition = cfg["fact_condition"].format(stt_assumption=cfg["stt_assumption"]) if fact["stt_condition"] else ""
         lines.append(cfg["fact_line"].format(
-            id=fact["id"], label=fact["label"], value=fact["value"], unit=cfg["units"][fact["unit"]],
+            id=fact["id"], label=fact["label"], display=fact["display"],
             as_of=fact["as_of"], source=fact["source"], verify="yes" if fact["verify"] else "no", condition=condition,
         ))
     return "\n".join(lines)
+
+
+def quoted_fact_keys(text: str, facts: list[dict[str, Any]]) -> list[str]:
+    """Keys of the facts whose display text shares a number with `text` (the text must have no citation markers).
+
+    A coincidence (the text says 12 and a fact says 12 months) only adds a footer, which is the safe side.
+    Example: "taxed at 12.5%" matches the facts displayed as "12.5%".
+    """
+    found = numbers_in(text)
+    return [fact["key"] for fact in facts if numbers_in(fact["display"]) & found]
 
 
 def slab_rate_for(inputs: CapitalGainsInputs) -> Decimal:
@@ -105,8 +117,11 @@ def capital_gains(inputs: CapitalGainsInputs, cfg: dict[str, Any]) -> TaxCalcula
       everything else   : taxable = gain
       rate       = equity short -> equity_stcg_pct; equity long -> equity_ltcg_pct;
                    other long -> other_ltcg_pct; debt fund (post-2023) and other short -> the user's slab rate
-      tax = taxable x rate / 100;  cess = tax x cess_pct / 100;  total = tax + cess
-    A gain of zero or less gives zero tax plus an informational note; losses are not set off.
+      tax = taxable x rate / 100;  cess = tax x cess_pct / 100 (on the unrounded tax);  total = tax + cess
+    Rounding happens once: tax and total are rounded from the exact values, and the shown cess is
+    total - tax so the three shown amounts always add up (it can differ from cess-on-rounded-tax by a cent).
+    A gain of zero or less gives zero tax plus an informational note; cess_pct is then not used and
+    not listed; losses are not set off.
     """
     texts, fig = cfg["texts"], cfg["figures"]
     equity = inputs.asset_type in cfg["equity_asset_types"]
@@ -114,7 +129,7 @@ def capital_gains(inputs: CapitalGainsInputs, cfg: dict[str, Any]) -> TaxCalcula
     buy, sell, expenses = _d(inputs.buy_value), _d(inputs.sell_value), _d(inputs.expenses)
     gain = sell - buy - expenses
     steps = [texts["step_gain"].format(sell=fmt(sell), buy=fmt(buy), expenses=fmt(expenses), gain=fmt(gain))]
-    used = ["cess_pct"]
+    used: list[str] = []
 
     threshold_key = "holding_months_equity" if equity else "holding_months_other"
     threshold = fig[threshold_key]["value"]
@@ -156,11 +171,13 @@ def capital_gains(inputs: CapitalGainsInputs, cfg: dict[str, Any]) -> TaxCalcula
             notes.append(texts["exemption_note"])
         steps.append(texts["step_taxable"].format(gain=fmt(gain), applied=fmt(applied), taxable=fmt(taxable)))
 
-    tax = _q(taxable * rate / _HUNDRED)
     cess_rate = _d(fig["cess_pct"]["value"])
-    cess = _q(tax * cess_rate / _HUNDRED)
-    total = tax + cess
+    exact_tax = taxable * rate / _HUNDRED
+    tax = _q(exact_tax)
+    total = _q(exact_tax + exact_tax * cess_rate / _HUNDRED)
+    cess = total - tax
     if gain > 0:
+        used.append("cess_pct")
         steps.append(texts["step_tax"].format(taxable=fmt(taxable), rate=plain(rate), tax=fmt(tax)))
         steps.append(texts["step_cess"].format(tax=fmt(tax), cess_rate=plain(cess_rate), cess=fmt(cess)))
         steps.append(texts["step_total"].format(tax=fmt(tax), cess=fmt(cess), total=fmt(total)))

@@ -116,3 +116,26 @@ def test_small_savings_amount_must_be_a_positive_number_within_the_limit():
     assert parse_small_savings({**SAVINGS, "amount": limit + 1}, CFG)[1]
     assert parse_small_savings({**SAVINGS, "amount": float("nan")}, CFG)[1] == [ERR["not_a_number"].format(field="amount")]
     assert parse_small_savings({**SAVINGS, "amount": -1}, CFG)[1] == [ERR["must_be_positive"].format(field="amount")]
+
+
+@pytest.mark.parametrize("asset, months", [("debt_fund_post_2023", 100), ("other", 3)])
+def test_a_loss_or_zero_gain_on_a_slab_taxed_asset_needs_no_slab_rate(asset, months):
+    assert cg(asset_type=asset, holding_months=months, buy_value=2000, sell_value=1000)[1] == []
+    assert cg(asset_type=asset, holding_months=months, buy_value=2000, sell_value=2000, expenses=0)[1] == []
+    assert cg(asset_type=asset, holding_months=months, buy_value=1000, sell_value=2000)[1] == [ERR["slab_rate_needed"]]
+    assert cg(asset_type=asset, holding_months=months, buy_value=1000, sell_value=1005, expenses=10)[1] == []   # expenses make it a loss
+    assert slab_rate_needed(asset, months, CFG, has_gain=False) is False
+
+
+@pytest.mark.parametrize("field", ["buy_value", "sell_value", "expenses", "ltcg_exemption_already_used", "holding_months", "slab_rate_pct"])
+@pytest.mark.parametrize("flag", [True, False])
+def test_booleans_are_not_numbers_in_the_capital_gains_request(field, flag):
+    inputs, errors = cg(**{"asset_type": "debt_fund_post_2023", "slab_rate_pct": 30, field: flag})
+    assert inputs is None and errors == [ERR["not_a_number"].format(field=field)]
+
+
+@pytest.mark.parametrize("field", ["amount", "years"])
+@pytest.mark.parametrize("flag", [True, False])
+def test_booleans_are_not_numbers_in_the_savings_request(field, flag):
+    inputs, errors = parse_small_savings({**SAVINGS, field: flag}, CFG)
+    assert inputs is None and errors == [ERR["not_a_number"].format(field=field)]

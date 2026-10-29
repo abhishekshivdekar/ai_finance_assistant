@@ -242,11 +242,15 @@ def summary_input(metrics: PortfolioMetrics) -> dict[str, Any]:
     return {"portfolios_by_currency": currencies, "positions": positions, "warnings": metrics.warnings}
 
 
-_NUMBER = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?")
+# Western grouping (1,234,567), Indian grouping (12,34,567) or a plain number, each with an optional decimal part.
+_NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{1,3}(?:,\d{2})+,\d{3}(?:\.\d+)?|\d+(?:\.\d+)?")
 
 
 def numbers_in(text: str) -> set[float]:
-    """Every number in `text` as a float ("1,234.50" -> 1234.5, "42%" -> 42.0)."""
+    """Every number in `text` as a float ("1,234.50" -> 1234.5, "1,25,000" -> 125000.0, "42%" -> 42.0).
+
+    "1.25 lakh" and "2 crore" give 1.25 and 2 exactly as written (the unit word is not multiplied in).
+    """
     return {float(m.replace(",", "")) for m in _NUMBER.findall(text)}
 
 

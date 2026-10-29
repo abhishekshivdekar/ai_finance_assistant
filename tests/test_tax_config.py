@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.utils.config import TAX_FIGURE_KEYS, ConfigError, get_config
+from src.core.portfolio_metrics import numbers_in
+from src.utils.config import TAX_FIGURE_KEYS, TAX_SUB_KEYS, TAX_TOP_KEYS, ConfigError, get_config
 
 ROOT = Path(__file__).resolve().parent.parent
 TAX_SOURCES = ["src/core/tax_models.py", "src/core/tax_inputs.py", "src/core/tax_metrics.py", "src/agents/tax.py"]
@@ -142,3 +143,48 @@ def test_the_literal_check_really_catches_a_rate(tmp_path):
     source.write_text("RATE = 12.5\nOK = 100\n", encoding="utf-8")
     found = [n.value for n in ast.walk(ast.parse(source.read_text())) if isinstance(n, ast.Constant) and n.value not in ALLOWED_LITERALS]
     assert found == [12.5]
+
+
+# ---- every key the code relies on is validated (ConfigError, never KeyError) ----
+
+@pytest.mark.parametrize("key", TAX_TOP_KEYS)
+def test_a_missing_top_level_key_is_a_config_error(tmp_path, key):
+    with pytest.raises(ConfigError, match=f"tax.{key} is missing"):
+        get_config(_tax_config(tmp_path, lambda t: t.pop(key)))
+
+
+@pytest.mark.parametrize("section, key", [(sec, key) for sec, keys in TAX_SUB_KEYS.items() for key in keys])
+def test_a_missing_nested_key_is_a_config_error(tmp_path, section, key):
+    with pytest.raises(ConfigError, match=f"tax.{section}.{key} is missing"):
+        get_config(_tax_config(tmp_path, lambda t: t[section].pop(key)))
+
+
+@pytest.mark.parametrize("section", ["input_limits", "errors", "texts", "figures", "units", "schemes"])
+def test_a_section_that_is_not_a_mapping_is_a_config_error(tmp_path, section):
+    with pytest.raises(ConfigError, match=f"tax.{section} must be a mapping"):
+        get_config(_tax_config(tmp_path, lambda t: t.__setitem__(section, ["x"])))
+
+
+def test_a_figure_that_is_not_a_mapping_is_a_config_error(tmp_path):
+    with pytest.raises(ConfigError, match="tax.figures.cess_pct must be a mapping"):
+        get_config(_tax_config(tmp_path, lambda t: t["figures"].__setitem__("cess_pct", 4)))
+
+
+@pytest.mark.parametrize("section", ["equity_asset_types", "slab_asset_types"])
+def test_asset_type_lists_must_be_subsets_of_asset_types(tmp_path, section):
+    with pytest.raises(ConfigError, match=rf"tax.{section} has \['gold'\]"):
+        get_config(_tax_config(tmp_path, lambda t: t[section].append("gold")))
+
+
+@pytest.mark.parametrize("bad", ["", "  ", None])
+def test_every_figure_needs_a_display_text(tmp_path, bad):
+    with pytest.raises(ConfigError, match="equity_ltcg_pct.display"):
+        get_config(_tax_config(tmp_path, lambda t: t["figures"]["equity_ltcg_pct"].__setitem__("display", bad)))
+
+
+def test_the_real_display_texts_show_the_figure_value():
+    for key, fig in get_config()["tax"]["figures"].items():
+        assert float(fig["value"]) in numbers_in(fig["display"]), key
+    exemption = get_config()["tax"]["figures"]["equity_ltcg_exemption"]["display"]
+    assert numbers_in(exemption) == {125000.0, 1.25}
+

@@ -118,3 +118,16 @@ def test_inf_and_nan_are_not_numbers(field, value):
 def test_hugely_negative_ints_are_reported_not_raised(field, text):
     inputs, errors = parse(**{field: -HUGE})
     assert inputs is None and any(text in e for e in errors)
+
+
+@pytest.mark.parametrize("flag", [True, False])
+@pytest.mark.parametrize("field", ["goal_amount", "horizon_years", "current_savings", "monthly_contribution", "annual_step_up_pct"])
+def test_booleans_are_not_numbers_for_any_numeric_field(field, flag):
+    inputs, errors = parse_goal_params({**GOOD, field: flag}, CFG)
+    assert inputs is None and any(f"{field} must be a number" in e for e in errors)
+
+
+def test_is_number_rejects_bools_and_non_finite_values_and_accepts_huge_ints():
+    from src.core.goal_inputs import is_number
+    assert not any(is_number(v) for v in (True, False, float("inf"), float("nan"), "1", None))
+    assert is_number(0) and is_number(1.5) and is_number(10**400)

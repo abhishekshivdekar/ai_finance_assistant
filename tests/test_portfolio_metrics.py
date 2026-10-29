@@ -397,3 +397,13 @@ def test_default_workers_come_from_config_and_empty_input_is_fine():
     positions, warnings = value_holdings(six(), SlowProvider())
     assert len(positions) == 6 and warnings == []
     assert value_holdings([], SlowProvider()) == ([], [])
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("1,234,567", {1234567.0}), ("12,34,567", {1234567.0}), ("1,25,000", {125000.0}),
+    ("10,00,000.50", {1000000.5}), ("12,34,56,789", {123456789.0}), ("1,234.50", {1234.5}),
+    ("1.25 lakh", {1.25}), ("2 crore", {2.0}), ("INR 1.25lakh and 3 crore", {1.25, 3.0}),
+    ("INR 1,25,000 (1.25 lakh) per year", {125000.0, 1.25}), ("12.5% and 20%", {12.5, 20.0}),
+])
+def test_numbers_in_reads_western_and_indian_grouping_and_lakh_crore_as_written(text, expected):
+    assert pm.numbers_in(text) == expected

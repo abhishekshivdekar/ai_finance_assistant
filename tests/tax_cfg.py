@@ -16,11 +16,19 @@ FIGURES = {
 }
 
 
+DISPLAYS = {"pct": "{value}%", "inr": "INR {value:,}", "months": "{value} months"}
+
+
 def tax_cfg(**changes):
-    """A deep copy of the real tax block with the test figures (and any other top-level changes) applied."""
+    """A deep copy of the real tax block with the test figures (and any other top-level changes) applied.
+
+    The display text is rebuilt from the test value, so a fact line never shows the real figure.
+    """
     cfg = copy.deepcopy(get_config()["tax"])
     for key, value in FIGURES.items():
-        cfg["figures"][key]["value"] = value
+        fig = cfg["figures"][key]
+        fig["value"] = value
+        fig["display"] = DISPLAYS[fig["unit"]].format(value=value)
     cfg.update(changes)
     return cfg
 

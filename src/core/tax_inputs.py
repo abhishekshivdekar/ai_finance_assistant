@@ -11,6 +11,7 @@ Input: state["tax_params"] = {"calculation": "capital_gains", "asset_type": "equ
 """
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from src.core.goal_inputs import is_number
@@ -70,13 +71,15 @@ def _whole(params: dict[str, Any], key: str, cfg: dict[str, Any], errors: list[s
     return int(value)
 
 
-def slab_rate_needed(asset_type: str, holding_months: int, cfg: dict[str, Any]) -> bool:
+def slab_rate_needed(asset_type: str, holding_months: int, cfg: dict[str, Any], *, has_gain: bool = True) -> bool:
     """True when the gain is taxed at the user's slab rate: debt funds always, other assets when short-term.
+
+    Without a gain (a loss or zero) no tax is computed, so no slab rate is needed whatever the asset.
 
     Listed equity and equity funds never need it (fixed rates from config). Long-term means MORE than
     the configured number of months.
     """
-    if asset_type in cfg["equity_asset_types"]:
+    if not has_gain or asset_type in cfg["equity_asset_types"]:
         return False
     if asset_type in cfg["slab_asset_types"]:
         return True
@@ -94,7 +97,8 @@ def parse_capital_gains(params: dict[str, Any], cfg: dict[str, Any]) -> tuple[Ca
     used = _amount(params, "ltcg_exemption_already_used", cfg, errors, default=0.0)
     months = _whole(params, "holding_months", cfg, errors, limits["max_months"])
     slab: float | None = None
-    if asset is not None and months is not None and slab_rate_needed(asset, months, cfg):
+    has_gain = buy is None or sell is None or expenses is None or Decimal(str(sell)) - Decimal(str(buy)) - Decimal(str(expenses)) > 0
+    if asset is not None and months is not None and slab_rate_needed(asset, months, cfg, has_gain=has_gain):
         raw = params.get("slab_rate_pct")
         if raw is None:
             errors.append(cfg["errors"]["slab_rate_needed"])

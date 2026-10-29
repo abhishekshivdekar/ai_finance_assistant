@@ -436,6 +436,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: Short-term capital gains tax rate on listed equity and equity funds
       value: 20
       unit: pct
+      display: "20%"
       as_of: "2026-10-29"
       source: &tax_source "incometax.gov.in (verify); cross-checked against Taxgarden, Tata Mutual Fund post-Budget 2026 note, TaxGuru; secondary sources"
       verify: true
@@ -444,6 +445,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: Long-term capital gains tax rate on listed equity and equity funds (above the yearly exemption)
       value: 12.5
       unit: pct
+      display: "12.5%"
       as_of: "2026-10-29"
       source: *tax_source
       verify: true
@@ -452,6 +454,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: Long-term capital gains on listed equity and equity funds exempt per financial year
       value: 125000
       unit: inr
+      display: "₹1,25,000 (₹1.25 lakh) per financial year"
       as_of: "2026-10-29"
       source: *tax_source
       verify: true
@@ -460,6 +463,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: Listed equity and equity funds count as long-term when held for more than this many months
       value: 12
       unit: months
+      display: "12 months"
       as_of: "2026-10-29"
       source: *tax_source
       verify: true
@@ -467,6 +471,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: Property, unlisted shares and other assets count as long-term when held for more than this many months
       value: 24
       unit: months
+      display: "24 months"
       as_of: "2026-10-29"
       source: *tax_source
       verify: true
@@ -474,6 +479,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: Long-term capital gains tax rate on property, unlisted shares and other assets (no indexation)
       value: 12.5
       unit: pct
+      display: "12.5%"
       as_of: "2026-10-29"
       source: *tax_source
       verify: true
@@ -481,6 +487,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: Health and education cess charged on the tax
       value: 4
       unit: pct
+      display: "4%"
       as_of: "2026-10-29"
       source: "incometax.gov.in (verify); not cross-checked; verify"
       verify: true
@@ -488,6 +495,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: Public Provident Fund interest rate (current quarter)
       value: 7.1
       unit: pct
+      display: "7.1%"
       as_of: "2026-10-29"
       source: &savings_source "Business Today 30 Sep 2026, Ministry of Finance announcement; verify"
       verify: true
@@ -495,6 +503,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: National Savings Certificate interest rate (current quarter)
       value: 7.7
       unit: pct
+      display: "7.7%"
       as_of: "2026-10-29"
       source: *savings_source
       verify: true
@@ -502,6 +511,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
       label: Sukanya Samriddhi Yojana interest rate (current quarter)
       value: 8.2
       unit: pct
+      display: "8.2%"
       as_of: "2026-10-29"
       source: *savings_source
       verify: true
@@ -581,14 +591,14 @@ tax:                          # Tax Education agent (architecture section 2.6). 
     Answer ONLY from the numbered context chunks [1], [2] and the numbered facts [F1], [F2] below.
     Do not use outside knowledge.
     - Cite a chunk as [1] and a fact as [F1] right after the claim it supports. Write each marker in its own brackets.
-    - Every number you write must come from a fact, a chunk or the question. Never calculate or estimate a figure.
-    - When you quote a fact, say it is illustrative, verify before relying, and give its as-of date.
+    - Every number you write must come from a chunk, the question or the figure text of a fact, copied exactly. Never calculate or estimate a figure.
+    - When you quote a fact, say it is illustrative, verify before relying. Do not write dates; the reader gets the as-of dates separately.
     - Never state an equity rate, exemption or holding period without also saying: {stt_assumption}.
     - If the chunks and facts do not answer the question, reply with exactly NO_ANSWER and nothing else.
     - General education only. Never give personal tax advice and never tell the reader what to buy, sell or hold;
       suggest consulting a chartered accountant for their own situation.
     - Use short, plain language that a beginner can follow.
-  fact_line: "{id}. {label}: {value}{unit}. As of {as_of}. Source: {source}. Verify: {verify}.{condition}"
+  fact_line: "{id}. {label}: {display}. As of {as_of}. Source: {source}. Verify: {verify}.{condition}"
   fact_condition: " Condition: {stt_assumption}."
   commentary_prompt: |
     You are a tax education assistant for beginners, explaining an ILLUSTRATIVE calculation.

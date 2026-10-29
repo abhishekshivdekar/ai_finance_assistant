@@ -262,3 +262,29 @@ def test_summary_input_has_inputs_results_rates_and_caveats_but_no_dates_or_sour
 
 def test_summary_input_leaves_out_the_yearly_table():
     assert "yearly" not in summary_input(savings(), CFG)["results"]
+
+
+def test_cess_is_computed_on_the_unrounded_tax_and_rounded_once():
+    # gain 0.05 at 15 percent = 0.0075 exact, cess 10 percent -> 0.00825 exact, total 0.00825 -> 0.01
+    calc = cg(buy_value=0, sell_value=0.05, holding_months=1)
+    assert calc.results["tax"] == 0.01 and calc.results["total_tax"] == 0.01 and calc.results["cess"] == 0.0
+    # gain 0.30 -> tax 0.045 exact (rounds to 0.05), cess 0.0045 exact, total 0.0495 -> 0.05
+    calc = cg(buy_value=0, sell_value=0.30, holding_months=1)
+    assert (calc.results["tax"], calc.results["cess"], calc.results["total_tax"]) == (0.05, 0.0, 0.05)
+    # rounding the tax first would give 0.05 + round(0.005) = 0.06; one rounding at the end gives 0.05
+    r = cg(buy_value=0, sell_value=1234.57, holding_months=1).results      # 185.1855 -> 185.19; total 203.70405 -> 203.70
+    assert (r["tax"], r["total_tax"], r["cess"]) == (185.19, 203.70, 18.51)
+    assert round(r["tax"] + r["cess"], 2) == r["total_tax"]
+
+
+def test_a_loss_does_not_list_cess_in_the_figures_used():
+    calc = cg(buy_value=500000, sell_value=100000)
+    assert "cess_pct" not in calc.config_used and set(calc.config_used) == {"holding_months_equity"}
+    gain = cg()
+    assert "cess_pct" in gain.config_used
+
+
+def test_a_debt_fund_loss_through_the_parser_needs_no_slab_rate():
+    calc = cg(asset_type="debt_fund_post_2023", buy_value=500000, sell_value=100000)
+    assert calc.results["total_tax"] == 0.0 and calc.inputs["slab_rate_pct"] is None
+    assert set(calc.config_used) == set()

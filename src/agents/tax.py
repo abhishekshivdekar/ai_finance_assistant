@@ -11,7 +11,9 @@ Two paths, chosen by the state:
 (a) QUESTION: no state["tax_params"] "calculation" -> retrieval locked to the config topic
     (never the Chat dropdown), numbered chunks [1].. plus numbered config facts [F1]..; the
     answer is kept only if it cites at least one real chunk or fact and every number in it
-    appears in the chunks, the facts or the question. Otherwise: no_answer.
+    appears in the retrieved chunks, the question or the display text of a figure (fact ids,
+    as_of dates and source strings are NOT a whitelist). The footer is added when a fact is
+    cited or any number in the answer matches a figure. Otherwise: no_answer.
 (b) CALCULATOR: state["tax_params"] = {"calculation": "capital_gains" | "small_savings_growth", ...}
     -> pure functions in src/core/tax_metrics.py; one optional LLM call writes plain-language
     commentary from the computed JSON only, with a fixed fallback line.
@@ -39,6 +41,7 @@ from src.core.tax_metrics import (
     fact_lines,
     figure_entry,
     footer,
+    quoted_fact_keys,
     small_savings_growth,
     summary_input,
 )
@@ -101,13 +104,16 @@ class TaxAgent(BaseAgent):
         if not fact_cited and not cited_chunks:
             self.log.warning("Answer cites no chunk or fact; discarding it")
             return discarded
-        allowed = collect_numbers([[c.text, c.title] for c in chunks] + [lines, question])
-        invented = numbers_in(strip_fact_citations(strip_citations(answer))) - allowed
+        allowed = collect_numbers([[c.text, c.title] for c in chunks] + [[f["display"] for f in facts], question])
+        bare = strip_fact_citations(strip_citations(answer))
+        invented = numbers_in(bare) - allowed
         if invented:
             self.log.warning("Answer contains numbers not in the chunks, facts or question: %s", sorted(invented))
             return discarded
 
-        used = {facts[n - 1]["key"]: figure_entry(cfg, facts[n - 1]["key"]) for n in fact_cited}
+        keys = [facts[n - 1]["key"] for n in fact_cited]
+        keys += [key for key in quoted_fact_keys(bare, facts) if key not in keys]
+        used = {key: figure_entry(cfg, key) for key in keys}
         if used:
             answer = f"{answer}\n\n{footer(used, cfg)}"
         payload["fact_citations"] = fact_cited

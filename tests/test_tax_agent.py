@@ -78,13 +78,13 @@ def test_the_prompt_carries_numbered_chunks_numbered_facts_and_the_rules():
     system, human = llm.calls[0][0].content, llm.calls[0][1].content
     assert "[1] Article 1" in human and "[2] Article 2" in human and f"Question: {QUESTION}" in human
     for number, (key, fig) in enumerate(CFG["figures"].items(), start=1):
-        assert f"F{number}. {fig['label']}: {fig['value']}" in human
+        assert f"F{number}. {fig['label']}: {fig['display']}. As of" in human
         assert f"As of {fig['as_of']}. Source: {fig['source']}" in human
     assert human.count("Verify: yes") == len(CFG["figures"])
     assert human.count(f"Condition: {CFG['stt_assumption']}") == 3          # the three equity figures
     assert "[F1]" in system and "Never state an equity rate" in system and CFG["stt_assumption"] in system
     assert "chartered accountant" in system and "Never give personal tax advice" in system
-    assert "illustrative, verify before relying" in system and "as-of date" in system
+    assert "illustrative, verify before relying" in system and "Do not write dates" in system
 
 
 def test_a_chunk_citation_gives_an_ok_answer_with_only_the_cited_source():
@@ -98,7 +98,8 @@ def test_a_fact_citation_adds_the_fixed_label_as_of_date_and_tax_paid_note():
     _, _, result = ask("Equity fund gains held longer are taxed at 10% [F2] after an exemption of 100000 [F3].")
     assert result["status"] == "ok"
     data = result["data"]
-    assert data["fact_citations"] == [2, 3] and set(data["config_used"]) == {"equity_ltcg_pct", "equity_ltcg_exemption"}
+    # the test figures repeat 10 (equity long-term, cess, PPF), so those facts are footnoted too: the safe side
+    assert data["fact_citations"] == [2, 3] and set(data["config_used"]) == {"equity_ltcg_pct", "equity_ltcg_exemption", "cess_pct", "ppf_pct"}
     assert data["config_used"]["equity_ltcg_pct"]["as_of"] == "2026-10-29" and data["config_used"]["equity_ltcg_pct"]["source"]
     assert "illustrative, verify before relying (as of 2026-10-29)" in result["answer"]
     assert result["answer"].endswith("Assumes the securities transaction tax was paid on the sale of listed equity and equity funds.")
@@ -108,7 +109,7 @@ def test_a_fact_citation_adds_the_fixed_label_as_of_date_and_tax_paid_note():
 
 
 def test_a_non_equity_fact_citation_has_no_tax_paid_note():
-    _, _, result = ask("Cess is added to the tax at 10% [F7].")
+    _, _, result = ask("The Sukanya Samriddhi rate is 8% [F10].")
     assert result["status"] == "ok" and "transaction tax" not in result["answer"] and "(as of 2026-10-29)" in result["answer"]
 
 
@@ -144,7 +145,7 @@ def test_a_calculated_number_is_rejected_even_when_its_parts_are_allowed():
 
 
 def test_numbers_from_the_facts_the_chunks_and_the_question_are_allowed():
-    text = "Held for 30 months [F2]: 10% [F2] above 100000 [F3], with 5 years of context [1]. The date is 2026-10-29 [F2]."
+    text = "Held for 30 months [F2]: 10% [F2] above INR 100,000 [F3], with 5 years of context [1]."
     _, _, result = ask(text, chunks=[chunk(1, "A holding of 5 years is long.")])
     assert result["status"] == "ok"
 
@@ -315,3 +316,39 @@ def test_default_llm_comes_from_the_factory_with_the_tax_role(monkeypatch):
 
 def test_default_retrieve_function_is_the_shared_retriever():
     assert TaxAgent(llm=FakeLLM()).retrieve_fn is retrieve
+
+def test_a_quoted_fact_number_with_only_a_chunk_citation_still_gets_the_footer():
+    _, _, result = ask("Equity fund gains held long are taxed at 15% [1].")
+    assert result["status"] == "ok" and result["data"]["fact_citations"] == []
+    assert set(result["data"]["config_used"]) == {"equity_stcg_pct"}
+    assert "illustrative, verify before relying (as of 2026-10-29)" in result["answer"]
+    assert result["answer"].endswith("equity funds.")
+
+
+def test_an_answer_with_no_figure_and_no_fact_citation_gets_no_footer():
+    _, _, result = ask("Gains are taxed when you sell [1].")
+    assert result["answer"] == "Gains are taxed when you sell [1]." and result["data"]["config_used"] == {}
+
+
+@pytest.mark.parametrize("text", [
+    "Held for 7 years the gain is long-term [F1].",      # 7 is only a fact id (F7); 10 would clash with a test figure
+    "The figures are as of 29 October [F1].",            # 29 is only part of the as_of date
+    "The rate was set in 2026 [F1].",                    # the year is only in as_of / source
+])
+def test_numbers_that_only_appear_in_fact_ids_dates_or_sources_are_rejected(text):
+    assert ask(text)[2]["status"] == "no_answer"
+
+
+def test_a_figure_display_text_and_lakh_grouping_can_be_quoted():
+    cfg = tax_cfg()
+    cfg["figures"]["equity_ltcg_exemption"]["display"] = "INR 1,00,000 (INR 1 lakh) per financial year"
+    cfg["figures"]["equity_ltcg_exemption"]["value"] = 100000
+    original = tax_module.get_config
+    tax_module.get_config = lambda: full_config(cfg)
+    try:
+        result = TaxAgent(llm=FakeLLM("The exemption is 1,00,000 a year [F3]."), retrieve_fn=FakeRetrieve([chunk(1)])).run(
+            {"turn_id": "t1", "query": QUESTION})
+    finally:
+        tax_module.get_config = original
+    assert result["status"] == "ok"
+
