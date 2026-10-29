@@ -33,14 +33,31 @@ def silence_pandas4_warning() -> None:
     yfinance still uses pandas features that pandas 4 will remove, and each call
     would print a warning we cannot fix. The filter is limited to that warning
     category AND to code in the yfinance package, so a Pandas4Warning raised by
-    our own code, or any other warning, is still shown. Called once at import.
+    our own code, or any other warning, is still shown.
+
+    Call it AFTER yfinance has been imported: yfinance/__init__.py adds its own
+    filter ("default" for DeprecationWarning from ^yfinance) at the front of the
+    list, and Pandas4Warning is a DeprecationWarning, so a filter installed
+    earlier would be overridden. load_yfinance() does import then silence.
     """
     category = getattr(pandas.errors, "Pandas4Warning", None)   # absent on older pandas
     if category is not None:
         warnings.filterwarnings("ignore", category=category, module=r"yfinance(\.|$)")
 
 
-silence_pandas4_warning()
+
+def load_yfinance() -> Any:
+    """Import yfinance, then (re)apply the Pandas4Warning filter on top of the one yfinance installs.
+
+    Safe to call on every request: warnings.filterwarnings() removes an identical
+    existing filter before inserting, so the list does not grow. Every place that
+    needs yfinance (scripts, tests, the Streamlit app) goes through here.
+    """
+    import yfinance as yf
+
+    silence_pandas4_warning()
+    return yf
+
 
 _TRANSIENT_NAMES = {
     "YFRateLimitError", "ReadTimeout", "ConnectTimeout", "Timeout",
@@ -50,8 +67,7 @@ _TRANSIENT_NAMES = {
 
 def _yf_call(kind: str, ticker: str, period: str | None = None) -> Any:
     """The ONLY place that talks to yfinance. kind: quote | history | news."""
-    import yfinance as yf
-
+    yf = load_yfinance()
     handle = yf.Ticker(ticker)
     if kind == "quote":
         info = handle.fast_info

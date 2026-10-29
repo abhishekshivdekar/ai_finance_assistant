@@ -250,3 +250,42 @@ def test_filter_is_skipped_when_pandas_has_no_pandas4warning(monkeypatch):
         before = list(warnings.filters)
         yfp.silence_pandas4_warning()
         assert list(warnings.filters) == before
+
+
+def test_filter_still_works_after_yfinance_adds_its_own_default_filter():
+    """yfinance/__init__.py puts a 'default' DeprecationWarning filter in front of ours when it is imported.
+
+    Pandas4Warning is a DeprecationWarning, so a filter installed BEFORE that import is overridden
+    (the bug seen in live_check_market_agent.py). load_yfinance() must install ours after it.
+    """
+    category = pandas.errors.Pandas4Warning
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        yfp.silence_pandas4_warning()                                       # the old, too-early order
+        warnings.filterwarnings("default", category=DeprecationWarning, module="^yfinance")   # what the import does
+        _emit(category, "yfinance.scrapers.history")
+        assert len(caught) == 1                                             # the early filter lost
+
+        caught.clear()
+        yfp.silence_pandas4_warning()                                       # what load_yfinance() does after the import
+        _emit(category, "yfinance.scrapers.history")
+        _emit(category, "src.data.market.cache")
+        assert [w.filename for w in caught] == ["src.data.market.cache.py"]
+
+
+def test_load_yfinance_imports_then_silences(monkeypatch):
+    order = []
+    fake = types.ModuleType("yfinance")
+    monkeypatch.setitem(sys.modules, "yfinance", fake)
+    monkeypatch.setattr(yfp, "silence_pandas4_warning", lambda: order.append("silenced"))
+    assert yfp.load_yfinance() is fake and order == ["silenced"]
+
+
+def test_repeated_load_does_not_grow_the_filter_list(monkeypatch):
+    monkeypatch.setitem(sys.modules, "yfinance", types.ModuleType("yfinance"))
+    with warnings.catch_warnings():
+        yfp.load_yfinance()
+        size = len(warnings.filters)
+        yfp.load_yfinance()
+        yfp.load_yfinance()
+        assert len(warnings.filters) == size

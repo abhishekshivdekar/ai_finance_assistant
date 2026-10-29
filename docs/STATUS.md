@@ -28,6 +28,8 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Market: a history shorter than the period (`market_analysis.short_history_tolerance_pct`, 15) is flagged per ticker (`period_is_short`, `span_days`), warned about, and the summary input carries `period_covered`. Metrics are still computed over the shorter span.
 - Market: `MarketPayload.source` is the least live source among the tickers (order `live`, `cache`, `stale cache`, `sample data`; unknown counts as worst). The unused `quotes` field is removed.
 - `sma_windows` is validated when the config loads (`src/utils/config.py`, `ConfigError`).
+- Summary prompt (`market_analysis.summary_prompt`): one short paragraph per ticker, at most 3 numbers each, one closing sentence explaining moving average and drawdown. The number-guard rule is unchanged.
+- yfinance `Pandas4Warning`: cause was `yfinance/__init__.py:45`, which adds a `default` DeprecationWarning filter for `^yfinance` when it is imported; `Pandas4Warning` is a DeprecationWarning and the provider imports yfinance lazily, so that filter landed in front of ours. Fix: `load_yfinance()` in `src/data/market/yfinance_provider.py` imports yfinance and then applies our filter; no yfinance upgrade needed (installed 1.7.0, pandas 3.1.0). Not verified against a live call (live checks not run).
 - `CachedProvider`: no new lock. `TTLCache` already guards every read and write with a `threading.Lock`; a concurrency test at `CachedProvider` level was added. Two threads asking for the same uncached key can both call the live provider (a duplicate fetch, not a wrong result); left as is.
 
 ## Open to-dos
@@ -46,4 +48,4 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - README known limitation to add: the number guard accepts any number present anywhere in the input, so a coincidental match is not detected.
 
 ## Last updated
-2026-10-29, Market agent review follow-ups (see `git log -1` for the commit).
+2026-10-29, Market agent polish: summary prompt format, live check table, Pandas4Warning filter (see `git log -1` for the commit).

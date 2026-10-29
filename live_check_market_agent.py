@@ -8,6 +8,8 @@ from src.core.usage_tracker import get_usage_registry
 
 TICKERS = ["RELIANCE.NS", "TCS.NS", "^NSEI", "AAPL"]    # three in INR, one in USD: each is reported in its own currency
 PERIOD = "6mo"
+# one fixed width per column and a space between every column (text columns left, number columns right)
+ROW = "{:<13} {:<4} {:>12} {:>8} {:>10} {:>8} {:>11} {:>11} {:>11} {:<10} {}"
 
 
 def fmt(value: float | None, suffix: str = "") -> str:
@@ -23,14 +25,15 @@ def main() -> None:
     metrics = data.get("metrics")
     if metrics:
         print(f"\n=== Metrics ({metrics['period']}) ===")
-        print(f"{'ticker':13s}{'ccy':5s}{'price':>12s}{'day %':>8s}{'return %':>10s}{'vol %':>8s}{'drawdown %':>12s}"
-              f"{'vs SMA20 %':>12s}{'vs SMA50 %':>12s}  {'trend':10s} source")
+        print(ROW.format("ticker", "ccy", "price", "day %", "return %", "vol %", "drawdown %",
+                         "vs SMA20 %", "vs SMA50 %", "trend", "source"))
         for t in metrics["tickers"]:
             vs = {a["window"]: a["price_vs_pct"] for a in t["averages"]}
             flag = " (not live)" if t["price_stale"] else ""
-            print(f"{t['ticker']:13s}{t['currency']:5s}{t['latest_price']:>12,.2f}{fmt(t['day_change_pct']):>8s}"
-                  f"{fmt(t['period_return_pct']):>10s}{fmt(t['volatility_pct']):>8s}{fmt(t['max_drawdown_pct']):>12s}"
-                  f"{fmt(vs.get(20)):>12s}{fmt(vs.get(50)):>12s}  {t['trend'] or '-':10s} {t['price_source']}{flag}")
+            print(ROW.format(
+                t["ticker"], t["currency"], f"{t['latest_price']:,.2f}", fmt(t["day_change_pct"]),
+                fmt(t["period_return_pct"]), fmt(t["volatility_pct"]), fmt(t["max_drawdown_pct"]),
+                fmt(vs.get(20)), fmt(vs.get(50)), t["trend"] or "-", f"{t['price_source']}{flag}"))
         print("\n=== 52-week range ===")
         for t in metrics["tickers"]:
             r = t["range_52w"]

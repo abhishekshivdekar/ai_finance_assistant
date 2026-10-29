@@ -209,7 +209,16 @@ market_analysis:              # Market agent (architecture section 2.3). All val
   summary_prompt: |
     You are a finance education assistant explaining recent price behaviour to a beginner.
     Below is a JSON summary of numbers that were already calculated by software.
-    Write a short plain-language summary in one paragraph (no lists, no headings).
+
+    Format:
+    - Write ONE short paragraph per ticker (two or three plain sentences), starting
+      with the ticker name. Then add ONE short closing sentence, after all the
+      paragraphs, that explains once what a moving average and a drawdown mean.
+    - Use at most 3 numbers per ticker: the return over the period, how the price
+      sits against the 20-day and 50-day averages (say above or below in words,
+      with only one percentage), and the distance from the 52-week high.
+    - Do not repeat every metric. Leave out the rest. Do not use lists, headings or
+      semicolon-separated lists. Use plain beginner language.
 
     Rules:
     - Use ONLY numbers that appear in the JSON, copied exactly as written. Never
@@ -219,8 +228,6 @@ market_analysis:              # Market agent (architecture section 2.3). All val
       price is below its short-term average" or "the price fell from its peak
       during the period". Use the wording from the JSON for the averages and for
       the 52-week range, with the numbers exactly as written there.
-    - The trend label is based on the latest averages and the return over the
-      selected period; say so briefly if you mention it.
     - If a ticker has "period_covered", its return, volatility and drawdown cover
       only that shorter span, not the whole analysis period: say so, and do not
       call it a return over the analysis period.
