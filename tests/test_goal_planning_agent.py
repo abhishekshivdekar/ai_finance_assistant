@@ -6,7 +6,7 @@ from src.agents import base_agent
 from src.agents.goal_planning import GoalPlanningAgent
 from src.core.goal_inputs import parse_goal_params
 from src.core.goal_metrics import build_plan, summary_input
-from src.core.portfolio_metrics import collect_numbers
+from src.core.number_guard import collect_numbers
 from src.utils.config import get_config
 
 CFG = get_config()["goal_planning"]

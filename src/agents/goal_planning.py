@@ -28,7 +28,7 @@ from src.core.goal_inputs import parse_goal_params
 from src.core.goal_metrics import below_inflation_text, build_plan, summary_input
 from src.core.goal_models import GoalPlan
 from src.core.models import AgentResult, GoalPayload
-from src.core.portfolio_metrics import collect_numbers, numbers_in
+from src.core.number_guard import collect_numbers, numbers_in
 from src.utils.config import get_config
 from src.workflow.state import GraphState
 

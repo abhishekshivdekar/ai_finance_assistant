@@ -40,7 +40,7 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - RAG settings chosen by the eval harness (README "RAG tuning results").
 - News: Google News RSS now lives in `src/data/news/google_rss.py` (`GoogleNewsRssSource`, a `NewsSource` Strategy injected into `YFinanceProvider`); `debug_news.py` is deleted. The earlier claim "market layer includes Google News RSS" was wrong until this step.
 - Market: one 1y history call per ticker is sliced in code; period return, volatility and drawdown use the requested period, SMAs and the 52-week range use the full year, so the trend label reflects the latest averages. Day change comes from the last two closes (no `get_quote`). Documented in `docs/architecture.md` section 2.3.
-- Market: the number guard is imported from `portfolio_metrics` for now.
+- Number guard: `numbers_in` / `collect_numbers` now live in `src/core/number_guard.py` (moved from `portfolio_metrics.py`; every importer and the tests were updated, no re-export). Behaviour unchanged.
 - Market: a history shorter than the period (`market_analysis.short_history_tolerance_pct`, 15) is flagged per ticker (`period_is_short`, `span_days`), warned about, and the summary input carries `period_covered`. Metrics are still computed over the shorter span.
 - Market: `MarketPayload.source` is the least live source among the tickers (order `live`, `cache`, `stale cache`, `sample data`; unknown counts as worst). The unused `quotes` field is removed.
 - `sma_windows` is validated when the config loads (`src/utils/config.py`, `ConfigError`).
@@ -51,7 +51,7 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Goal Planning: annual effective returns converted to monthly `(1+r)^(1/12)-1`; deposits at month end; step-up applied every 12 months (from month 13). These appear in the payload's `assumptions` block and in architecture 2.4.
 - Goal Planning: required monthly contribution uses the linear closed form `(target - FV(0)) / FV_unit`, exact with or without step-up, instead of a search (round-trip tested in `tests/test_goal_metrics.py`).
 - Goal Planning: `inflation_adjust` reads `goal_amount` as today's money; the target is the goal in future money, and shortfall, required contribution and months use that target. Default from `goal_planning.inflation_adjust_default` (true); `goal_params["inflation_adjust"]` overrides.
-- Goal Planning: LLM role is `goal_summary` (the doc said `default`; doc changed). The number guard is still imported from `portfolio_metrics`.
+- Goal Planning: LLM role is `goal_summary` (the doc said `default`; doc changed). The number guard is in `src/core/number_guard.py`.
 - Goal Planning: commentary input uses western digit grouping (`1,234,567.00`).
 - Goal Planning: the required monthly amount is labelled in the payload (`required_labels`, per-scenario `required_label`): plain, "starting monthly amount (rises X% a year)" with a step-up, "minimum monthly amount to still reach the goal" when the scenario already reaches the goal (here "reaches" means final value >= target at the current contribution).
 - Goal Planning: commentary input has precomputed text (`years_months_to_goal`, `surplus_or_shortfall_text`, `time_compared_with_horizon`, two plain inflation sentences); the old `labels` object is no longer sent to the LLM. Maths unchanged.
@@ -65,7 +65,6 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Resolve the `<!-- VERIFY -->` markers in the knowledge base against official sites: **23 markers in 15 files** (counted with grep; two are the new STT/LTCG/STCG sections in `capital-gains-basics.md`).
 - Portfolio tab needs a per-holding asset-class dropdown (UI not built yet).
 - UI shows sources per chunk with article title and snippet.
-- Move the number guard (`numbers_in` / `collect_numbers`) out of `portfolio_metrics.py` into a shared module used by Portfolio and Market.
 - Run `live_check_news.py` once (spends API money and uses the network; only when asked).
 - Run `live_check_market_agent.py` once (spends API money; only when asked).
 - Review `smoke_test.py` (exists at the repo root).
@@ -87,4 +86,5 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Known issue, filler chunks: with no topic filter (Finance Q&A), `goals_and_retirement/compound-interest-explained#14` ("costs and charges ... transaction charges") fills a free slot for "What is STT?" (0.53) and "What is LTCG?" (0.51) because the acronym expansion fills up to `top_k` (`retrieval_check.py`). It is not a Tax agent issue (topic locked). Not fixed; the grounded prompt is the only defence.
 
 ## Last updated
+Workflow commit 0 (number guard moved to `src/core/number_guard.py`) is done; the router + LangGraph step is split into commits 0-4 (plan approved; commit 1 is next).
 2026-10-29, Tax follow-ups 4 (see `git log -1`). Previous: Tax follow-ups 3. Tax live-check fixes; Tax review follow-ups. Previous: Tax Education agent (calculators, grounded Q&A with facts, config figures; see `git log -1`). Previous step: News agent review follow-ups (UTF-8 only feeds, normalised cache key, max_items warning, prompt wording, README technology choices; see `git log -1` for the commit).

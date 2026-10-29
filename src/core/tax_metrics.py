@@ -15,7 +15,7 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from src.core.portfolio_metrics import numbers_in
+from src.core.number_guard import numbers_in
 from src.core.tax_models import CapitalGainsInputs, SmallSavingsInputs, TaxCalculation
 
 _HUNDRED = Decimal(100)

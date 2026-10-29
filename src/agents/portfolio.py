@@ -19,7 +19,8 @@ from typing import Any
 
 from src.agents.base_agent import BaseAgent
 from src.core.models import AgentResult, PortfolioPayload
-from src.core.portfolio_metrics import build_metrics, collect_numbers, numbers_in, summary_input
+from src.core.number_guard import collect_numbers, numbers_in
+from src.core.portfolio_metrics import build_metrics, summary_input
 from src.core.portfolio_models import PortfolioMetrics
 from src.core.portfolio_valuation import parse_holdings, value_holdings
 from src.data.market import get_market_provider

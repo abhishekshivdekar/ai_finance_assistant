@@ -26,7 +26,7 @@ from src.agents.base_agent import BaseAgent
 from src.core.citations import drop_invalid_citations, strip_citations
 from src.core.models import AgentResult, NewsPayload
 from src.core.news_query import resolve_query
-from src.core.portfolio_metrics import collect_numbers, numbers_in
+from src.core.number_guard import collect_numbers, numbers_in
 from src.data.market import get_market_provider
 from src.data.market.provider import MarketDataProvider
 from src.utils.config import get_config

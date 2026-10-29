@@ -27,7 +27,7 @@ from src.core.market_metrics import (
 )
 from src.core.market_models import MarketMetrics, TickerMetrics
 from src.core.models import AgentResult, MarketPayload
-from src.core.portfolio_metrics import collect_numbers, numbers_in
+from src.core.number_guard import collect_numbers, numbers_in
 from src.core.portfolio_valuation import NOT_LIVE_SOURCES
 from src.data.market import get_market_provider
 from src.data.market.provider import MarketDataProvider

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.core.portfolio_metrics import numbers_in
+from src.core.number_guard import numbers_in
 from src.utils.config import TAX_FIGURE_KEYS, TAX_SUB_KEYS, TAX_TOP_KEYS, ConfigError, get_config
 
 ROOT = Path(__file__).resolve().parent.parent
