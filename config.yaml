@@ -30,6 +30,8 @@ llm:
       model: gpt-6-luna
     news_summary:               # News agent: short themed summary of fetched headlines
       model: gpt-6-luna
+    tax_summary:                # Tax Education agent: grounded answers and calculator commentary
+      model: gpt-6-luna
 
 pricing:                      # USD per 1M tokens, keyed by model ID
   gpt-6-luna:
@@ -425,6 +427,185 @@ news:                         # News agent and Google News RSS source (architect
 
     Headlines (JSON):
     {headlines_json}
+
+tax:                          # Tax Education agent (architecture section 2.6). Every figure is illustrative and must be verified.
+  topic: accounts_and_taxes_india      # the question path is locked to this knowledge-base topic
+  label: illustrative, verify before relying
+  figures:                             # the ONLY place a rate, limit or threshold may appear (value + as_of + source + verify)
+    equity_stcg_pct:
+      label: Short-term capital gains tax rate on listed equity and equity funds
+      value: 20
+      unit: pct
+      as_of: "2026-10-29"
+      source: &tax_source "incometax.gov.in (verify); cross-checked against Taxgarden, Tata Mutual Fund post-Budget 2026 note, TaxGuru; secondary sources"
+      verify: true
+      stt_condition: true
+    equity_ltcg_pct:
+      label: Long-term capital gains tax rate on listed equity and equity funds (above the yearly exemption)
+      value: 12.5
+      unit: pct
+      as_of: "2026-10-29"
+      source: *tax_source
+      verify: true
+      stt_condition: true
+    equity_ltcg_exemption:
+      label: Long-term capital gains on listed equity and equity funds exempt per financial year
+      value: 125000
+      unit: inr
+      as_of: "2026-10-29"
+      source: *tax_source
+      verify: true
+      stt_condition: true
+    holding_months_equity:
+      label: Listed equity and equity funds count as long-term when held for more than this many months
+      value: 12
+      unit: months
+      as_of: "2026-10-29"
+      source: *tax_source
+      verify: true
+    holding_months_other:
+      label: Property, unlisted shares and other assets count as long-term when held for more than this many months
+      value: 24
+      unit: months
+      as_of: "2026-10-29"
+      source: *tax_source
+      verify: true
+    other_ltcg_pct:
+      label: Long-term capital gains tax rate on property, unlisted shares and other assets (no indexation)
+      value: 12.5
+      unit: pct
+      as_of: "2026-10-29"
+      source: *tax_source
+      verify: true
+    cess_pct:
+      label: Health and education cess charged on the tax
+      value: 4
+      unit: pct
+      as_of: "2026-10-29"
+      source: "incometax.gov.in (verify); not cross-checked; verify"
+      verify: true
+    ppf_pct:
+      label: Public Provident Fund interest rate (current quarter)
+      value: 7.1
+      unit: pct
+      as_of: "2026-10-29"
+      source: &savings_source "Business Today 30 Sep 2026, Ministry of Finance announcement; verify"
+      verify: true
+    nsc_pct:
+      label: National Savings Certificate interest rate (current quarter)
+      value: 7.7
+      unit: pct
+      as_of: "2026-10-29"
+      source: *savings_source
+      verify: true
+    ssy_pct:
+      label: Sukanya Samriddhi Yojana interest rate (current quarter)
+      value: 8.2
+      unit: pct
+      as_of: "2026-10-29"
+      source: *savings_source
+      verify: true
+  units: {pct: "%", inr: " INR", months: " months"}
+  asset_types: [listed_equity, equity_fund, property_or_unlisted, other, debt_fund_post_2023]
+  equity_asset_types: [listed_equity, equity_fund]      # fixed rates from figures; the yearly exemption applies
+  slab_asset_types: [debt_fund_post_2023]               # always taxed at the slab rate the user enters
+  schemes: {ppf: ppf_pct, nsc: nsc_pct, ssy: ssy_pct}      # scheme -> figure that holds its interest rate
+  input_limits:                        # our own sanity caps for typed inputs; not tax figures
+    max_amount: 1000000000000
+    max_months: 1200
+    max_years: 50
+    max_pct: 100
+  stt_assumption: assumes the securities transaction tax was paid on the sale of listed equity and equity funds
+  exclusions:                          # shown with every calculator output
+    - surcharge is not included
+    - indexation for older property purchases is not included
+    - set-off of losses against other gains or income is not included
+    - income tax slabs are not modelled; where a slab rate applies you enter it yourself
+  small_savings_assumptions:
+    - interest simplified to annual compounding; actual scheme interest calculation differs; check the official scheme rules
+    - deposits are assumed at the start of each year and the rate is assumed constant for all years
+    - scheme limits, lock-in periods and eligibility are not checked; check the official scheme rules
+  errors:
+    not_a_number: "{field} must be a number."
+    must_be_positive: "{field} must be greater than zero."
+    must_not_be_negative: "{field} must not be negative."
+    too_large: "{field} must not be more than {limit}."
+    whole_number: "{field} must be a whole number."
+    unknown_choice: "{field} must be one of: {choices}."
+    slab_rate_needed: "slab_rate_pct (your income tax slab rate, in percent) is needed for this asset and holding period."
+    unknown_calculation: "calculation must be one of: {choices}."
+  needs_input_message: >
+    I need a few details to run this illustrative calculation. Please check the
+    points below and try again.
+  question_needs_input: Please type a question about Indian tax concepts or savings schemes.
+  no_answer_message: >
+    I couldn't answer this from my Indian tax and savings knowledge base. I can
+    explain topics such as capital gains, PPF, NPS, ELSS, EPF and tax-saving
+    deductions in general terms. For your own situation please ask a chartered
+    accountant.
+  discarded_message: >
+    I could not produce a reliable answer to this question from my sources, so I
+    am not showing one. Please check incometax.gov.in or ask a chartered accountant.
+  no_answer_sentinel: NO_ANSWER
+  footer: >
+    Figures quoted are {label} (as of {as_of}). This is general education, not
+    personal tax advice; please check the official site and consider a chartered
+    accountant for your own situation.
+  fallback_commentary: >
+    These figures are an illustrative calculation. Read the steps below, check
+    every rate on the official site, and ask a chartered accountant about your own
+    situation. This is general education, not tax advice.
+  texts:
+    commentary_unavailable: The commentary was unavailable, so a standard line is shown.
+    commentary_empty: The commentary was empty, so a standard line is shown.
+    commentary_discarded: The commentary was discarded because it contained numbers that are not in the results.
+    loss_note: There is a loss, so no tax is due on this sale. This calculator does not apply losses to other gains or income.
+    exemption_note: The yearly exemption already used is subtracted from the exemption available.
+    approximate_note: These are approximate projections, not a promise of returns.
+    slab_taxed_note: This gain is taxed at the slab rate you entered, not at a fixed rate from the configuration.
+    step_gain: "Gain or loss = sale value - purchase value - expenses = {sell} - {buy} - {expenses} = {gain}"
+    step_term_long: "Holding period {months} months is more than {threshold} months, so the gain is long-term."
+    step_term_short: "Holding period {months} months is not more than {threshold} months, so the gain is short-term."
+    step_term_slab: "Debt fund units bought after the change in rules are taxed at your slab rate whatever the holding period."
+    step_exemption: "Exemption available = {exemption} - {used} already used = {available}; exemption applied = {applied}"
+    step_taxable: "Taxable gain = gain - exemption applied = {gain} - {applied} = {taxable}"
+    step_tax: "Tax = taxable gain x rate = {taxable} x {rate}% = {tax}"
+    step_cess: "Cess = tax x cess rate = {tax} x {cess_rate}% = {cess}"
+    step_total: "Total = tax + cess = {tax} + {cess} = {total}"
+    step_loss: "There is no gain, so the tax is zero."
+    step_savings_rate: "Interest rate used: {rate}% a year, compounded once a year."
+    step_savings_formula: "Each year: balance = (previous balance + deposit for that year) x (one plus the yearly rate)"
+    step_savings_year: "Year {year}: deposits so far {deposited}, balance {balance}"
+  system_prompt: |
+    You are a tax education assistant for beginners, covering Indian tax concepts only.
+    Answer ONLY from the numbered context chunks [1], [2] and the numbered facts [F1], [F2] below.
+    Do not use outside knowledge.
+    - Cite a chunk as [1] and a fact as [F1] right after the claim it supports. Write each marker in its own brackets.
+    - Every number you write must come from a fact, a chunk or the question. Never calculate or estimate a figure.
+    - When you quote a fact, say it is illustrative, verify before relying, and give its as-of date.
+    - Never state an equity rate, exemption or holding period without also saying: {stt_assumption}.
+    - If the chunks and facts do not answer the question, reply with exactly NO_ANSWER and nothing else.
+    - General education only. Never give personal tax advice and never tell the reader what to buy, sell or hold;
+      suggest consulting a chartered accountant for their own situation.
+    - Use short, plain language that a beginner can follow.
+  fact_line: "{id}. {label}: {value}{unit}. As of {as_of}. Source: {source}. Verify: {verify}.{condition}"
+  fact_condition: " Condition: {stt_assumption}."
+  commentary_prompt: |
+    You are a tax education assistant for beginners, explaining an ILLUSTRATIVE calculation.
+    Below is JSON with the user's inputs, the computed results and the rates used.
+
+    Write a few short plain sentences that explain what the results mean.
+
+    Rules:
+    - Use only numbers that appear in the JSON. Do not calculate or estimate anything new.
+    - Say that the result is illustrative and that the rates must be verified on the official site.
+    - Mention the exclusions in the JSON in one short sentence.
+    - Educational only: never tell the reader what to buy, sell or hold, and give no personal advice.
+      Suggest a chartered accountant for their own situation.
+    - Do not repeat dates or sources.
+
+    JSON:
+    {results_json}
 
 agents:
   error_message: "Sorry, something went wrong while preparing this answer. Please try again."

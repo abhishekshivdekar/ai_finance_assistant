@@ -10,7 +10,7 @@ most top_k; an off-topic question returns [].
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from src.core.models import Source
 from src.rag.embeddings import get_embedder
@@ -122,6 +122,31 @@ def retrieve(
         )
         for rec, score in hits
     ]
+
+
+def merge_retrieval(
+    retrieve_fn: Callable[..., list[RetrievedChunk]], queries: list[str], topic: str | None
+) -> list[RetrievedChunk]:
+    """Retrieve for each query, merge by chunk (best score), re-apply the shared rules.
+
+    retrieve() already applied the threshold and caps per query; select_chunks
+    runs again on the merged list so the per-article and glossary caps and top_k
+    still hold after merging (no second implementation of those rules). Used by
+    the Finance Q&A agent (original + rewritten query) and the Tax agent (one query,
+    locked topic). Example: the same chunk found by both queries appears once with
+    its better score.
+    """
+    rag = get_config()["rag"]
+    best: dict[str, RetrievedChunk] = {}
+    for query in queries:
+        for chunk in retrieve_fn(query, topic=topic):
+            known = best.get(chunk.chunk_id)
+            if known is None or chunk.score > known.score:
+                best[chunk.chunk_id] = chunk
+    hits = [({"chunk_id": cid}, chunk.score) for cid, chunk in best.items()]
+    max_per_article, max_per_topic = diversity_caps(rag)
+    kept = select_chunks(hits, rag["top_k"], rag["score_threshold"], max_per_article, max_per_topic)
+    return [best[rec["chunk_id"]] for rec, _ in kept]
 
 
 def format_context(chunks: list[RetrievedChunk]) -> str:

@@ -54,6 +54,31 @@ def apply_citations(answer: str, items: list[T]) -> tuple[str, list[T]]:
     return _tidy(CITATION.sub(renumber, answer)), [items[n - 1] for n in order]
 
 
+# Fact markers: "[F1]" and "[F1, F2]" (facts are numbered separately from chunks, which use plain numbers).
+FACT_CITATION = re.compile(r"\[(F\d+(?:\s*,\s*F\d+)*)\]")
+
+
+def strip_fact_citations(text: str) -> str:
+    """The text without any [Fn] marker (so the digits are not mistaken for figures)."""
+    return FACT_CITATION.sub("", text)
+
+
+def drop_invalid_fact_citations(text: str, count: int) -> tuple[str, list[int]]:
+    """Remove [Fn] markers outside F1..F<count> WITHOUT renumbering; also return the fact numbers still cited.
+
+    Example: with 3 facts, "Rate [F2]. Other [F9]." gives ("Rate [F2]. Other.", [2]). Facts are not
+    renumbered because the reader sees the whole numbered fact list.
+    """
+    cited: set[int] = set()
+
+    def keep(match: re.Match[str]) -> str:
+        nums = list(dict.fromkeys(n for n in _numbers(match.group(1)) if 1 <= n <= count))
+        cited.update(nums)
+        return "[" + ", ".join(f"F{n}" for n in nums) + "]" if nums else ""
+
+    return _tidy(FACT_CITATION.sub(keep, text)), sorted(cited)
+
+
 def drop_invalid_citations(text: str, count: int) -> tuple[str, list[int]]:
     """Remove citations of numbers outside 1..count WITHOUT renumbering; also return the numbers still cited.
 

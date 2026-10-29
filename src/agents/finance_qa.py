@@ -26,10 +26,9 @@ from src.core.llm_factory import get_llm
 from src.core.models import AgentResult, QAPayload
 from src.rag.retriever import (
     RetrievedChunk,
-    diversity_caps,
     format_context,
+    merge_retrieval,
     retrieve,
-    select_chunks,
     to_sources,
 )
 from src.utils.config import get_config
@@ -89,23 +88,8 @@ class FinanceQAAgent(BaseAgent):
         return rewritten or question
 
     def _retrieve(self, queries: list[str], topic: str | None) -> list[RetrievedChunk]:
-        """Retrieve for each query, merge by chunk (best score), re-apply the shared rules.
-
-        retrieve() already applied the threshold and caps per query; select_chunks
-        runs again on the merged list so the per-article and glossary caps and top_k
-        still hold after merging (no second implementation of those rules).
-        """
-        rag = get_config()["rag"]
-        best: dict[str, RetrievedChunk] = {}
-        for query in queries:
-            for chunk in self.retrieve_fn(query, topic=topic):
-                known = best.get(chunk.chunk_id)
-                if known is None or chunk.score > known.score:
-                    best[chunk.chunk_id] = chunk
-        hits = [({"chunk_id": cid}, chunk.score) for cid, chunk in best.items()]
-        max_per_article, max_per_topic = diversity_caps(rag)
-        kept = select_chunks(hits, rag["top_k"], rag["score_threshold"], max_per_article, max_per_topic)
-        return [best[rec["chunk_id"]] for rec, _ in kept]
+        """Retrieve for each query and merge (shared with the Tax agent: see merge_retrieval)."""
+        return merge_retrieval(self.retrieve_fn, queries, topic)
 
     def _result(
         self, status: str, answer: str, sources: list[Any], payload: QAPayload

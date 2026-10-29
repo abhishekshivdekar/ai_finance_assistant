@@ -86,11 +86,27 @@ class NewsPayload(TypedDict, total=False):
 
 
 class TaxPayload(TypedDict, total=False):
-    """Tax education data: inputs, config values used and calculation steps."""
+    """Tax education data for both paths (architecture 2.6).
 
+    Calculator path: `calculation`, `inputs`, `results`, `steps`, `notes`, `assumptions`.
+    Question path: `facts` (every numbered config fact shown to the LLM) and `fact_citations`.
+    Both: `config_used` (label, value, unit, as_of, source, verify per figure), `exclusions`, `label`
+    ("illustrative, verify before relying") and `warnings`, always filled from config in code, never by the LLM.
+    """
+
+    path: str
+    calculation: str
     inputs: dict[str, Any]
-    config_used: dict[str, Any]
+    results: dict[str, Any]
     steps: list[str]
+    notes: list[str]
+    assumptions: list[str]
+    config_used: dict[str, Any]
+    exclusions: list[str]
+    label: str
+    facts: list[dict[str, Any]]
+    fact_citations: list[int]
+    warnings: list[str]
 
 
 class QAPayload(TypedDict, total=False):

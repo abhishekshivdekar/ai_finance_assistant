@@ -27,6 +27,9 @@ def _is_number(value: Any) -> bool:
     return isinstance(value, int) or math.isfinite(value)
 
 
+is_number = _is_number   # public name for the other agents' input checks (same rule)
+
+
 def _number(params: dict[str, Any], key: str, cfg: dict[str, Any], errors: list[str], default: float | None = None,
             limit: float | None = None, over_key: str = "too_large") -> float | None:
     """A number up to `limit` (default max_amount), or None (an error is added). A missing key uses `default`.

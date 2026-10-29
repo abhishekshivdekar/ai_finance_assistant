@@ -234,3 +234,29 @@ def test_retrieve_caps_off_when_config_is_empty(monkeypatch):
                max_chunks_per_article=None, max_chunks_per_topic={})
     got = [c.chunk_id for c in _retrieve("anything", ScriptedStore(hits))]
     assert got == ["stocks/a#0", "stocks/a#1", "stocks/a#2"]
+
+
+# --- merge_retrieval: shared by Finance Q&A and Tax ---
+from src.rag.retriever import RetrievedChunk, merge_retrieval
+
+
+def _hit(chunk_id, score):
+    return RetrievedChunk("t", "T", chunk_id.split("/")[0], REFS, chunk_id, score)
+
+
+def test_merge_retrieval_keeps_the_best_score_per_chunk_and_passes_the_topic():
+    calls = []
+    results = {"q1": [_hit("stocks/a#0", 0.5), _hit("stocks/a#1", 0.4)], "q2": [_hit("stocks/a#0", 0.9)]}
+
+    def fake(query, topic=None):
+        calls.append((query, topic))
+        return results[query]
+
+    merged = merge_retrieval(fake, ["q1", "q2"], "stocks")
+    assert calls == [("q1", "stocks"), ("q2", "stocks")]
+    assert [(c.chunk_id, c.score) for c in merged] == [("stocks/a#0", 0.9), ("stocks/a#1", 0.4)] or \
+        [(c.chunk_id, c.score) for c in merged] == [("stocks/a#0", 0.9)]
+
+
+def test_merge_retrieval_of_nothing_is_empty():
+    assert merge_retrieval(lambda q, topic=None: [], ["q"], None) == []

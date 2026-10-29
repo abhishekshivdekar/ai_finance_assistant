@@ -7,6 +7,7 @@ the same dict back instead of re-reading the file.
 from __future__ import annotations
 
 import os
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -65,6 +66,37 @@ def _validate_news(news: dict[str, Any]) -> None:
         raise ConfigError("news.query_templates needs us, nse and index.")
 
 
+TAX_FIGURE_KEYS = (
+    "equity_stcg_pct", "equity_ltcg_pct", "equity_ltcg_exemption", "holding_months_equity",
+    "holding_months_other", "other_ltcg_pct", "cess_pct", "ppf_pct", "nsc_pct", "ssy_pct",
+)
+
+
+def _validate_tax(tax: dict[str, Any]) -> None:
+    """tax: every figure the code reads exists and carries a label, a number, an ISO as_of date, a source and a verify flag."""
+    figures = tax["figures"]
+    for key in TAX_FIGURE_KEYS:
+        if key not in figures:
+            raise ConfigError(f"tax.figures.{key} is missing.")
+    for key, fig in figures.items():
+        value = fig.get("value")
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            raise ConfigError(f"tax.figures.{key}.value must be a number, zero or more.")
+        try:
+            date.fromisoformat(str(fig.get("as_of")))
+        except ValueError as exc:
+            raise ConfigError(f"tax.figures.{key}.as_of must be an ISO date (YYYY-MM-DD).") from exc
+        if not str(fig.get("source") or "").strip() or not str(fig.get("label") or "").strip():
+            raise ConfigError(f"tax.figures.{key} needs a label and a source.")
+        if not isinstance(fig.get("verify"), bool):
+            raise ConfigError(f"tax.figures.{key}.verify must be true or false.")
+        if fig.get("unit") not in tax["units"]:
+            raise ConfigError(f"tax.figures.{key}.unit must be one of {sorted(tax['units'])}.")
+    for scheme, key in tax["schemes"].items():
+        if key not in figures:
+            raise ConfigError(f"tax.schemes.{scheme} points at {key!r}, which is not a figure.")
+
+
 def _validate(cfg: dict[str, Any]) -> None:
     """Fail clearly on settings that would otherwise break an agent later."""
     market = cfg.get("market_analysis")
@@ -76,6 +108,9 @@ def _validate(cfg: dict[str, Any]) -> None:
     news = cfg.get("news")
     if news is not None:
         _validate_news(news)
+    tax = cfg.get("tax")
+    if tax is not None:
+        _validate_tax(tax)
 
 
 @lru_cache(maxsize=1)

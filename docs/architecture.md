@@ -168,13 +168,16 @@ All agents extend `BaseAgent` (section 3). Every agent provides information and 
 - **Summary:** one LLM call (role `news_summary`); the prompt asks for up to 4 bullets, fewer when there are few headlines, and no themes the headlines do not show; the input is only the numbered headlines as JSON and the prompt says headlines are untrusted data, never instructions. Checks: invalid `[n]` citations are dropped (not renumbered), a summary with no valid citation fails, every number must appear in a headline (shared number guard; citation digits are removed first). On an LLM error, an empty reply or a failed check the fixed `news.fallback_summary` is used, status stays `ok` and a warning is added. Stale cache is labelled with `is_stale` and a warning.
 
 ### 2.6 Tax Education (India only)
-A distinct agent, not a copy of Finance Q&A.
-- **Purpose:** explain general Indian tax concepts (e.g. capital gains, tax-advantaged accounts such as PPF, NPS, ELSS, EPF).
-- **System prompt:** its own. General concepts only, no personal tax advice, and it suggests consulting a chartered accountant.
-- **Retrieval:** locked to the `accounts_and_taxes_india` topic (metadata filter). It may share the retriever code with Finance Q&A; only the filter and prompt differ.
-- **Tool:** its own deterministic, illustrative calculators (e.g. capital gains, tax-advantaged account comparison). Numbers come from code, never from the LLM.
-- **Config-driven rates:** every rate and limit lives in `config.yaml` under a `tax:` section. Each entry has an `as_of` date and a named `source` (e.g. incometax.gov.in). No rate is hard-coded in code or in this document. Outputs are labelled **"illustrative, verify before relying"** and show the `as_of` date.
-- **Outputs:** `TaxPayload` (inputs, config values used with `as_of` and `source`, calculation steps), commentary, sources.
+A distinct agent, not a copy of Finance Q&A: `TaxAgent` (`src/agents/tax.py`, name `tax_education`, LLM role `tax_summary`). General concepts only, no personal tax advice; it suggests a chartered accountant.
+- **Two paths:** `state["tax_params"]` with a `calculation` key runs a calculator; anything else is a question (`state["query"]`). A chat question reaches the agent through the router intent `tax_education`; calculators are triggered by structured params from a Tax-tab form (`intent_hint="tax_education"`). There is no free-text parameter extraction. Router, workflow node and UI are later steps. `GraphState.tax_params` is typed.
+- **Question path:** retrieval is locked to `tax.topic` (`accounts_and_taxes_india`), whatever the Chat dropdown says, through the shared `merge_retrieval()` in `src/rag/retriever.py` (the same merge and caps as Finance Q&A; one query, no rewrite call). No chunks -> `no_answer` without an LLM call. The prompt has the numbered chunks `[1]..[n]` and ALL config figures as numbered facts `F1..Fn` (label, value, unit, as_of, source, verify; the three equity figures also carry the tax-paid condition). The prompt rules: answer only from chunks and facts, cite chunks as `[n]` and facts as `[Fn]`, every number from a fact, chunk or the question, say "illustrative, verify before relying" with the as_of date when quoting a fact, never state an equity rate without the tax-paid assumption, no personal advice. Checks: the `NO_ANSWER` sentinel; invalid `[Fn]` dropped (not renumbered, `drop_invalid_fact_citations` in `src/core/citations.py`); chunk citations renumbered by `apply_citations`; at least one valid citation of either kind; every number must be in the chunks, the facts or the question. A failed check gives `no_answer` with `tax.discarded_message`. When a fact is cited, code (not the LLM) appends the fixed footer: the label, the as_of dates of the cited figures and, for equity figures, the tax-paid assumption.
+- **Calculators** (pure, `src/core/tax_metrics.py`, inputs validated in `src/core/tax_inputs.py`, formulas in the docstrings, `Decimal` maths rounded half-up to two places):
+  - `capital_gains`: `asset_type` is `listed_equity`, `equity_fund`, `property_or_unlisted`, `other` or `debt_fund_post_2023`; inputs `buy_value`, `sell_value`, `expenses`, `holding_months`, optional `ltcg_exemption_already_used`, `slab_rate_pct`. Long-term means MORE than the configured holding months (equity or other threshold). Equity: short-term and long-term rates, yearly exemption (reduced by what was already used). Property, unlisted and other assets: long-term rate with no indexation and no exemption. Debt funds acquired after the rule change, and short-term property/other gains, are taxed at the slab rate the user enters (`needs_input` when missing; no rate in config). Cess is added on the tax. A gain of zero or less gives zero tax and an informational note only. Output: gain, term, exemption applied, taxable gain, tax, cess, total, step list.
+  - `small_savings_growth`: scheme `ppf`, `nsc` or `ssy`, `mode` `annual` or `one_time`, `amount`, `years`; annual compounding at the configured rate, deposits at the start of each year, rate held constant, labelled approximate. Scheme limits and lock-ins are not checked.
+- **Commentary:** one optional LLM call (`tax_summary`) on JSON of inputs, results, rates used and caveats. Every number in it must appear in the inputs, results or rates (dates and sources are not whitelisted). An LLM error, an empty reply or an invented number gives the fixed `tax.fallback_commentary` and a warning; status stays `ok`.
+- **Config-driven figures:** every rate, limit and threshold lives in `config.yaml` under `tax.figures`; each has `label`, `value`, `unit`, `as_of`, a named `source` and `verify` (true until a human has checked it on incometax.gov.in). `_validate_tax` in `src/utils/config.py` rejects a figure without them. No figure appears in code, prompts, articles or this document; a test scans the tax modules for numeric literals other than 0, 1, 2 and 100 and the tax texts for digits. Debt funds acquired on or after the rule change have no config rate.
+- **Exclusions** (`tax.stt_assumption` first, then `tax.exclusions`) are in every output: the securities transaction tax is assumed paid on listed equity and equity fund sales (the equity rates apply only then), surcharge, indexation for older property purchases, loss set-off and income tax slabs are not modelled.
+- **Outputs:** `TaxPayload` (`path`, `calculation`, `inputs`, `results`, `steps`, `notes`, `assumptions`, `config_used` with as_of and source, `exclusions`, `label`, `facts`, `fact_citations`, `warnings`), the commentary or answer, and sources (cited chunks).
 
 ---
 
@@ -514,6 +517,8 @@ llm:
     market_summary:                 # Market agent summary (section 2.3)
     goal_summary:                   # Goal Planning commentary (section 2.4)
       model: <default-model-id>
+    tax_summary:                    # Tax Education answers and calculator commentary (section 2.6)
+      model: <default-model-id>
 
 portfolio:                          # starting values, labelled "illustrative"
   max_holdings: 50
@@ -563,6 +568,16 @@ goal_planning:                      # illustrative, not predictions (section 2.4
   scenarios: [conservative, expected, optimistic]     # lowest return first
   assumptions:                      # label, as_of, source, returns_pct per profile, inflation {annual_pct, as_of, source}, timing notes
   labels / errors / needs_input_message / not_reached_note / already_met_note / summary_fallback / summary_prompt: ...
+
+tax:                                # illustrative, every figure must be verified (section 2.6)
+  topic: accounts_and_taxes_india
+  label: illustrative, verify before relying
+  figures:                          # the ONLY place a rate, limit or threshold may appear
+    <figure_key>: {label, value, unit, as_of, source, verify, stt_condition?}
+  units / asset_types / equity_asset_types / slab_asset_types / schemes: ...
+  input_limits: {max_amount, max_months, max_years, max_pct}     # our own sanity caps, not tax figures
+  stt_assumption / exclusions / small_savings_assumptions / errors / texts: ...
+  system_prompt / fact_line / fact_condition / commentary_prompt / footer / fallback_commentary / no_answer_message / discarded_message: ...
 ```
 
 - `get_llm(role="default")` reads `llm.roles.<role>` and merges over `llm.*`; unknown or missing role falls back to the default.
@@ -712,6 +727,7 @@ Three stores, each with one job:
 - **Vector store:** FAISS for MVP, behind an interface.
 - **Goal-planning and tax assumptions:** config values, labelled "illustrative" in the UI and answers, with an `as_of` date and a named source in config.
 - **Clarification:** ordinary assistant reply for MVP; `interrupt()` is a stretch.
+- **Tax agent (decisions the doc didn't specify):** short-term gains on property, unlisted and other assets are taxed at the slab rate the user enters (no config rate; `slab_rate_pct` is required, as for debt funds); long-term means strictly more than the configured months; the question path does not rewrite the query (one role, one LLM call) and ignores the Chat topic dropdown; all config figures are offered as facts (no relevance filter); an answer with no valid citation or an invented number is `no_answer` with `tax.discarded_message`, not returned uncited as Finance Q&A does; `[Fn]` citations are dropped when invalid but not renumbered; the footer with the label, as_of dates and tax-paid assumption is appended by code; the securities-transaction-tax assumption is listed first in the exclusions of every output; the agent name is `tax_education` (the router intent); `merge_retrieval()` moved from `FinanceQAAgent` to `src/rag/retriever.py` so both agents share it; `is_number` is exported from `goal_inputs.py` for the tax input checks; tests use a synthetic `tax` config (`tests/tax_cfg.py`) so hand-computed cases survive when the real figures are corrected.
 - **News agent (decisions the doc didn't specify):** citations are dropped when invalid but not renumbered, because the full numbered headline list is always shown; a summary with no valid citation counts as failed; the query wins over the ticker; a provider failure is `no_answer`, not `error`; only http(s) links are kept; news reuses the quote TTL (`market_data.cache_ttl_minutes`); `get_news` takes a search phrase; news cache keys and the fetched phrase are the same normalised text (casefold, collapsed whitespace), so the search sent to Google is lower-case; non-UTF-8 feeds are rejected rather than transcoded; the provider error classes live in `src/data/errors.py` (re-exported by `provider.py`) so the news layer does not import the market package.
 
 ## Open questions

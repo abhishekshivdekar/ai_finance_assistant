@@ -1,5 +1,5 @@
 import operator
-from typing import get_type_hints
+from typing import Any, get_type_hints
 
 from langgraph.graph import END, START, StateGraph
 
@@ -87,3 +87,8 @@ def test_missing_keys_give_empty_lists():
 
 def test_news_params_is_a_typed_state_key():
     assert "news_params" in get_type_hints(GraphState)
+
+
+def test_tax_params_is_a_typed_state_key():
+    hints = get_type_hints(GraphState, include_extras=True)
+    assert "tax_params" in hints and hints["tax_params"] == (dict[str, Any] | None)

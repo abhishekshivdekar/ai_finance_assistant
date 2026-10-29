@@ -13,8 +13,9 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - **News agent:** `src/agents/news.py`, Google News RSS source in `src/data/news/`; see Decisions.
 - **Goal Planning agent:** `src/agents/goal_planning.py`; math in `src/core/goal_metrics.py`, validation in `src/core/goal_inputs.py`, models in `src/core/goal_models.py`; role `goal_summary` and block `goal_planning:` in `config.yaml`; `GoalPayload` extended; config validation for the block in `src/utils/config.py`. `live_check_goal_planning.py` is written but **not run** (not verified against the real LLM). Spec: `docs/architecture.md` section 2.4. Review follow-ups done (huge-number validation, number-guard whitelist, strings moved to config, negative-rate config check).
 
+- **Tax Education agent:** `src/agents/tax.py` (`TaxAgent`, name `tax_education`, role `tax_summary`); calculators in `src/core/tax_metrics.py`, input checks in `src/core/tax_inputs.py`, models in `src/core/tax_models.py`; block `tax:` in `config.yaml` (figures with value/as_of/source/verify), `_validate_tax` in `src/utils/config.py`, typed `tax_params` in `GraphState`, `TaxPayload` extended, `merge_retrieval()` shared with Finance Q&A, fact citations `[Fn]` in `src/core/citations.py`. Spec: architecture 2.6. `live_check_tax.py` is written but **not run** (not verified against the real LLM and index). Router, workflow node and UI are not built.
+
 ## Next
-- Tax agent.
 - Router, LangGraph workflow, clarify node, facade.
 - Persistence.
 - Streamlit UI (`src/web_app/` only has `__init__.py` today).
@@ -22,6 +23,7 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Optional: Docker / MCP.
 
 ## Decisions
+- Tax: see architecture "Tax agent (decisions the doc didn't specify)". The three that matter most: short-term gains on property/unlisted/other assets need the user's `slab_rate_pct` (no config rate); a tax answer with no valid citation or an invented number is `no_answer` (not returned uncited); the securities-transaction-tax assumption is listed in the exclusions of every output and added to the footer whenever an equity figure is used. Tax tests use a synthetic config (`tests/tax_cfg.py`), so correcting the real figures breaks no test. The tax-paid wording and the small-savings assumption text are those you specified.
 - News agent: `src/agents/news.py` (`NewsAgent`, role `news_summary`, block `news:` in `config.yaml`); pure parsing in `src/core/news_parse.py`, query resolution in `src/core/news_query.py`, shared citation helpers in `src/core/citations.py` (`apply_citations` moved out of `finance_qa.py`, behaviour unchanged), `NewsPayload` in `src/core/models.py`, `news_params` typed key in `GraphState`, `_validate_news` in `src/utils/config.py`. Spec: architecture 2.5 and section 6. `live_check_news.py` is written but **not run** (not verified against the real feed and LLM).
 - News: `get_news` now takes a search phrase (`validate_news_query`), not a ticker; the yfinance news path (`_parse_news`, the `news` branch of `_yf_call`) is removed with its tests. `YFinanceProvider(news_source=...)` delegates to `GoogleNewsRssSource`, so `CachedProvider` gives news cache, retry, stale cache and errors with no change to `fallback.py`. Provider error classes moved to `src/data/errors.py` (still importable from `provider.py`) to avoid a circular import.
 - News: invalid `[n]` citations are dropped, not renumbered (the payload always lists every headline with its number); a summary with no valid citation falls back; the number guard removes `[n]` markers first and allows numbers from headline titles and publishers only; the query wins over the ticker; provider failure is `no_answer`; only http(s) links; DTD/entity feeds rejected; news TTL reuses `market_data.cache_ttl_minutes`; ticker phrases come from `news.query_overrides` then `news.query_templates` (the market provider offers no cheap company name).
@@ -54,6 +56,9 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Goal Planning: commentary input has precomputed text (`years_months_to_goal`, `surplus_or_shortfall_text`, `time_compared_with_horizon`, two plain inflation sentences); the old `labels` object is no longer sent to the LLM. Maths unchanged.
 
 ## Open to-dos
+- **Before the demo: verify EVERY value in `tax.figures` (config.yaml) on incometax.gov.in** (the initial values come from secondary sources and one is "not cross-checked"), then set `verify: false` per figure and update `as_of` and `source`.
+- Run `live_check_tax.py` once (spends API money; only when asked).
+- Router must map `tax_education` to `TaxAgent` and pass `tax_params` from a Tax-tab form; Chat questions use the question path only.
 - UI formats amounts in Indian lakh/crore grouping while the LLM input stays western grouping; the number guard (`numbers_in`) does not parse lakh grouping.
 - Run `live_check_goal_planning.py` once (spends API money; only when asked).
 - Resolve the `<!-- VERIFY -->` markers in the knowledge base against official sites: **21 markers in 15 files** (counted with grep).
@@ -72,4 +77,4 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - News review follow-ups (this step): `query_overrides` are "company + stock" phrases (`AAPL` -> "Apple Inc AAPL stock", `^NSEI` -> "Nifty 50 index"); feeds must be plain UTF-8 and the DTD check runs on decoded text (`decode_utf8` in `src/core/news_parse.py`); `CachedProvider._get_news` uses one normalised (casefold, collapsed whitespace) phrase for the key and the fetch, so Google receives the lower-case phrase; a non-int `max_items` uses the config default and adds a warning (`NewsRequest.warning`); the prompt asks for up to 4 bullets and no invented themes; README has "Technology choices". The README line about the OpenAI choice records that the author chose it; the original reason is not in the repo (not verified).
 
 ## Last updated
-2026-10-29, News agent review follow-ups (UTF-8 only feeds, normalised cache key, max_items warning, prompt wording, README technology choices; see `git log -1` for the commit).
+2026-10-29, Tax Education agent (calculators, grounded Q&A with facts, config figures; see `git log -1`). Previous step: News agent review follow-ups (UTF-8 only feeds, normalised cache key, max_items warning, prompt wording, README technology choices; see `git log -1` for the commit).
