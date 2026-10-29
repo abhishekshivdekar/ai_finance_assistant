@@ -9,6 +9,7 @@ most top_k; an off-topic question returns [].
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -124,10 +125,26 @@ def retrieve(
     ]
 
 
+def expand_query(query: str, expansions: dict[str, str]) -> str | None:
+    """The query with each acronym replaced by its plain words, or None when no acronym is found.
+
+    Whole words only, any case: "What is ltcg?" -> "What is long-term capital gains tax?", while
+    "PPFX" and "stcgs" are left alone. No LLM call: the table is rag.query_expansions in config.
+    """
+    expanded = query
+    for acronym, words in expansions.items():
+        expanded = re.sub(rf"(?<!\w){re.escape(acronym)}(?!\w)", lambda _m, w=words: w, expanded, flags=re.IGNORECASE)
+    return None if expanded == query else expanded
+
+
 def merge_retrieval(
     retrieve_fn: Callable[..., list[RetrievedChunk]], queries: list[str], topic: str | None
 ) -> list[RetrievedChunk]:
-    """Retrieve for each query, merge by chunk (best score), re-apply the shared rules.
+    """Retrieve for each query (and its acronym-expanded form), merge by chunk (best score), re-apply the shared rules.
+
+    A query that holds an acronym such as LTCG is searched twice, as written and expanded (see
+    expand_query), because the articles use the long form. Example: "What is LTCG?" finds nothing
+    on its own but its expansion finds the capital-gains article.
 
     retrieve() already applied the threshold and caps per query; select_chunks
     runs again on the merged list so the per-article and glossary caps and top_k
@@ -138,7 +155,9 @@ def merge_retrieval(
     """
     rag = get_config()["rag"]
     best: dict[str, RetrievedChunk] = {}
-    for query in queries:
+    expansions = rag.get("query_expansions") or {}
+    searches = list(dict.fromkeys(q for query in queries for q in (query, expand_query(query, expansions)) if q))
+    for query in searches:
         for chunk in retrieve_fn(query, topic=topic):
             known = best.get(chunk.chunk_id)
             if known is None or chunk.score > known.score:

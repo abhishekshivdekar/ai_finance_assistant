@@ -45,11 +45,12 @@ def test_only_the_equity_figures_carry_the_tax_paid_condition():
 def test_exclusions_and_the_tax_paid_assumption_are_in_config():
     tax = get_config()["tax"]
     assert tax["stt_assumption"] == "assumes the securities transaction tax was paid on the sale of listed equity and equity funds"
-    joined = " ".join(tax["exclusions"])
+    joined = " ".join(tax["exclusions"]["capital_gains"])
     for word in ("surcharge", "indexation", "set-off", "slabs"):
         assert word in joined
-    assert any("interest simplified to annual compounding; actual scheme interest calculation differs; check the official scheme rules" == a
-               for a in tax["small_savings_assumptions"])
+    assert "transaction tax" not in joined and "transaction tax" not in " ".join(tax["exclusions"]["small_savings"])
+    assert tax["exclusions"]["small_savings"][0] == "interest simplified to annual compounding; actual scheme interest calculation differs; check the official scheme rules"
+    assert len(tax["exclusions"]["small_savings"]) == 3 and "small_savings_assumptions" not in tax
 
 
 def test_valid_tax_config_loads(tmp_path):
@@ -187,4 +188,3 @@ def test_the_real_display_texts_show_the_figure_value():
         assert float(fig["value"]) in numbers_in(fig["display"]), key
     exemption = get_config()["tax"]["figures"]["equity_ltcg_exemption"]["display"]
     assert numbers_in(exemption) == {125000.0, 1.25}
-

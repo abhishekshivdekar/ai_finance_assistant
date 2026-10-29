@@ -2,7 +2,7 @@ import pytest
 
 from src.core.tax_inputs import parse_capital_gains, parse_small_savings
 from src.core.tax_metrics import (
-    all_exclusions,
+    exclusions_for,
     build_facts,
     capital_gains,
     fact_lines,
@@ -195,8 +195,8 @@ def test_round_trip_against_a_closed_form(mode):
 def test_savings_carry_the_approximation_note_and_the_assumptions():
     calc = savings()
     assert calc.notes == [CFG["texts"]["approximate_note"]]
-    assert calc.assumptions == CFG["small_savings_assumptions"]
-    assert any("annual compounding" in a and "check the official scheme rules" in a for a in calc.assumptions)
+    assert calc.assumptions == [] and calc.exclusions == CFG["exclusions"]["small_savings"]
+    assert any("annual compounding" in a and "check the official scheme rules" in a for a in calc.exclusions)
 
 
 def test_the_largest_projection_does_not_crash():
@@ -213,8 +213,10 @@ def test_plain_never_uses_an_exponent():
     assert (plain(Decimal(20)), plain(Decimal("12.50")), plain(Decimal(100)), plain(Decimal(0))) == ("20", "12.5", "100", "0")
 
 
-def test_exclusions_start_with_the_securities_transaction_tax_assumption():
-    assert all_exclusions(CFG)[0] == CFG["stt_assumption"] and all_exclusions(CFG)[1:] == CFG["exclusions"]
+def test_exclusions_for_adds_the_securities_transaction_tax_assumption_first_and_only_for_equity():
+    capital = CFG["exclusions"]["capital_gains"]
+    assert exclusions_for("capital_gains", CFG, equity=True) == [CFG["stt_assumption"], *capital]
+    assert exclusions_for("capital_gains", CFG) == capital and exclusions_for("small_savings", CFG) == CFG["exclusions"]["small_savings"]
     assert "securities transaction tax was paid" in CFG["stt_assumption"]
 
 
@@ -288,3 +290,24 @@ def test_a_debt_fund_loss_through_the_parser_needs_no_slab_rate():
     calc = cg(asset_type="debt_fund_post_2023", buy_value=500000, sell_value=100000)
     assert calc.results["total_tax"] == 0.0 and calc.inputs["slab_rate_pct"] is None
     assert set(calc.config_used) == set()
+
+
+STT_WORDS = ("transaction tax", "surcharge", "indexation")
+
+
+@pytest.mark.parametrize("asset, has_stt", [
+    ("listed_equity", True), ("equity_fund", True), ("property_or_unlisted", False), ("other", False), ("debt_fund_post_2023", False),
+])
+def test_the_tax_paid_assumption_is_in_the_exclusions_of_equity_results_only(asset, has_stt):
+    calc = cg(asset_type=asset, slab_rate_pct=30, holding_months=36)
+    assert (calc.exclusions[0] == CFG["stt_assumption"]) is has_stt
+    assert (CFG["stt_assumption"] in calc.exclusions) is has_stt
+    assert calc.exclusions[has_stt:] == CFG["exclusions"]["capital_gains"]
+    assert (CFG["stt_assumption"] in summary_input(calc, CFG)["caveats"]) is has_stt
+
+
+def test_the_savings_commentary_input_has_no_capital_gains_caveats():
+    calc = savings()
+    caveats = " ".join(summary_input(calc, CFG)["caveats"])
+    assert not any(word in caveats for word in STT_WORDS) and "income tax slabs" not in caveats and "set-off" not in caveats
+    assert "annual compounding" in caveats and "lock-in" in caveats and "check the official scheme rules" in caveats

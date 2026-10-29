@@ -56,6 +56,22 @@ rag:
     glossary: {chunk_size: 250, chunk_overlap: 0}
   top_k: 6
   score_threshold: 0.30
+  query_expansions:           # acronym -> plain words; merge_retrieval also searches the expanded query (whole words, any case)
+    LTCG: long-term capital gains tax
+    STCG: short-term capital gains tax
+    STT: securities transaction tax
+    PPF: public provident fund
+    NPS: national pension system
+    ELSS: equity linked savings scheme
+    EPF: employees provident fund
+    TDS: tax deducted at source
+    SIP: systematic investment plan
+    NAV: net asset value
+    ETF: exchange traded fund
+    FD: fixed deposit
+    KYC: know your customer
+    IPO: initial public offering
+    P/E: price to earnings ratio
   max_chunks_per_article: 2   # diversity cap: at most this many chunks from one article (0/null = off)
   max_chunks_per_topic:       # per-topic caps (empty = off); glossary entries are tiny and many match at once
     glossary: 1
@@ -526,15 +542,16 @@ tax:                          # Tax Education agent (architecture section 2.6). 
     max_years: 50
     max_pct: 100
   stt_assumption: assumes the securities transaction tax was paid on the sale of listed equity and equity funds
-  exclusions:                          # shown with every calculator output
-    - surcharge is not included
-    - indexation for older property purchases is not included
-    - set-off of losses against other gains or income is not included
-    - income tax slabs are not modelled; where a slab rate applies you enter it yourself
-  small_savings_assumptions:
-    - interest simplified to annual compounding; actual scheme interest calculation differs; check the official scheme rules
-    - deposits are assumed at the start of each year and the rate is assumed constant for all years
-    - scheme limits, lock-in periods and eligibility are not checked; check the official scheme rules
+  exclusions:                          # per calculation; stt_assumption is put first in code for equity asset types only
+    capital_gains:
+      - surcharge is not included
+      - indexation for older property purchases is not included
+      - set-off of losses against other gains or income is not included
+      - income tax slabs are not modelled; where a slab rate applies you enter it yourself
+    small_savings:
+      - interest simplified to annual compounding; actual scheme interest calculation differs; check the official scheme rules
+      - deposits are assumed at the start of each year and the rate is assumed constant for all years
+      - scheme limits, lock-in periods and eligibility are not checked; check the official scheme rules
   errors:
     not_a_number: "{field} must be a number."
     must_be_positive: "{field} must be greater than zero."

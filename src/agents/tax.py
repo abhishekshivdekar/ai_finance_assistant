@@ -35,7 +35,7 @@ from src.core.models import AgentResult, TaxPayload
 from src.core.portfolio_metrics import collect_numbers, numbers_in
 from src.core.tax_inputs import CALCULATIONS, parse_capital_gains, parse_small_savings
 from src.core.tax_metrics import (
-    all_exclusions,
+    exclusions_for,
     build_facts,
     capital_gains,
     fact_lines,
@@ -69,15 +69,15 @@ class TaxAgent(BaseAgent):
             sources=sources or [], error=None, data=payload,
         )
 
-    def _base_payload(self, path: str, cfg: dict[str, Any]) -> TaxPayload:
+    def _base_payload(self, path: str, cfg: dict[str, Any], exclusions: list[str]) -> TaxPayload:
         """The parts of the payload that always come from config."""
-        return {"path": path, "label": cfg["label"], "exclusions": all_exclusions(cfg), "warnings": []}
+        return {"path": path, "label": cfg["label"], "exclusions": exclusions, "warnings": []}
 
     # ---- question path ----
 
     def _answer_question(self, question: str, cfg: dict[str, Any]) -> AgentResult:
         """Retrieve from the locked topic, answer from chunks and facts, then check citations and numbers."""
-        payload = self._base_payload("question", cfg)
+        payload = self._base_payload("question", cfg, exclusions_for("capital_gains", cfg, equity=True))
         if not question:
             return self._result("needs_input", cfg["question_needs_input"], payload)
         chunks = merge_retrieval(self.retrieve_fn, [question], cfg["topic"])
@@ -148,7 +148,11 @@ class TaxAgent(BaseAgent):
     def _calculate(self, params: dict[str, Any], cfg: dict[str, Any]) -> AgentResult:
         """Validate the request, run the calculator, then write the commentary."""
         name = params.get("calculation")
-        payload = self._base_payload("calculation", cfg)
+        payload = self._base_payload("calculation", cfg, [])
+        if name == "capital_gains":
+            payload["exclusions"] = exclusions_for("capital_gains", cfg, equity=params.get("asset_type") in cfg["equity_asset_types"])
+        elif name == "small_savings_growth":
+            payload["exclusions"] = exclusions_for("small_savings", cfg)
         if name not in CALCULATIONS:
             errors = [cfg["errors"]["unknown_calculation"].format(choices=", ".join(CALCULATIONS))]
             inputs = None
@@ -165,7 +169,8 @@ class TaxAgent(BaseAgent):
         commentary, note = self._commentary(calc, cfg)
         payload.update({
             "calculation": calc.calculation, "inputs": calc.inputs, "results": calc.results, "steps": calc.steps,
-            "notes": calc.notes, "assumptions": calc.assumptions, "config_used": calc.config_used,
+            "notes": calc.notes, "assumptions": calc.assumptions, "exclusions": calc.exclusions,
+            "config_used": calc.config_used,
             "warnings": [note] if note else [],
         })
         return self._result("ok", f"{commentary}\n\n{footer(calc.config_used, cfg)}", payload)

@@ -260,3 +260,81 @@ def test_merge_retrieval_keeps_the_best_score_per_chunk_and_passes_the_topic():
 
 def test_merge_retrieval_of_nothing_is_empty():
     assert merge_retrieval(lambda q, topic=None: [], ["q"], None) == []
+
+
+# --- acronym expansion (rag.query_expansions) ---
+from src.rag.retriever import expand_query
+
+EXPANSIONS = {"LTCG": "long-term capital gains tax", "PPF": "public provident fund", "P/E": "price to earnings ratio"}
+
+
+@pytest.mark.parametrize("query, expected", [
+    ("What is LTCG?", "What is long-term capital gains tax?"),
+    ("what is ltcg", "what is long-term capital gains tax"),
+    ("LTCG vs PPF", "long-term capital gains tax vs public provident fund"),
+    ("Is a P/E of 15 high?", "Is a price to earnings ratio of 15 high?"),
+    ("(PPF)", "(public provident fund)"),
+])
+def test_expand_query_replaces_whole_word_acronyms_in_any_case(query, expected):
+    assert expand_query(query, EXPANSIONS) == expected
+
+
+@pytest.mark.parametrize("query", ["What is a bond?", "PPFX rules", "myppf", "LTCGS", "PPF2", "", "SPP/E"])
+def test_expand_query_leaves_other_text_alone(query):
+    assert expand_query(query, EXPANSIONS) is None
+
+
+def test_expand_query_with_no_table_does_nothing():
+    assert expand_query("What is LTCG?", {}) is None
+
+
+def _by_query(table):
+    calls = []
+
+    def fake(query, topic=None):
+        calls.append((query, topic))
+        return table.get(query, [])
+
+    return fake, calls
+
+
+def test_an_acronym_query_is_searched_as_written_and_expanded_and_finds_the_article():
+    article = _hit("accounts_and_taxes_india/capital-gains#0", 0.7)
+    fake, calls = _by_query({"What is long-term capital gains tax?": [article]})        # the bare acronym finds nothing
+    merged = merge_retrieval(fake, ["What is LTCG?"], "accounts_and_taxes_india")
+    assert calls == [("What is LTCG?", "accounts_and_taxes_india"), ("What is long-term capital gains tax?", "accounts_and_taxes_india")]
+    assert [c.chunk_id for c in merged] == ["accounts_and_taxes_india/capital-gains#0"]
+
+
+def test_a_query_without_an_acronym_is_searched_once_as_before():
+    fake, calls = _by_query({})
+    merge_retrieval(fake, ["What is a bond?"], None)
+    assert calls == [("What is a bond?", None)]
+
+
+def test_a_longer_word_is_not_expanded_in_a_search():
+    fake, calls = _by_query({})
+    merge_retrieval(fake, ["PPFX and LTCGS"], None)
+    assert calls == [("PPFX and LTCGS", None)]
+
+
+def test_each_query_is_expanded_and_duplicate_searches_are_made_once():
+    fake, calls = _by_query({})
+    merge_retrieval(fake, ["What is STT?", "What is STT?", "securities transaction tax explained"], None)
+    assert [q for q, _ in calls] == ["What is STT?", "What is securities transaction tax?", "securities transaction tax explained"]
+
+
+def test_without_a_table_in_config_nothing_is_expanded(monkeypatch):
+    cfg = copy.deepcopy(get_config())
+    del cfg["rag"]["query_expansions"]
+    monkeypatch.setattr(retriever, "get_config", lambda: cfg)
+    fake, calls = _by_query({})
+    merge_retrieval(fake, ["What is LTCG?"], None)
+    assert calls == [("What is LTCG?", None)]
+
+
+def test_the_real_table_covers_the_required_acronyms_in_plain_words():
+    table = get_config()["rag"]["query_expansions"]
+    for acronym in ("LTCG", "STCG", "STT", "PPF", "NPS", "ELSS", "EPF", "TDS", "SIP", "NAV", "ETF", "FD", "KYC", "IPO", "P/E"):
+        assert table[acronym] and table[acronym].replace(" ", "").replace("-", "").isalpha(), acronym
+    assert table["LTCG"] == "long-term capital gains tax"

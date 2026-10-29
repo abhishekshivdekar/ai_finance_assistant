@@ -72,14 +72,27 @@ TAX_FIGURE_KEYS = (
 )
 
 
+def _validate_rag(rag: dict[str, Any]) -> None:
+    """rag.query_expansions (optional): a mapping of non-empty acronym -> non-empty text."""
+    expansions = rag.get("query_expansions")
+    if expansions is None:
+        return
+    if not isinstance(expansions, dict):
+        raise ConfigError("rag.query_expansions must be a mapping of acronym to words.")
+    for acronym, words in expansions.items():
+        if not str(acronym).strip() or not isinstance(words, str) or not words.strip():
+            raise ConfigError(f"rag.query_expansions.{acronym} needs a non-empty expansion text.")
+
+
 TAX_TOP_KEYS = (
     "topic", "label", "figures", "units", "asset_types", "equity_asset_types", "slab_asset_types", "schemes",
-    "input_limits", "stt_assumption", "exclusions", "small_savings_assumptions", "errors", "needs_input_message",
+    "input_limits", "stt_assumption", "exclusions", "errors", "needs_input_message",
     "question_needs_input", "no_answer_message", "discarded_message", "no_answer_sentinel", "footer",
     "fallback_commentary", "texts", "system_prompt", "fact_line", "fact_condition", "commentary_prompt",
 )
 TAX_SUB_KEYS = {
     "input_limits": ("max_amount", "max_months", "max_years", "max_pct"),
+    "exclusions": ("capital_gains", "small_savings"),
     "errors": ("not_a_number", "must_be_positive", "must_not_be_negative", "too_large", "whole_number",
                "unknown_choice", "slab_rate_needed", "unknown_calculation"),
     "texts": (
@@ -147,6 +160,9 @@ def _validate(cfg: dict[str, Any]) -> None:
     news = cfg.get("news")
     if news is not None:
         _validate_news(news)
+    rag = cfg.get("rag")
+    if rag is not None:
+        _validate_rag(rag)
     tax = cfg.get("tax")
     if tax is not None:
         _validate_tax(tax)

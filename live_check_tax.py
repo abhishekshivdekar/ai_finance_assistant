@@ -13,6 +13,8 @@ QUESTIONS = [
     "What is LTCG?",
     "Which rate applies to equity fund gains held for 2 years?",
     "How does PPF work?",
+    "What is STT?",
+    "What is the difference between PPF and NPS?",
 ]
 CALCULATIONS = {
     "Equity fund sold after 18 months": {
@@ -29,11 +31,16 @@ CALCULATIONS = {
 }
 
 
+def short_source(source: str) -> str:
+    """The first part of a long source string: "incometax.gov.in (verify); cross-checked ..." -> "incometax.gov.in"."""
+    return source.split(";")[0].split(" (")[0].split(",")[0].strip()
+
+
 def show_config_used(config_used: dict) -> None:
-    """Print each figure used with its value, as_of date, source and verify flag."""
+    """Print each figure used with its display text, as_of date, short source and verify flag."""
     print("\n--- Config values used ---")
     for key, entry in config_used.items():
-        print(f"  {key}: {entry['value']} ({entry['label']}); as of {entry['as_of']}; source: {entry['source']}; verify: {entry['verify']}")
+        print(f"  {key}: {entry['display']} ({entry['label']}); as of {entry['as_of']}; source: {short_source(entry['source'])}; verify: {entry['verify']}")
 
 
 def show(title: str, state: dict) -> None:
@@ -53,9 +60,11 @@ def show(title: str, state: dict) -> None:
     if data.get("config_used"):
         show_config_used(data["config_used"])
     if data.get("facts") and result["status"] == "ok":
-        print(f"\n--- Facts offered to the model (cited: {data.get('fact_citations')}) ---")
+        cited = data.get("fact_citations") or []
+        print(f"\n--- Facts cited by the model ({len(cited)} of {len(data['facts'])} offered) ---")
         for fact in data["facts"]:
-            print(f"  {fact['id']}: {fact['label']} = {fact['value']} ({fact['unit']}); as of {fact['as_of']}; source: {fact['source']}")
+            if fact["number"] in cited:
+                print(f"  {fact['id']}: {fact['label']} = {fact['display']}; as of {fact['as_of']}; source: {short_source(fact['source'])}")
     if result["sources"]:
         print("\n--- Sources ---")
         for source in result["sources"]:

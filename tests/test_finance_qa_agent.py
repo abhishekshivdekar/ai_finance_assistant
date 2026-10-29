@@ -311,3 +311,11 @@ def test_usage_of_both_calls_is_recorded_under_the_agent_roles():
         assert registry.session_tokens() == 412
     finally:
         registry.reset()
+
+
+def test_an_acronym_in_the_question_is_also_searched_in_plain_words():
+    agent, retrieve = make({"What is long-term capital gains tax?": [A]}, answer="Gains are taxed [1].", rewrite="what is LTCG")
+    result = agent.run({"turn_id": "t1", "query": "What is LTCG?"})
+    assert [q for q, _ in retrieve.calls] == [
+        "What is LTCG?", "What is long-term capital gains tax?", "what is LTCG", "what is long-term capital gains tax"]
+    assert result["status"] == "ok" and result["sources"]

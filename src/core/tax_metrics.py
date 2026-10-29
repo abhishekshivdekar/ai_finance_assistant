@@ -56,9 +56,15 @@ def figure_entry(cfg: dict[str, Any], key: str) -> dict[str, Any]:
     }
 
 
-def all_exclusions(cfg: dict[str, Any]) -> list[str]:
-    """What every output leaves out; the securities-transaction-tax assumption comes first."""
-    return [cfg["stt_assumption"], *cfg["exclusions"]]
+def exclusions_for(calculation: str, cfg: dict[str, Any], *, equity: bool = False) -> list[str]:
+    """What one calculation (or the question path, as "capital_gains") leaves out.
+
+    The securities-transaction-tax assumption comes first and only when `equity` is true, so a
+    debt-fund or PPF result never mentions it. Example: exclusions_for("small_savings", cfg) is
+    just the three savings assumptions.
+    """
+    items = list(cfg["exclusions"][calculation])
+    return [cfg["stt_assumption"], *items] if equity else items
 
 
 def footer(config_used: dict[str, Any], cfg: dict[str, Any]) -> str:
@@ -189,6 +195,7 @@ def capital_gains(inputs: CapitalGainsInputs, cfg: dict[str, Any]) -> TaxCalcula
             "rate_pct": float(rate), "tax": _f(tax), "cess": _f(cess), "total_tax": _f(total),
         },
         steps=steps, notes=notes, assumptions=[],
+        exclusions=exclusions_for("capital_gains", cfg, equity=equity),
         config_used={key: figure_entry(cfg, key) for key in used},
     )
 
@@ -227,7 +234,8 @@ def small_savings_growth(inputs: SmallSavingsInputs, cfg: dict[str, Any]) -> Tax
             "scheme": inputs.scheme, "rate_pct": float(rate), "total_deposited": _f(deposited),
             "final_value": _f(balance), "interest_earned": _f(balance - deposited), "yearly": rows,
         },
-        steps=steps, notes=[texts["approximate_note"]], assumptions=list(cfg["small_savings_assumptions"]),
+        steps=steps, notes=[texts["approximate_note"]], assumptions=[],
+        exclusions=exclusions_for("small_savings", cfg),
         config_used={key: figure_entry(cfg, key)},
     )
 
@@ -239,5 +247,5 @@ def summary_input(calc: TaxCalculation, cfg: dict[str, Any]) -> dict[str, Any]:
         "inputs": calc.inputs,
         "results": {k: v for k, v in calc.results.items() if k != "yearly"},
         "rates": {key: entry["value"] for key, entry in calc.config_used.items()},
-        "caveats": [*calc.notes, *calc.assumptions, *all_exclusions(cfg)],
+        "caveats": [*calc.notes, *calc.assumptions, *calc.exclusions],
     }

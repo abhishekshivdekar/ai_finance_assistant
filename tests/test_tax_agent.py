@@ -104,7 +104,7 @@ def test_a_fact_citation_adds_the_fixed_label_as_of_date_and_tax_paid_note():
     assert "illustrative, verify before relying (as of 2026-10-29)" in result["answer"]
     assert result["answer"].endswith("Assumes the securities transaction tax was paid on the sale of listed equity and equity funds.")
     assert [f["id"] for f in data["facts"]][:2] == ["F1", "F2"] and data["label"] == CFG["label"]
-    assert data["exclusions"][0] == CFG["stt_assumption"] and data["exclusions"][1:] == CFG["exclusions"]
+    assert data["exclusions"] == [CFG["stt_assumption"], *CFG["exclusions"]["capital_gains"]]
     assert result["sources"] == []
 
 
@@ -207,7 +207,7 @@ def test_capital_gains_payload_is_complete_and_deterministic():
     assert data["inputs"]["holding_months"] == 13 and len(data["steps"]) == 7 and data["label"] == CFG["label"]
     assert set(data["config_used"]) == {"cess_pct", "holding_months_equity", "equity_ltcg_pct", "equity_ltcg_exemption"}
     assert all(e["as_of"] == "2026-10-29" and e["source"] and e["verify"] for e in data["config_used"].values())
-    assert data["exclusions"][0] == CFG["stt_assumption"] and data["exclusions"][1:] == CFG["exclusions"]
+    assert data["exclusions"] == [CFG["stt_assumption"], *CFG["exclusions"]["capital_gains"]]
     assert data["warnings"] == [] and result["answer"].startswith(GOOD) and result["sources"] == []
     assert "illustrative, verify before relying (as of 2026-10-29)" in result["answer"]
     assert result["answer"].endswith("equity funds.")                        # equity figures used: tax-paid assumption shown
@@ -227,7 +227,8 @@ def test_a_debt_fund_calculation_uses_the_slab_rate_and_no_equity_note():
                       "sell_value": 150000, "holding_months": 36, "slab_rate_pct": 30}, reply="The total is 16500.")
     assert result["status"] == "ok" and result["data"]["results"]["total_tax"] == 16500.0
     assert set(result["data"]["config_used"]) == {"cess_pct"} and "transaction tax" not in result["answer"]
-    assert result["data"]["exclusions"][0] == CFG["stt_assumption"]            # exclusions are in every output
+    assert result["data"]["exclusions"] == CFG["exclusions"]["capital_gains"]       # no tax-paid line for a slab-rate asset
+    assert CFG["stt_assumption"] not in json.dumps(result["data"]["exclusions"])
 
 
 def test_a_loss_reports_zero_tax_and_the_note():
@@ -239,7 +240,7 @@ def test_small_savings_payload_has_the_projection_the_rate_and_the_assumptions()
     _, result = calc(SAVINGS, reply="Your 2000 grows to 2310.")
     data = result["data"]
     assert result["status"] == "ok" and data["results"]["final_value"] == 2310.0 and len(data["results"]["yearly"]) == 2
-    assert data["assumptions"] == CFG["small_savings_assumptions"] and data["notes"] == [CFG["texts"]["approximate_note"]]
+    assert data["exclusions"] == CFG["exclusions"]["small_savings"] and data["assumptions"] == [] and data["notes"] == [CFG["texts"]["approximate_note"]]
     assert set(data["config_used"]) == {"ppf_pct"} and data["config_used"]["ppf_pct"]["source"]
 
 
@@ -273,7 +274,7 @@ def test_an_unknown_calculation_is_needs_input_listing_the_choices(params):
     llm, result = calc(params)
     assert result["status"] == "needs_input" and llm.calls == []
     assert "capital_gains, small_savings_growth" in result["answer"] and result["data"]["warnings"]
-    assert result["data"]["label"] == CFG["label"] and result["data"]["exclusions"]
+    assert result["data"]["label"] == CFG["label"] and result["data"]["exclusions"] == []
 
 
 def test_missing_slab_rate_for_a_debt_fund_is_needs_input():
@@ -352,3 +353,36 @@ def test_a_figure_display_text_and_lakh_grouping_can_be_quoted():
         tax_module.get_config = original
     assert result["status"] == "ok"
 
+
+def test_the_ppf_commentary_input_has_no_tax_paid_surcharge_or_indexation_text():
+    llm, result = calc(SAVINGS, reply="Your 2000 grows to 2310.")
+    sent = llm.calls[0]
+    for word in ("transaction tax", "surcharge", "indexation", "set-off"):
+        assert word not in sent and word not in json.dumps(result["data"]["exclusions"])
+    assert "annual compounding" in sent and "lock-in" in sent
+
+
+def test_a_debt_fund_commentary_input_has_no_tax_paid_line_but_an_equity_one_has_it():
+    debt = {"calculation": "capital_gains", "asset_type": "debt_fund_post_2023", "buy_value": 100000,
+            "sell_value": 150000, "holding_months": 36, "slab_rate_pct": 30}
+    assert CFG["stt_assumption"] not in calc(debt, reply="The total is 16500.")[0].calls[0]
+    assert CFG["stt_assumption"] in calc(EQUITY)[0].calls[0]
+
+
+def test_an_acronym_question_is_searched_as_written_and_in_plain_words_on_the_locked_topic():
+    chunks = [chunk(1)]
+    llm = FakeLLM("Gains are taxed [1].")
+    retrieve_fn = FakeRetrieve(chunks)
+    result = TaxAgent(llm=llm, retrieve_fn=retrieve_fn).run({"turn_id": "t1", "query": "What is STT?", "topic_filter": "stocks"})
+    assert retrieve_fn.calls == [("What is STT?", TOPIC), ("What is securities transaction tax?", TOPIC)]
+    assert result["status"] == "ok"
+
+
+@pytest.mark.parametrize("params, expected", [
+    ({"calculation": "capital_gains", "asset_type": "equity_fund"}, [CFG["stt_assumption"], *CFG["exclusions"]["capital_gains"]]),
+    ({"calculation": "capital_gains", "asset_type": "debt_fund_post_2023"}, CFG["exclusions"]["capital_gains"]),
+    ({"calculation": "small_savings_growth"}, CFG["exclusions"]["small_savings"]),
+])
+def test_a_needs_input_result_already_carries_the_exclusions_of_the_requested_calculation(params, expected):
+    _, result = calc(params)
+    assert result["status"] == "needs_input" and result["data"]["exclusions"] == expected

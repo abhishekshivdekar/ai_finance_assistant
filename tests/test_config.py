@@ -53,3 +53,27 @@ def test_missing_sma_windows_fails_clearly(tmp_path):
     path.write_text("market_analysis:\n  max_tickers: 4\n", encoding="utf-8")
     with pytest.raises(ConfigError, match="sma_windows"):
         get_config(str(path))
+
+
+def _rag_file(tmp_path, body):
+    path = tmp_path / "config.yaml"
+    path.write_text("rag:\n  top_k: 6\n" + body, encoding="utf-8")
+    return str(path)
+
+
+def test_valid_query_expansions_load(tmp_path):
+    body = "  query_expansions:\n    LTCG: long-term capital gains tax\n    P/E: price to earnings ratio\n"
+    assert get_config(_rag_file(tmp_path, body))["rag"]["query_expansions"]["P/E"] == "price to earnings ratio"
+
+
+def test_query_expansions_are_optional(tmp_path):
+    assert "query_expansions" not in get_config(_rag_file(tmp_path, ""))["rag"]
+
+
+@pytest.mark.parametrize("body", [
+    "  query_expansions: [LTCG]\n", "  query_expansions: text\n", "  query_expansions:\n    LTCG: ''\n",
+    "  query_expansions:\n    LTCG: 5\n", "  query_expansions:\n    LTCG:\n", "  query_expansions:\n    '': words\n",
+])
+def test_bad_query_expansions_fail_clearly(tmp_path, body):
+    with pytest.raises(ConfigError, match="query_expansions"):
+        get_config(_rag_file(tmp_path, body))

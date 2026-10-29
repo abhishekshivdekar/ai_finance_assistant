@@ -50,4 +50,5 @@ class TaxCalculation(_Frozen):
     steps: list[str]
     notes: list[str]
     assumptions: list[str]
+    exclusions: list[str]
     config_used: dict[str, Any]
