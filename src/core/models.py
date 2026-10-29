@@ -21,13 +21,13 @@ class Source(TypedDict):
 
 
 class MarketPayload(TypedDict, total=False):
-    """Market agent data: quotes (with currency), history and freshness.
+    """Market agent data: trend metrics, price history and freshness.
 
-    The trend analysis adds `metrics` (MarketMetrics as a dict, one entry per
-    ticker, each in its own currency), `comparison` (table rows) and `warnings`.
+    `metrics` is MarketMetrics as a dict (one entry per ticker, each in its own
+    currency), `comparison` holds the table rows, `source` is the least live
+    source among the analysed tickers and `warnings` lists everything left out.
     """
 
-    quotes: list[dict[str, Any]]
     history: list[dict[str, Any]]
     as_of: str
     source: str

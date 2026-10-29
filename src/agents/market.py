@@ -10,8 +10,8 @@ Design patterns:
 Principle: ALL numbers come from pure Python (src/core/market_metrics.py). The
 LLM sees only the already-computed metrics as JSON and writes words; the number
 guard shared with the Portfolio agent rejects any summary that contains a number
-that was not in that JSON, and the agent then uses a fixed fallback text. The
-summary can never fail the request.
+that was not in that JSON. Only the summary step falls back (to a fixed text);
+any other failure is turned into an error result by BaseAgent.run().
 
 Input: state["market_params"] = {"tickers": ["AAPL", "TCS.NS"], "period": "6mo"}.
 """
@@ -23,7 +23,7 @@ from typing import Any
 from src.agents.base_agent import BaseAgent
 from src.core.market_history import fetch_histories, parse_request
 from src.core.market_metrics import (
-    build_metrics, comparison_rows, history_points, price_series, summary_input, ticker_metrics,
+    build_metrics, comparison_rows, history_points, price_series, summary_input, ticker_metrics, worst_source,
 )
 from src.core.market_models import MarketMetrics, TickerMetrics
 from src.core.models import AgentResult, MarketPayload
@@ -106,6 +106,7 @@ class MarketAgent(BaseAgent):
             "comparison": comparison_rows(metrics) if len(analysed) > 1 else [],
             "history": history,
             "as_of": metrics.as_of.isoformat() if metrics.as_of else "",
+            "source": worst_source([t.price_source for t in metrics.tickers]),
             "is_stale": metrics.uses_stale_or_sample,
             "warnings": all_warnings,
         }

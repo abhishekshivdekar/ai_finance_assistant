@@ -151,6 +151,7 @@ def test_short_history_omits_metrics_with_warnings_and_does_not_fail():
     assert found.range_52w is None and found.trend is None
     assert found.period_return_pct is not None and found.volatility_pct is not None
     assert warnings == [
+        "AAA: only 29 days of data for the requested 6mo; return, volatility and drawdown cover that shorter span.",
         "AAA: the 50-day average was left out (only 30 daily prices).",
         "AAA: the 52-week range was left out (the history covers only 29 days).",
         "AAA: the trend label was left out because a moving average or the return is missing.",
@@ -237,3 +238,50 @@ def test_summary_input_describes_a_fall_and_marks_missing_values_not_available()
     assert b["price_is_stale_or_sample"] is True
     assert mm.summary_input(MarketMetrics(period="1y", tickers=[sparse.model_copy(update={"averages": []})],
                                           warnings=[]), CFG)["tickers"][0]["moving_averages"] == ["not available"]
+
+
+# ---- history shorter than the requested period ----
+
+def test_span_days_and_short_history_rule():
+    assert mm.span_days([]) == 0 and mm.span_days(series([1, 2, 3])) == 2
+    # 182-day period, 15% tolerance: spans under 154.7 days are short
+    assert mm.is_short_history(154, 182, 15) is True
+    assert mm.is_short_history(155, 182, 15) is False
+    assert mm.is_short_history(0, 182, 0) is True and mm.is_short_history(182, 182, 0) is False
+
+
+def test_short_history_is_flagged_with_the_actual_span():
+    found, warnings = metrics_for([100 + i for i in range(30)])             # 29 days, 6mo asked
+    assert found.period_is_short is True and found.span_days == 29
+    assert warnings[0] == ("AAA: only 29 days of data for the requested 6mo; "
+                           "return, volatility and drawdown cover that shorter span.")
+    assert found.period_return_pct == pytest.approx((129 / 100 - 1) * 100)   # computed over those 29 days
+
+
+def test_full_history_is_not_flagged():
+    found, warnings = metrics_for([100 + i * 0.1 for i in range(300)], period="6mo")
+    assert found.period_is_short is False and found.span_days == 182
+    assert not any("days of data for the requested" in w for w in warnings)
+
+
+def test_summary_input_tells_the_model_the_shorter_span_only_when_short():
+    short, _ = metrics_for([100 + i for i in range(30)])
+    long_, _ = metrics_for([100 + i * 0.1 for i in range(300)])
+    short_input = mm.summary_input(mm.build_metrics([short], [], "6mo"), CFG)["tickers"][0]
+    long_input = mm.summary_input(mm.build_metrics([long_], [], "6mo"), CFG)["tickers"][0]
+    assert short_input["period_covered"] == "only 29 days of data (shorter than the requested period)"
+    assert "period_covered" not in long_input
+
+
+# ---- worst source ----
+
+@pytest.mark.parametrize("sources, expected", [
+    ([], ""),
+    (["live"], "live"),
+    (["live", "cache"], "cache"),
+    (["cache", "stale cache", "live"], "stale cache"),
+    (["stale cache", "sample data", "live"], "sample data"),
+    (["live", "something new"], "something new"),          # an unknown label is treated as the worst
+])
+def test_worst_source_follows_the_freshness_order(sources, expected):
+    assert mm.worst_source(sources) == expected

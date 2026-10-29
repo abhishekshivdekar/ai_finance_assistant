@@ -18,7 +18,28 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class ConfigError(Exception):
-    """Raised when configuration or a required secret is missing."""
+    """Raised when configuration or a required secret is missing or invalid."""
+
+
+def _validate_sma_windows(windows: Any) -> None:
+    """market_analysis.sma_windows must be [short, long]: two distinct positive ints, short < long."""
+    ok = (
+        isinstance(windows, list) and len(windows) == 2
+        and all(isinstance(w, int) and not isinstance(w, bool) and w > 0 for w in windows)
+        and windows[0] < windows[1]
+    )
+    if not ok:
+        raise ConfigError(
+            f"market_analysis.sma_windows must be two positive integers, short first "
+            f"and smaller than long (for example [20, 50]); got {windows!r}."
+        )
+
+
+def _validate(cfg: dict[str, Any]) -> None:
+    """Fail clearly on settings that would otherwise break an agent later."""
+    market = cfg.get("market_analysis")
+    if market is not None:
+        _validate_sma_windows(market.get("sma_windows"))
 
 
 @lru_cache(maxsize=1)
@@ -29,7 +50,9 @@ def get_config(path: str | None = None) -> dict[str, Any]:
     if not cfg_path.exists():
         raise ConfigError(f"Config file not found: {cfg_path}")
     with cfg_path.open("r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
+        cfg = yaml.safe_load(fh) or {}
+    _validate(cfg)
+    return cfg
 
 
 def get_secret(name: str, required: bool = True) -> str | None:

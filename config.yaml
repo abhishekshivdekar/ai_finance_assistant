@@ -191,6 +191,7 @@ market_analysis:              # Market agent (architecture section 2.3). All val
   sma_windows: [20, 50]       # trading days: short first, long last (the trend label compares these two)
   trading_days: 252           # trading days per year, to annualise volatility
   week52_min_days: 350        # calendar days the fetched history must span to report the 52-week range
+  short_history_tolerance_pct: 15   # history covering this much less than the period (percent) is flagged as short
   trend:
     return_threshold_pct: 3.0 # period return needed (up or down) for an Uptrend or Downtrend label
     sma_gap_pct: 0.5          # gap between the short and long average (percent of the long one) that counts as a difference
@@ -220,6 +221,9 @@ market_analysis:              # Market agent (architecture section 2.3). All val
       the 52-week range, with the numbers exactly as written there.
     - The trend label is based on the latest averages and the return over the
       selected period; say so briefly if you mention it.
+    - If a ticker has "period_covered", its return, volatility and drawdown cover
+      only that shorter span, not the whole analysis period: say so, and do not
+      call it a return over the analysis period.
     - If there are several tickers, you may compare their numbers side by side, but
       never rank them or call one better or worse.
     - Never predict future prices, never say what will happen, and never tell the

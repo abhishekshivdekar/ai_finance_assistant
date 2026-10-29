@@ -240,3 +240,41 @@ def test_usage_is_recorded_under_the_market_summary_role():
         assert registry.totals("market_summary")["output_tokens"] == 50
     finally:
         registry.reset()
+
+
+# ---- history shorter than the requested period ----
+
+def sample_snapshot_history(ticker):
+    """What SampleHandler returns for a history request: the snapshot rows, labelled "sample data"."""
+    entry = json.loads(open(CFG_SNAPSHOT, encoding="utf-8").read())["tickers"][ticker]
+    return MarketResult(data=entry["history"], currency=entry["currency"], as_of=T0, source="sample data", is_stale=True)
+
+
+CFG_SNAPSHOT = get_config()["market_data"]["snapshot_path"]
+
+
+def test_sample_snapshot_fallback_says_it_covers_a_shorter_span_than_6mo():
+    llm = FakeLLM()
+    agent, result = run(["AAPL"], {"AAPL": sample_snapshot_history("AAPL")}, llm=llm, period="6mo")
+    t = result["data"]["metrics"]["tickers"][0]
+    assert result["status"] == "ok" and t["period"] == "6mo"
+    assert t["period_is_short"] is True and t["span_days"] == 6          # 5 closes, 2026-10-21 to 2026-10-27
+    assert ("AAPL: only 6 days of data for the requested 6mo; "
+            "return, volatility and drawdown cover that shorter span.") in result["data"]["warnings"]
+    assert "only 6 days of data" in llm.calls[0]                            # the prompt input carries the span
+
+
+def test_full_length_history_has_no_short_history_warning():
+    _, result = run(["AAA"], TWO, period="6mo")
+    assert result["data"]["metrics"]["tickers"][0]["period_is_short"] is False
+    assert not any("days of data for the requested" in w for w in result["data"]["warnings"])
+
+
+# ---- payload source ----
+
+def test_payload_source_is_the_least_live_source_among_the_tickers():
+    histories = {"AAA": history(RISING), "BBB": history(FALLING, source="stale cache", stale=True)}
+    _, mixed = run(["AAA", "BBB"], histories)
+    assert mixed["data"]["source"] == "stale cache" and mixed["data"]["is_stale"] is True
+    _, live = run(["AAA"], TWO)
+    assert live["data"]["source"] == "live" and "quotes" not in live["data"]

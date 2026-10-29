@@ -12,8 +12,11 @@ One year of daily history is fetched per ticker and sliced here:
 So the trend label reflects the latest averages, not only the selected window.
 
 Every threshold comes from the `market_analysis:` config block (passed in as
-`cfg`). Values are illustrative. A metric without enough data is None and gets a
-warning; it never fails the ticker. Prices stay in the ticker's own currency.
+`cfg`). Values are illustrative. A metric that cannot be computed (too few
+closes) is None and gets a warning; it never fails the ticker. When the history
+is shorter than the requested period the metrics are still computed, but over the
+shorter span: the ticker is flagged (period_is_short) and a warning says so.
+Prices stay in the ticker's own currency.
 """
 from __future__ import annotations
 
@@ -26,6 +29,7 @@ from src.core.market_models import AverageMetric, MarketMetrics, Range52w, Ticke
 
 Series = list[tuple[date, float]]          # (day, close), oldest first
 NOT_AVAILABLE = "not available"
+SOURCE_ORDER = ("live", "cache", "stale cache", "sample data")   # best to worst (MarketResult.source)
 
 
 def _parse_day(value: Any) -> date | None:
@@ -55,6 +59,23 @@ def slice_period(series: Series, days: int) -> Series:
         return []
     cutoff = series[-1][0] - timedelta(days=days)
     return [item for item in series if item[0] >= cutoff]
+
+
+def span_days(series: Series) -> int:
+    """Calendar days between the first and the last close (0 for an empty series)."""
+    return (series[-1][0] - series[0][0]).days if series else 0
+
+
+def is_short_history(span: int, period_days: int, tolerance_pct: float) -> bool:
+    """True when `span` covers less than the requested period minus the tolerance (in percent)."""
+    return span < period_days * (1 - tolerance_pct / 100)
+
+
+def worst_source(sources: list[str]) -> str:
+    """The least live source in SOURCE_ORDER; an unknown label counts as the worst. "" for no sources."""
+    if not sources:
+        return ""
+    return max(sources, key=lambda s: SOURCE_ORDER.index(s) if s in SOURCE_ORDER else len(SOURCE_ORDER))
 
 
 def latest_and_day_change(closes: list[float]) -> tuple[float, float | None, float | None]:
@@ -148,7 +169,16 @@ def ticker_metrics(
         return None, [f"{ticker} was left out: not enough price history."]
     warnings: list[str] = []
     closes = [close for _, close in series]
-    window_closes = [close for _, close in slice_period(series, cfg["period_days"][period])]
+    period_days = cfg["period_days"][period]
+    window = slice_period(series, period_days)
+    window_closes = [close for _, close in window]
+    window_span = span_days(window)
+    short_history = is_short_history(window_span, period_days, cfg["short_history_tolerance_pct"])
+    if short_history:
+        warnings.append(
+            f"{ticker}: only {window_span} days of data for the requested {period}; "
+            "return, volatility and drawdown cover that shorter span."
+        )
     latest, change, change_pct = latest_and_day_change(closes)
 
     averages: dict[int, float] = {}
@@ -174,7 +204,8 @@ def ticker_metrics(
         warnings.append(f"{ticker}: the trend label was left out because a moving average or the return is missing.")
 
     return TickerMetrics(
-        ticker=ticker, currency=currency, period=period, latest_price=latest,
+        ticker=ticker, currency=currency, period=period, span_days=window_span,
+        period_is_short=short_history, latest_price=latest,
         day_change=change, day_change_pct=change_pct, period_return_pct=period_return,
         averages=[AverageMetric(window=w, value=v, price_vs_pct=price_vs_pct(latest, v)) for w, v in averages.items()],
         volatility_pct=volatility, max_drawdown_pct=max_drawdown_pct(window_closes),
@@ -238,8 +269,10 @@ def _ticker_summary(t: TickerMetrics) -> dict[str, Any]:
         drawdown = "no fall from an earlier high during the period"
     else:
         drawdown = f"{_pct(abs(t.max_drawdown_pct))} fall from a peak"
+    covered = {"period_covered": f"only {t.span_days} days of data (shorter than the requested period)"} if t.period_is_short else {}
     return {
         "ticker": t.ticker, "currency": t.currency, "latest_price": f"{t.latest_price:,.2f}",
+        **covered,
         "day_change": day,
         "return_over_period": NOT_AVAILABLE if t.period_return_pct is None else f"{t.period_return_pct:+.1f}%",
         "moving_averages": averages or [NOT_AVAILABLE],

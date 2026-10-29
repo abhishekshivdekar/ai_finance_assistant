@@ -154,3 +154,45 @@ def test_config_ttls_are_read():
     cfg = get_config()["market_data"]
     assert cfg["cache_ttl_minutes"] == 30
     assert pytest.approx(cfg["history_ttl_minutes"]) == 240
+
+
+class TickerInner(MarketDataProvider):
+    """Returns data that identifies the ticker, so a mix-up between threads would show."""
+
+    def _get_quote(self, symbol):
+        return MarketResult({"price": float(len(symbol)), "ticker": symbol}, "USD", START, "live")
+
+    def _get_history(self, symbol, period):
+        return MarketResult([{"ticker": symbol, "period": period}], "USD", START, "live")
+
+    def _get_news(self, symbol):
+        return MarketResult([], None, START, "live")
+
+
+def test_cached_provider_is_correct_under_concurrent_calls():
+    """Many threads, same and different tickers (as Market and Portfolio use it): no errors, no mix-ups."""
+    provider = CachedProvider(TickerInner(), clock=Clock(), sleep=lambda s: None)
+    tickers = ["AAPL", "MSFT", "TCS.NS", "RELIANCE.NS"]
+    errors: list[Exception] = []
+    barrier = threading.Barrier(16)
+
+    def work(n):
+        try:
+            barrier.wait()
+            for i in range(50):
+                ticker = tickers[(n + i) % len(tickers)]
+                quote = provider.get_quote(ticker)
+                history = provider.get_history(ticker, "1y")
+                assert quote.error is None and quote.data["ticker"] == ticker
+                assert history.error is None and history.data == [{"ticker": ticker, "period": "1y"}]
+                assert quote.source in ("live", "cache") and history.source in ("live", "cache")
+        except Exception as exc:                     # collected here so the main thread can assert on it
+            errors.append(exc)
+
+    threads = [threading.Thread(target=work, args=(n,)) for n in range(16)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert all(provider.get_quote(t).source == "cache" for t in tickers)

@@ -43,6 +43,8 @@ class TickerMetrics(_Frozen):
     ticker: str
     currency: str
     period: str                                # requested period, e.g. "6mo"
+    span_days: int = 0                         # calendar days the period slice really covers
+    period_is_short: bool = False              # history covers noticeably less than the requested period
     latest_price: float
     day_change: float | None
     day_change_pct: float | None
