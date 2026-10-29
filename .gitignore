@@ -10,3 +10,4 @@ src/rag/vector_store/*
 !src/rag/vector_store/.gitkeep
 *.db
 *.sqlite
+.claude/settings.local.json

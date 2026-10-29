@@ -1,0 +1,1 @@
+Finish the current step: run pytest and report passed count and src coverage; update docs/STATUS.md (Done, Next, Decisions, Open to-dos, Last updated); update docs/architecture.md if the implementation differs; make sure the working tree is clean and committed; then give the final report in the CLAUDE.md format.
