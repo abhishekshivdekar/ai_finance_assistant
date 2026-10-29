@@ -19,24 +19,18 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from src.core.models import MarketResult
+from src.data.errors import PermanentProviderError, TransientProviderError  # noqa: F401  (re-exported)
 from src.utils.config import get_config
 
 # US: AAPL, BRK-B, BF.B. NSE: RELIANCE.NS, M&M.NS. Index: ^NSEI, ^BSESN, ^GSPC.
 _US = re.compile(r"^[A-Z]{1,5}([.-][A-Z])?$")
 _NSE = re.compile(r"^[A-Z0-9&-]{1,20}\.NS$")
 _INDEX = re.compile(r"^\^[A-Z0-9]{2,10}$")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 class InvalidSymbolError(ValueError):
     """The ticker or period is empty or malformed."""
-
-
-class TransientProviderError(Exception):
-    """Temporary failure (network, timeout, rate limit): worth retrying."""
-
-
-class PermanentProviderError(Exception):
-    """Failure that retrying cannot fix (unknown ticker, no data)."""
 
 
 def validate_symbol(raw: Any) -> str:
@@ -55,6 +49,18 @@ def validate_period(period: Any) -> str:
     if period not in allowed:
         raise InvalidSymbolError(f"Invalid history period {period!r}.")
     return period
+
+
+def validate_news_query(raw: Any) -> str:
+    """Return the cleaned search phrase (control characters removed, spaces collapsed) or raise InvalidSymbolError."""
+    text = _CONTROL.sub(" ", raw) if isinstance(raw, str) else ""
+    query = " ".join(text.split())
+    if not query:
+        raise InvalidSymbolError("News search is empty.")
+    limit = get_config()["news"]["max_query_chars"]
+    if len(query) > limit:
+        raise InvalidSymbolError(f"News search is longer than {limit} characters.")
+    return query
 
 
 def error_result(message: str) -> MarketResult:
@@ -82,13 +88,13 @@ class MarketDataProvider(ABC):
             return error_result(str(exc))
         return self._get_history(symbol, period)
 
-    def get_news(self, ticker: str) -> MarketResult:
-        """Validated headline lookup."""
+    def get_news(self, query: str) -> MarketResult:
+        """Validated headline lookup for a search phrase (the News agent turns tickers into phrases)."""
         try:
-            symbol = validate_symbol(ticker)
+            phrase = validate_news_query(query)
         except InvalidSymbolError as exc:
             return error_result(str(exc))
-        return self._get_news(symbol)
+        return self._get_news(phrase)
 
     @abstractmethod
     def _get_quote(self, symbol: str) -> MarketResult:
@@ -99,5 +105,5 @@ class MarketDataProvider(ABC):
         """Fetch history for an already-validated symbol and period."""
 
     @abstractmethod
-    def _get_news(self, symbol: str) -> MarketResult:
-        """Fetch headlines for an already-validated symbol."""
+    def _get_news(self, query: str) -> MarketResult:
+        """Fetch headlines for an already-validated search phrase."""

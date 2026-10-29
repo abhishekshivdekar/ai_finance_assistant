@@ -10,6 +10,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 from dotenv import load_dotenv
@@ -52,6 +53,18 @@ def _validate_goal_planning(goal: dict[str, Any]) -> None:
         raise ConfigError("goal_planning horizon limits must satisfy 1 <= min <= max.")
 
 
+def _validate_news(news: dict[str, Any]) -> None:
+    """news: https base_url on an allowed host, positive limits, a query template for every kind of ticker."""
+    parts = urlparse(news["base_url"])
+    if parts.scheme != "https" or parts.hostname not in news["allowed_hosts"]:
+        raise ConfigError("news.base_url must be an https URL on a host listed in news.allowed_hosts.")
+    for key in ("timeout_seconds", "max_response_bytes", "max_items", "max_age_days", "max_query_chars", "title_max_chars"):
+        if not news[key] > 0:
+            raise ConfigError(f"news.{key} must be greater than zero.")
+    if not {"us", "nse", "index"} <= set(news["query_templates"]):
+        raise ConfigError("news.query_templates needs us, nse and index.")
+
+
 def _validate(cfg: dict[str, Any]) -> None:
     """Fail clearly on settings that would otherwise break an agent later."""
     market = cfg.get("market_analysis")
@@ -60,6 +73,9 @@ def _validate(cfg: dict[str, Any]) -> None:
     goal = cfg.get("goal_planning")
     if goal is not None:
         _validate_goal_planning(goal)
+    news = cfg.get("news")
+    if news is not None:
+        _validate_news(news)
 
 
 @lru_cache(maxsize=1)

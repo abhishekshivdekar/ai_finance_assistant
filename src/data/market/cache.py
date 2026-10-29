@@ -63,7 +63,8 @@ class CachedProvider(MarketDataProvider):
             )
         )
 
-    def _get_news(self, symbol: str) -> MarketResult:
+    def _get_news(self, query: str) -> MarketResult:
+        """News is cached per search phrase (case-insensitive), with the quote TTL."""
         return self._chain.handle(
-            Request("news", symbol, None, lambda: self._inner.get_news(symbol), self._quote_ttl)
+            Request("news", query.casefold(), None, lambda: self._inner.get_news(query), self._quote_ttl)
         )

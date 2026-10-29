@@ -68,6 +68,23 @@ class GoalPayload(TypedDict, total=False):
     warnings: list[str]
 
 
+class NewsPayload(TypedDict, total=False):
+    """News agent data: the headlines actually fetched, their freshness and the summary's citations.
+
+    `items` are {number, title, publisher, published (ISO, UTC), link}; they are always the
+    fetched data, never LLM output. `summary_citations` lists the headline numbers the summary
+    cites (empty when the fixed fallback line is shown).
+    """
+
+    query: str
+    items: list[dict[str, Any]]
+    as_of: str
+    source: str
+    is_stale: bool
+    warnings: list[str]
+    summary_citations: list[int]
+
+
 class TaxPayload(TypedDict, total=False):
     """Tax education data: inputs, config values used and calculation steps."""
 
@@ -95,7 +112,7 @@ class AgentResult(TypedDict):
     answer: str
     sources: list[Source]
     error: str | None
-    data: MarketPayload | PortfolioPayload | GoalPayload | TaxPayload | QAPayload | None
+    data: MarketPayload | PortfolioPayload | GoalPayload | NewsPayload | TaxPayload | QAPayload | None
 
 
 @dataclass

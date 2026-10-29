@@ -21,6 +21,7 @@ from typing import Any, Callable
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.base_agent import BaseAgent
+from src.core.citations import apply_citations
 from src.core.llm_factory import get_llm
 from src.core.models import AgentResult, QAPayload
 from src.rag.retriever import (
@@ -33,10 +34,6 @@ from src.rag.retriever import (
 )
 from src.utils.config import get_config
 from src.workflow.state import GraphState
-
-# "[1]", "[1, 2]" and "[1,2]" are one group each; "[1][2]" is two groups.
-_CITATION = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
-
 
 def clean_rewrite(text: str, max_chars: int) -> str:
     """Return a usable search query from the rewrite reply, or "" if it is malformed.
@@ -57,36 +54,6 @@ def clean_rewrite(text: str, max_chars: int) -> str:
             return ""
         query = head.rsplit(" ", 1)[0].strip(" ,;:-")
     return query
-
-
-def _numbers(group: str) -> list[int]:
-    """'1, 2' -> [1, 2]."""
-    return [int(n) for n in re.findall(r"\d+", group)]
-
-
-def apply_citations(answer: str, chunks: list[RetrievedChunk]) -> tuple[str, list[RetrievedChunk]]:
-    """Keep only citations that exist, renumber them 1..m, return the cited chunks.
-
-    Example: with 4 context chunks the reply "A [3]. B [1][9]. C [3, 1]." becomes
-    "A [1]. B [2]. C [1, 2]." and the cited chunks are [chunk 3, chunk 1], so the
-    Sources list lines up with the numbers the reader sees. [9] does not exist
-    and is removed.
-    """
-    order: list[int] = []
-    for match in _CITATION.finditer(answer):
-        for n in _numbers(match.group(1)):
-            if 1 <= n <= len(chunks) and n not in order:
-                order.append(n)
-    new_number = {n: i for i, n in enumerate(order, start=1)}
-
-    def renumber(match: re.Match[str]) -> str:
-        nums = list(dict.fromkeys(new_number[n] for n in _numbers(match.group(1)) if n in new_number))
-        return "[" + ", ".join(str(n) for n in nums) + "]" if nums else ""
-
-    text = _CITATION.sub(renumber, answer)
-    text = re.sub(r"[ \t]+([.,;:!?])", r"\1", text)  # space left before punctuation
-    text = re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", text)  # double space left in the middle
-    return text.strip(), [chunks[n - 1] for n in order]
 
 
 class FinanceQAAgent(BaseAgent):

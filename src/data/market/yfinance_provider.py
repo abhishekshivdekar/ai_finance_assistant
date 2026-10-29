@@ -3,7 +3,8 @@
 Design pattern: STRATEGY. YFinanceProvider is the MVP strategy behind the
 MarketDataProvider interface. Example: get_quote("RELIANCE.NS") returns the
 price with currency "INR" exactly as yfinance reports it; this class never
-decides a currency itself.
+decides a currency itself. News comes from a second, injected Strategy
+(NewsSource), so the cache and fallback chain wrap both with no extra code.
 
 All yfinance access lives in one function, _yf_call, so tests patch it and
 never touch the network.
@@ -22,6 +23,8 @@ from src.data.market.provider import (
     PermanentProviderError,
     TransientProviderError,
 )
+from src.data.news.google_rss import GoogleNewsRssSource
+from src.data.news.source import NewsSource
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -66,7 +69,7 @@ _TRANSIENT_NAMES = {
 
 
 def _yf_call(kind: str, ticker: str, period: str | None = None) -> Any:
-    """The ONLY place that talks to yfinance. kind: quote | history | news."""
+    """The ONLY place that talks to yfinance. kind: quote | history."""
     yf = load_yfinance()
     handle = yf.Ticker(ticker)
     if kind == "quote":
@@ -76,12 +79,10 @@ def _yf_call(kind: str, ticker: str, period: str | None = None) -> Any:
             "previous_close": _fast(info, "previous_close"),
             "currency": _fast(info, "currency"),
         }
-    if kind == "history":
-        return {
-            "frame": handle.history(period=period),
-            "currency": _fast(handle.fast_info, "currency"),
-        }
-    return handle.news
+    return {
+        "frame": handle.history(period=period),
+        "currency": _fast(handle.fast_info, "currency"),
+    }
 
 
 def _fast(info: Any, key: str) -> Any:
@@ -113,39 +114,16 @@ def _num(value: Any) -> float | None:
     return float(value)
 
 
-def _parse_news(items: Any) -> list[dict[str, Any]]:
-    """Normalise headlines from the old flat and newer 'content' yfinance shapes."""
-    parsed: list[dict[str, Any]] = []
-    if not isinstance(items, list):
-        return parsed
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        body = item.get("content") if isinstance(item.get("content"), dict) else item
-        title = body.get("title")
-        if not title:
-            continue
-        provider = body.get("provider") if isinstance(body.get("provider"), dict) else {}
-        canonical = body.get("canonicalUrl") if isinstance(body.get("canonicalUrl"), dict) else {}
-        published = body.get("providerPublishTime")
-        if isinstance(published, (int, float)):
-            published = datetime.fromtimestamp(published, tz=timezone.utc).isoformat()
-        parsed.append(
-            {
-                "title": title,
-                "publisher": body.get("publisher") or provider.get("displayName"),
-                "link": body.get("link") or canonical.get("url"),
-                "published": published or body.get("pubDate"),
-            }
-        )
-    return parsed
-
-
 class YFinanceProvider(MarketDataProvider):
-    """Live market data from yfinance (raises Transient/Permanent errors)."""
+    """Live quotes and history from yfinance (raises Transient/Permanent errors).
 
-    def __init__(self, clock: Callable[[], datetime] | None = None) -> None:
+    Headlines are not available from yfinance in a usable form, so get_news is
+    delegated to an injected NewsSource (default: Google News RSS, architecture section 6).
+    """
+
+    def __init__(self, clock: Callable[[], datetime] | None = None, news_source: NewsSource | None = None) -> None:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._news = news_source if news_source is not None else GoogleNewsRssSource(clock=self._clock)
 
     def _fetch(self, kind: str, symbol: str, period: str | None = None) -> Any:
         try:
@@ -187,5 +165,5 @@ class YFinanceProvider(MarketDataProvider):
             )
         return self._result(rows, raw.get("currency"))
 
-    def _get_news(self, symbol: str) -> MarketResult:
-        return self._result(_parse_news(self._fetch("news", symbol)), None)
+    def _get_news(self, query: str) -> MarketResult:
+        return self._result(self._news.fetch(query), None)

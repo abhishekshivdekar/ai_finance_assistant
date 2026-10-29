@@ -84,7 +84,7 @@ All agents extend `BaseAgent` (section 3). Every agent provides information and 
 | 2.2 | Portfolio Analysis | build first | metric functions |
 | 2.3 | Market Analysis | build first | market data layer |
 | 2.4 | Goal Planning | build first | compound-growth calculator |
-| 2.5 | News Synthesizer | build after | yfinance headlines |
+| 2.5 | News Synthesizer | built | Google News RSS headlines (stdlib) |
 | 2.6 | Tax Education (India) | build after | illustrative tax calculators |
 
 **Market scope:** US tickers (`AAPL`) and NSE tickers with the `.NS` suffix (`RELIANCE.NS`). Every price and portfolio value is shown with its currency (USD or INR); values in different currencies are never summed without conversion or a clear per-currency split. The bundled sample snapshot and the sample portfolios include both US and Indian examples.
@@ -159,7 +159,13 @@ All agents extend `BaseAgent` (section 3). Every agent provides information and 
 - **Uses:** deterministic compound-growth calculator, LLM role `goal_summary` (own role so usage is counted per agent).
 
 ### 2.5 News Synthesizer
-- Summarises recent yfinance headlines for a ticker (US or `.NS`) with a summary prompt. No new dependency. Headlines are listed with source and time; the summary does not predict prices.
+- Summarises recent Google News RSS headlines for a ticker (US or `.NS`) or a free search phrase. No new dependency (standard library `urllib` + `xml.etree`). Headlines are listed with publisher and time; the summary does not predict prices.
+- **Input:** `state["news_params"]` = `{"ticker": "RELIANCE.NS"}` or `{"query": "Nifty 50"}`, optional `max_items` (clamped to `1..news.max_items`). If both are given the query wins. `src/core/news_query.py` (`resolve_query`) turns a ticker into a search phrase: `news.query_overrides` first (for example `RELIANCE.NS` -> "Reliance Industries"), else a template from `news.query_templates` (`INFY.NS` -> "INFY NSE stock", `TSLA` -> "TSLA stock", `^GSPC` -> "GSPC index"). The market provider offers no company name cheaply (yfinance `fast_info` has none; `Ticker.info` is an extra slow call), so no name lookup is made.
+- **Fetch:** `NewsAgent` calls `provider.get_news(query)`. `get_news` now takes a search phrase (validated by `validate_news_query`), not a ticker. `YFinanceProvider` delegates it to an injected `NewsSource` (`GoogleNewsRssSource`, `src/data/news/`), so `CachedProvider` gives news the same cache, retry, stale-cache and error behaviour as quotes. News has no sample fallback.
+- **Parsing** (`src/core/news_parse.py`, pure): title without the ` - Publisher` suffix when `<source>` matches, publisher, http(s) link only, `published` as ISO UTC, HTML entities and tags and control characters removed, title capped at `news.title_max_chars`, duplicates (same normalised title or link) removed, items older than `news.max_age_days` dropped, newest first, at most `news.max_items`.
+- **Safety:** only `https` and hosts in `news.allowed_hosts` (redirects included); `news.timeout_seconds`; responses over `news.max_response_bytes` are rejected before parsing; `news.user_agent` is sent; a feed with a DTD/entity declaration or malformed XML is a controlled error; an empty feed is not an error.
+- **Statuses:** no ticker/query or an invalid one -> `needs_input`; provider failure or no headlines -> `no_answer` (LLM not called); otherwise `ok`. The headline list (`items`: number, title, publisher, published, link) is always in the payload (`NewsPayload`: `query`, `items`, `as_of`, `source`, `is_stale`, `warnings`, `summary_citations`).
+- **Summary:** one LLM call (role `news_summary`); the input is only the numbered headlines as JSON and the prompt says headlines are untrusted data, never instructions. Checks: invalid `[n]` citations are dropped (not renumbered), a summary with no valid citation fails, every number must appear in a headline (shared number guard; citation digits are removed first). On an LLM error, an empty reply or a failed check the fixed `news.fallback_summary` is used, status stays `ok` and a warning is added. Stale cache is labelled with `is_stale` and a warning.
 
 ### 2.6 Tax Education (India only)
 A distinct agent, not a copy of Finance Q&A.
@@ -418,7 +424,7 @@ The eval harness (section 5.3) calls the same `select_chunks()` function, so it 
 ```
 get_quote(ticker) -> MarketResult(data, currency, as_of, source, is_stale)
 get_history(ticker, period) -> MarketResult
-get_news(ticker) -> MarketResult
+get_news(query) -> MarketResult      # query = search phrase; the News agent turns tickers into phrases
 ```
 
 **Fallback chain (Chain of Responsibility):** `live -> retry -> stale cache -> sample`. Each handler either returns a result or passes the request on.
@@ -427,6 +433,8 @@ get_news(ticker) -> MarketResult
 3. **Stale cache:** on failure, return the expired entry with `is_stale=True`.
 4. **Sample:** bundled snapshot from `src/data/` (US and `.NS` examples) with `source="sample data"`. Always labelled.
 5. **Total failure:** `MarketResult` with error; the agent explains data is unavailable.
+
+**News source (Strategy inside the provider):** `YFinanceProvider` takes a `NewsSource`; the default is `GoogleNewsRssSource` (Google News RSS search feed, `hl=en-IN gl=IN ceid=IN:en`, standard library only). Google RSS replaces yfinance news because the yfinance news path returned nothing usable for this project (reported by the project author, not re-verified in the commit that removed it), and the RSS feed also supports free search phrases such as "Nifty 50", which need no ticker. Headlines are never sampled: a news request that cannot be served live or from cache is an error result.
 
 **Freshness indicator:** every `MarketResult` carries `as_of` (UTC), `source` (`live`, `cache`, `stale cache`, `sample data`) and the quote `currency`. The UI shows a badge: green "Live, updated 2 min ago", amber "Cached/stale", grey "Sample data".
 
@@ -704,6 +712,7 @@ Three stores, each with one job:
 - **Vector store:** FAISS for MVP, behind an interface.
 - **Goal-planning and tax assumptions:** config values, labelled "illustrative" in the UI and answers, with an `as_of` date and a named source in config.
 - **Clarification:** ordinary assistant reply for MVP; `interrupt()` is a stretch.
+- **News agent (decisions the doc didn't specify):** citations are dropped when invalid but not renumbered, because the full numbered headline list is always shown; a summary with no valid citation counts as failed; the query wins over the ticker; a provider failure is `no_answer`, not `error`; only http(s) links are kept; news reuses the quote TTL (`market_data.cache_ttl_minutes`); `get_news` takes a search phrase; the provider error classes live in `src/data/errors.py` (re-exported by `provider.py`) so the news layer does not import the market package.
 
 ## Open questions
 

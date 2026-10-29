@@ -31,3 +31,11 @@ def test_market_result_defaults():
 def test_market_result_error():
     result = MarketResult(data=None, currency=None, as_of=None, source="live", error="boom")
     assert result.error == "boom"
+
+
+def test_news_payload_keys_and_envelope_accepts_it():
+    from src.core.models import NewsPayload
+
+    assert set(NewsPayload.__annotations__) == {
+        "query", "items", "as_of", "source", "is_stale", "warnings", "summary_citations"}
+    assert "NewsPayload" in str(AgentResult.__annotations__["data"])

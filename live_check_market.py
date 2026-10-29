@@ -22,7 +22,7 @@ def main() -> None:
     h = show("history RELIANCE.NS 1mo", provider.get_history("RELIANCE.NS", "1mo"))
     if h.data:
         print("    rows:", len(h.data), "last:", h.data[-1])
-    n = show("news AAPL", provider.get_news("AAPL"))
+    n = show("news Apple stock", provider.get_news("Apple stock"))
     if n.data:
         print("    first headline:", n.data[0])
     show("bad ticker '???'", provider.get_quote("???"))

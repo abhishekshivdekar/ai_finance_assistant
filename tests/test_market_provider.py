@@ -72,14 +72,15 @@ def test_valid_input_reaches_hooks_normalised():
     rec = Recorder()
     rec.get_quote(" aapl ")
     rec.get_history("^nsei", "1mo")
-    rec.get_news("tcs.ns")
-    assert rec.calls == [("quote", "AAPL"), ("history", "^NSEI", "1mo"), ("news", "TCS.NS")]
+    rec.get_news("  Nifty \x00 50  ")
+    assert rec.calls == [("quote", "AAPL"), ("history", "^NSEI", "1mo"), ("news", "Nifty 50")]
 
 
 def test_invalid_input_returns_error_result_without_hook_call():
     rec = Recorder()
     for result in (rec.get_quote(""), rec.get_history("???", "1mo"),
-                   rec.get_history("AAPL", "bad"), rec.get_news("AAPL.BO")):
+                   rec.get_history("AAPL", "bad"), rec.get_news("   "), rec.get_news(None),
+                   rec.get_news("x" * 500)):
         assert result.error
         assert result.data is None and result.source == "none"
     assert rec.calls == []

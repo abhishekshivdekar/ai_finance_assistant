@@ -45,6 +45,7 @@ class GraphState(TypedDict):
     portfolio: list[dict[str, Any]] | None  # from Portfolio tab / profile store
     goal_params: dict[str, Any] | None  # from Goals tab
     market_params: dict[str, Any] | None  # from Market tab: {"tickers": [...], "period": "6mo"}
+    news_params: dict[str, Any] | None  # from the News tab / router: {"ticker": "AAPL"} or {"query": "Nifty 50"}
     topic_filter: str | None  # set by the Chat tab dropdown; the facade passes it to the retriever
     final_answer: str
 

@@ -83,3 +83,7 @@ def test_current_errors_ignores_previous_turn():
 def test_missing_keys_give_empty_lists():
     assert current_results({"turn_id": "t1"}) == []
     assert current_errors({"turn_id": "t1"}) == []
+
+
+def test_news_params_is_a_typed_state_key():
+    assert "news_params" in get_type_hints(GraphState)

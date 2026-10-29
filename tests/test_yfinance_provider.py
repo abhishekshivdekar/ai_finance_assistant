@@ -7,7 +7,9 @@ import pytest
 
 from src.data.market import yfinance_provider as yfp
 from src.data.market.provider import PermanentProviderError, TransientProviderError
-from src.data.market.yfinance_provider import YFinanceProvider, _classify, _parse_news
+from src.data.market.yfinance_provider import YFinanceProvider, _classify
+from src.data.news.google_rss import GoogleNewsRssSource
+from src.data.news.source import NewsSource
 
 NOW = datetime(2026, 10, 27, 12, 0, tzinfo=timezone.utc)
 
@@ -76,36 +78,25 @@ def test_empty_history_is_permanent(monkeypatch, raw):
         p.get_history("AAPL", "1mo")
 
 
-def test_news_old_shape():
-    items = [{"title": "T", "publisher": "Pub", "link": "http://x", "providerPublishTime": 1_700_000_000}]
-    parsed = _parse_news(items)
-    assert parsed[0]["title"] == "T" and parsed[0]["publisher"] == "Pub"
-    assert parsed[0]["published"].startswith("2023-11-14")
+class FakeNewsSource(NewsSource):
+    def __init__(self):
+        self.queries = []
+
+    def fetch(self, query):
+        self.queries.append(query)
+        return [{"title": "T", "publisher": "Pub", "link": "https://x.test/1", "published": "2026-10-27T01:00:00+00:00"}]
 
 
-def test_news_new_content_shape():
-    items = [
-        {
-            "content": {
-                "title": "New", "pubDate": "2026-10-27T01:00:00Z",
-                "provider": {"displayName": "Wire"}, "canonicalUrl": {"url": "http://y"},
-            }
-        }
-    ]
-    assert _parse_news(items) == [
-        {"title": "New", "publisher": "Wire", "link": "http://y", "published": "2026-10-27T01:00:00Z"}
-    ]
-
-
-@pytest.mark.parametrize("raw", [None, "text", {}, [None, 5, {}, {"content": {}}, {"content": "x"}]])
-def test_news_malformed_is_defensive(raw):
-    assert _parse_news(raw) == []
-
-
-def test_news_provider_returns_ok_result(monkeypatch):
-    p = _provider(monkeypatch, lambda kind, t, period=None: [{"title": "T"}])
-    result = p.get_news("AAPL")
+def test_news_is_delegated_to_the_injected_source():
+    source = FakeNewsSource()
+    result = YFinanceProvider(clock=lambda: NOW, news_source=source).get_news("Apple stock")
+    assert source.queries == ["Apple stock"]
     assert result.data[0]["title"] == "T" and result.currency is None and result.error is None
+    assert result.source == "live" and result.as_of == NOW
+
+
+def test_default_news_source_is_google_news_rss():
+    assert isinstance(YFinanceProvider()._news, GoogleNewsRssSource)
 
 
 class YFRateLimitError(Exception):
@@ -147,7 +138,6 @@ class FakeFastInfo(dict):
 class FakeTicker:
     def __init__(self, symbol):
         self.fast_info = FakeFastInfo(last_price=10.0, previous_close=9.0, currency="USD")
-        self.news = [{"title": "N"}]
 
     def history(self, period=None):
         return pd.DataFrame({"Close": [1.0]}, index=pd.to_datetime(["2026-10-27"]))
@@ -164,7 +154,6 @@ def test_yf_call_with_fake_module(fake_yfinance):
     assert yfp._yf_call("quote", "AAPL") == {"price": 10.0, "previous_close": 9.0, "currency": "USD"}
     hist = yfp._yf_call("history", "AAPL", "1mo")
     assert hist["currency"] == "USD" and len(hist["frame"]) == 1
-    assert yfp._yf_call("news", "AAPL") == [{"title": "N"}]
 
 
 def test_fast_returns_none_for_missing_key():
