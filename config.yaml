@@ -272,6 +272,25 @@ goal_planning:                # Goal Planning agent (architecture section 2.4). 
   labels:
     goal_future_money: Goal in future money (adjusted for inflation)
     projection_todays_money: Projection in today's money (adjusted for inflation)
+  required_labels:            # {pct} is the yearly step-up in percent
+    plain: monthly amount needed to reach the goal
+    step_up: starting monthly amount (rises {pct}% a year)
+    goal_met: minimum monthly amount to still reach the goal
+    goal_met_step_up: minimum monthly amount to still reach the goal (starting amount, rises {pct}% a year)
+  texts:                      # precomputed wording for the commentary input
+    already_met: already met by the current savings
+    not_within_max: not within the maximum period
+    within_horizon: within the horizon
+    after_horizon: after the end of the horizon
+    years_one: "{n} year"
+    years_many: "{n} years"
+    months_one: "{n} month"
+    months_many: "{n} months"
+    surplus: "surplus of {amount}"
+    shortfall: "shortfall of {amount}"
+    exact: no surplus or shortfall (the goal is met exactly)
+    goal_today: "The goal of {amount} is stated in today's money."
+    goal_inflated: "With inflation of {rate} a year over {years}, the same goal would need about {amount} in future money."
   errors:
     not_a_number: "{field} must be a number."
     must_be_positive: "{field} must be greater than zero."
@@ -296,17 +315,26 @@ goal_planning:                # Goal Planning agent (architecture section 2.4). 
     Below is a JSON summary of numbers that were already calculated by software.
 
     Format:
-    - Write ONE short paragraph, then two or three short bullet lines (start each with "- ").
-    - Plain beginner language. Describe what the numbers show; do not give advice.
+    - Write ONE short paragraph, then one bullet line per scenario (start each with "- "),
+      then ONE closing sentence.
+    - Plain beginner language and plain words. Do not quote field names or labels from
+      the JSON; describe them in your own words. Describe what the numbers show; do not give advice.
+    - In the paragraph, say that the results come from illustrative assumptions and
+      are not predictions or guaranteed returns, and say in one sentence how the time
+      needed to reach the goal compares with the horizon.
+    - In each bullet, state the surplus or shortfall for that scenario and, if a time
+      to reach the goal is given, the time to reach the goal at the current monthly amount.
+    - The closing sentence lists in general terms what changes the outcome: the monthly
+      amount, the time horizon, the risk profile and the yearly step-up. Use observation
+      wording only.
 
     Rules:
     - Use ONLY numbers that appear in the JSON, copied exactly as written. Do not
       calculate, round, or invent a number, and do not convert any amount to
       lakh, crore or any other form (keep the western grouping with commas).
-    - Say clearly that the results come from illustrative assumptions (see
-      "assumptions") and are not predictions or guaranteed returns.
-    - If "inflation" says it was applied, say which figures are in future money
-      and which are in today's money, using the labels in the JSON.
+    - The results are illustrative assumptions and are not predictions or guaranteed returns.
+    - If inflation was applied, say which goal figure is in today's money and which
+      is in future money, using the plain-words sentences in the JSON.
     - Never predict future returns or markets, never recommend a product or fund,
       and never say "you should"; use observation wording such as "in the
       expected scenario the savings reach ..." or "a monthly amount of ... would

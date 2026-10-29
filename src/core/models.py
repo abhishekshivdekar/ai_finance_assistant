@@ -60,6 +60,7 @@ class GoalPayload(TypedDict, total=False):
     scenarios: list[dict[str, Any]]
     projections: list[dict[str, Any]]
     required_monthly_contribution: dict[str, float]
+    required_labels: dict[str, str]
     months_to_goal: dict[str, int | None]
     shortfall: dict[str, float]
     inflation: dict[str, Any]

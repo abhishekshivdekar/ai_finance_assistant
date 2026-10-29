@@ -105,6 +105,7 @@ class GoalPlanningAgent(BaseAgent):
             "scenarios": [s.model_dump(mode="json") for s in scenarios],
             "projections": plan.projection_rows,
             "required_monthly_contribution": {s.name: s.required_monthly_contribution for s in scenarios},
+            "required_labels": {s.name: s.required_label for s in scenarios},
             "months_to_goal": {s.name: s.months_to_goal for s in scenarios},
             "shortfall": {s.name: s.shortfall for s in scenarios},
             "inflation": inflation_block(plan, cfg),

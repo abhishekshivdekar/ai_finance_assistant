@@ -122,8 +122,56 @@ def test_the_prompt_forbids_advice_predictions_and_number_conversion():
     assert "lakh" in prompt and "crore" in prompt and "western grouping" in prompt
     assert "illustrative assumptions" in prompt and "not predictions or guaranteed returns" in prompt
     assert "never recommend a product or fund" in prompt and 'never say "you should"' in prompt
-    assert "ONE short paragraph, then two or three short bullet lines" in prompt
     assert prompt.count("{results_json}") == 1
+
+
+def test_the_prompt_asks_for_plain_words_per_scenario_results_and_a_closing_sentence():
+    prompt = " ".join(CFG["summary_prompt"].split())
+    assert "Do not quote field names or labels" in prompt and "plain words" in prompt
+    assert "ONE short paragraph, then one bullet line per scenario" in prompt and "then ONE closing sentence" in prompt
+    assert "state the surplus or shortfall for that scenario" in prompt
+    assert "the time to reach the goal at the current monthly amount" in prompt
+    assert "how the time needed to reach the goal compares with the horizon" in prompt
+    assert "the monthly amount, the time horizon, the risk profile and the yearly step-up" in prompt
+    assert "Use observation wording only" in prompt
+
+
+def test_the_inflation_part_of_the_json_is_two_plain_sentences():
+    llm, _ = run({**PARAMS, "inflation_adjust": True})
+    assert set(sent_json(llm)["inflation"]) == {"goal_in_todays_money_text", "goal_in_future_money_text"}
+
+
+# ---- the new precomputed text passes the number guard ----
+
+def test_text_copied_from_the_new_fields_passes_the_number_guard():
+    probe, _ = run({**PARAMS, "inflation_adjust": True})
+    sent = sent_json(probe)
+    parts = [sent["inflation"]["goal_in_todays_money_text"], sent["inflation"]["goal_in_future_money_text"]]
+    for s in sent["scenarios"]:
+        parts.append(f"{s['scenario']}: {s['surplus_or_shortfall_text']}, {s['years_months_to_goal']}, "
+                     f"{s['monthly_amount']} ({s['monthly_amount_meaning']}).")
+    reply = " ".join(parts)
+    assert "years" in reply and "month" in reply
+    _, result = run({**PARAMS, "inflation_adjust": True}, llm=FakeLLM(reply=reply))
+    assert result["answer"] == reply and result["data"]["warnings"] == []
+
+
+def test_a_years_and_months_figure_that_was_not_calculated_is_rejected():
+    _, result = run(llm=FakeLLM(reply="It would take 97 years 11 months."))
+    assert result["answer"] == CFG["summary_fallback"].strip()
+
+
+def test_payload_labels_follow_step_up_and_goal_met():
+    hard = {**PARAMS, "goal_amount": 50_000_000}
+    _, stepped = run(hard)
+    assert stepped["data"]["required_labels"]["expected"] == "starting monthly amount (rises 5% a year)"
+    assert stepped["data"]["scenarios"][1]["required_label"] == stepped["data"]["required_labels"]["expected"]
+    _, plain = run({**hard, "annual_step_up_pct": 0})
+    assert plain["data"]["required_labels"]["expected"] == "monthly amount needed to reach the goal"
+    _, met_step = run()                                  # the expected scenario already exceeds the goal
+    assert met_step["data"]["required_labels"]["expected"].startswith("minimum monthly amount to still reach the goal")
+    _, met = run({**PARAMS, "current_savings": 5_000_000, "annual_step_up_pct": 0})
+    assert set(met["data"]["required_labels"].values()) == {"minimum monthly amount to still reach the goal"}
 
 
 # ---- guarded commentary ----

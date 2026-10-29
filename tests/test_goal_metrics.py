@@ -201,20 +201,62 @@ def test_summary_input_has_only_preformatted_text_and_the_assumptions():
 def test_summary_input_describes_shortfall_surplus_exact_and_timing():
     cfg = zero_cfg()
     short = gm.summary_input(gm.build_plan(inputs(monthly_contribution=10.0), cfg), cfg)["scenarios"][0]
-    assert short["result_against_goal"] == "shortfall of 11,880.00"
-    assert short["time_to_reach_goal_at_current_contribution"] == cfg["not_reached_note"].format(months=600)
+    assert short["surplus_or_shortfall_text"] == "shortfall of 11,880.00"
+    assert short["years_months_to_goal"] == "not within the maximum period"
+    assert short["time_compared_with_horizon"] == "not within the maximum period"
     exact = gm.summary_input(gm.build_plan(inputs(), cfg), cfg)["scenarios"][0]
-    assert exact["result_against_goal"] == "goal met exactly"
-    assert exact["time_to_reach_goal_at_current_contribution"] == "12 months"
-    over = gm.summary_input(gm.build_plan(inputs(goal_amount=100.0, current_savings=500.0, monthly_contribution=0.0), cfg), cfg)["scenarios"][0]
-    assert over["result_against_goal"] == "goal reached, surplus of 400.00"
-    assert over["time_to_reach_goal_at_current_contribution"] == "already met"
+    assert exact["surplus_or_shortfall_text"] == "no surplus or shortfall (the goal is met exactly)"
+    assert exact["years_months_to_goal"] == "1 year" and exact["time_compared_with_horizon"] == "within the horizon"
+    met = inputs(goal_amount=100.0, current_savings=500.0, monthly_contribution=0.0)
+    over = gm.summary_input(gm.build_plan(met, cfg), cfg)["scenarios"][0]
+    assert over["surplus_or_shortfall_text"] == "surplus of 400.00"
+    assert over["years_months_to_goal"] == "already met by the current savings"
+    assert over["time_compared_with_horizon"] == "already met by the current savings"
 
 
-def test_summary_input_gives_both_goal_figures_when_inflation_is_applied():
+def test_summary_input_gives_plain_words_for_both_goal_figures_when_inflation_is_applied():
     plan = gm.build_plan(inputs(goal_amount=100_000.0, horizon_years=2, inflation_adjust=True), CFG)
     data = gm.summary_input(plan, CFG)
-    assert data["inflation"]["goal_in_todays_money"] == "100,000.00"
-    assert data["inflation"]["goal_in_future_money"] == "110,250.00"
-    assert data["inflation"]["applied_at"] == "5.0% a year"
-    assert "projected_value_at_end_in_todays_money" in data["scenarios"][0]
+    assert data["inflation"]["goal_in_todays_money_text"] == "The goal of 100,000.00 is stated in today's money."
+    assert data["inflation"]["goal_in_future_money_text"] == (
+        "With inflation of 5.0% a year over 2 years, the same goal would need about 110,250.00 in future money.")
+    assert "labels" not in data["inflation"] and "projected_value_at_end_in_todays_money" in data["scenarios"][0]
+
+
+@pytest.mark.parametrize("months, text", [
+    (1, "1 month"), (5, "5 months"), (12, "1 year"), (24, "2 years"), (208, "17 years 4 months"), (13, "1 year 1 month"),
+])
+def test_years_months_text(months, text):
+    assert gm.years_months_text(months, CFG) == text
+
+
+def test_time_after_the_horizon_is_compared_with_it():
+    cfg = zero_cfg()
+    late = gm.summary_input(gm.build_plan(inputs(goal_amount=20_000.0), cfg), cfg)["scenarios"][0]
+    assert late["years_months_to_goal"] == "1 year 8 months"
+    assert late["time_compared_with_horizon"] == "after the end of the horizon"
+
+
+# ---- required-amount labels ----
+
+@pytest.mark.parametrize("met, step_up, text", [
+    (False, 0, "monthly amount needed to reach the goal"),
+    (False, 5, "starting monthly amount (rises 5% a year)"),
+    (False, 2.5, "starting monthly amount (rises 2.5% a year)"),
+    (True, 0, "minimum monthly amount to still reach the goal"),
+    (True, 5, "minimum monthly amount to still reach the goal (starting amount, rises 5% a year)"),
+])
+def test_required_label(met, step_up, text):
+    assert gm.required_label(met, step_up, CFG) == text
+
+
+def test_plan_labels_follow_step_up_and_whether_the_goal_is_met():
+    cfg = zero_cfg()
+    plain = gm.build_plan(inputs(goal_amount=1e6), cfg).scenarios[0]
+    assert plain.required_label == "monthly amount needed to reach the goal"
+    stepped_inputs = inputs(goal_amount=1e6, annual_step_up_pct=5.0)
+    assert gm.build_plan(stepped_inputs, cfg).scenarios[0].required_label == "starting monthly amount (rises 5% a year)"
+    met = gm.build_plan(inputs(goal_amount=100.0, current_savings=500.0), cfg).scenarios[0]
+    assert met.required_label == "minimum monthly amount to still reach the goal"
+    data = gm.summary_input(gm.build_plan(stepped_inputs, cfg), cfg)
+    assert data["scenarios"][0]["monthly_amount_meaning"] == "starting monthly amount (rises 5% a year)"

@@ -39,6 +39,7 @@ class ScenarioResult(_Frozen):
     shortfall: float                             # target - final_value; negative = surplus
     goal_met: bool
     required_monthly_contribution: float         # starting monthly amount that reaches the target
+    required_label: str                          # how to describe that amount (plain, step-up or goal already met)
     months_to_goal: int | None                   # at the current contribution; None = not reached
     months_note: str | None = None
 

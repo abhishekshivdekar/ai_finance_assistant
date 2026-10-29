@@ -38,6 +38,8 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Goal Planning: `inflation_adjust` reads `goal_amount` as today's money; the target is the goal in future money, and shortfall, required contribution and months use that target. Default from `goal_planning.inflation_adjust_default` (true); `goal_params["inflation_adjust"]` overrides.
 - Goal Planning: LLM role is `goal_summary` (the doc said `default`; doc changed). The number guard is still imported from `portfolio_metrics`.
 - Goal Planning: commentary input uses western digit grouping (`1,234,567.00`).
+- Goal Planning: the required monthly amount is labelled in the payload (`required_labels`, per-scenario `required_label`): plain, "starting monthly amount (rises X% a year)" with a step-up, "minimum monthly amount to still reach the goal" when the scenario already reaches the goal (here "reaches" means final value >= target at the current contribution).
+- Goal Planning: commentary input has precomputed text (`years_months_to_goal`, `surplus_or_shortfall_text`, `time_compared_with_horizon`, two plain inflation sentences); the old `labels` object is no longer sent to the LLM. Maths unchanged.
 
 ## Open to-dos
 - UI formats amounts in Indian lakh/crore grouping while the LLM input stays western grouping; the number guard (`numbers_in`) does not parse lakh grouping.
@@ -57,4 +59,4 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - README known limitation to add: the number guard accepts any number present anywhere in the input, so a coincidental match is not detected.
 
 ## Last updated
-2026-10-29, Goal Planning agent: pure projection math, guarded commentary, assumptions block (see `git log -1` for the commit).
+2026-10-29, Goal Planning polish: required-amount labels, precomputed commentary text, plain-words prompt (see `git log -1` for the commit).

@@ -97,6 +97,16 @@ def _months_note(reach: int | None, cfg: dict[str, Any]) -> str | None:
     return cfg["already_met_note"] if reach == 0 else None
 
 
+def required_label(goal_met: bool, step_up_pct: float, cfg: dict[str, Any]) -> str:
+    """How to describe the required monthly amount: plain, rising with a step-up, or the minimum when the goal is met."""
+    labels = cfg["required_labels"]
+    if goal_met:
+        key = "goal_met_step_up" if step_up_pct > 0 else "goal_met"
+    else:
+        key = "step_up" if step_up_pct > 0 else "plain"
+    return labels[key].format(pct=f"{step_up_pct:g}")
+
+
 def _scenario(name: str, annual_pct: float, inputs: GoalInputs, target: float, cfg: dict[str, Any]) -> tuple[ScenarioResult, list[float]]:
     """ScenarioResult plus the year-end values (year 0..horizon) for the chart."""
     months = inputs.horizon_years * MONTHS_PER_YEAR
@@ -112,6 +122,7 @@ def _scenario(name: str, annual_pct: float, inputs: GoalInputs, target: float, c
         required_monthly_contribution=required_contribution(
             target, inputs.current_savings, inputs.annual_step_up_pct, annual_pct, months),
         months_to_goal=reach, months_note=_months_note(reach, cfg),
+        required_label=required_label(final >= target, inputs.annual_step_up_pct, cfg),
     ), year_end_values(inputs.current_savings, balances)
 
 
@@ -139,23 +150,50 @@ def _money(x: float) -> str:
     return f"{x:,.2f}"
 
 
-def _scenario_summary(s: ScenarioResult) -> dict[str, Any]:
-    """One scenario with every number pre-formatted as text."""
-    if s.shortfall > 0:
-        result = f"shortfall of {_money(s.shortfall)}"
-    elif s.shortfall < 0:
-        result = f"goal reached, surplus of {_money(-s.shortfall)}"
-    else:
-        result = "goal met exactly"
+def years_months_text(months: int, cfg: dict[str, Any]) -> str:
+    """"17 years 4 months" from a month count (units are dropped when zero, singular for 1)."""
+    t = cfg["texts"]
+    years, rest = divmod(months, MONTHS_PER_YEAR)
+    parts = []
+    if years:
+        parts.append(t["years_one" if years == 1 else "years_many"].format(n=years))
+    if rest:
+        parts.append(t["months_one" if rest == 1 else "months_many"].format(n=rest))
+    return " ".join(parts)
+
+
+def surplus_or_shortfall_text(shortfall: float, cfg: dict[str, Any]) -> str:
+    """"surplus of X" / "shortfall of X" (shortfall is target - final value; negative = surplus)."""
+    t = cfg["texts"]
+    if shortfall > 0:
+        return t["shortfall"].format(amount=_money(shortfall))
+    if shortfall < 0:
+        return t["surplus"].format(amount=_money(-shortfall))
+    return t["exact"]
+
+
+def _time_text(s: ScenarioResult, horizon_months: int, cfg: dict[str, Any]) -> tuple[str, str]:
+    """(time to reach the goal in years and months, how that compares with the horizon)."""
+    t = cfg["texts"]
     if s.months_to_goal is None:
-        months = s.months_note
-    else:
-        months = "already met" if s.months_to_goal == 0 else f"{s.months_to_goal} months"
+        return t["not_within_max"], t["not_within_max"]
+    if s.months_to_goal == 0:
+        return t["already_met"], t["already_met"]
+    compare = t["within_horizon"] if s.months_to_goal <= horizon_months else t["after_horizon"]
+    return years_months_text(s.months_to_goal, cfg), compare
+
+
+def _scenario_summary(s: ScenarioResult, horizon_months: int, cfg: dict[str, Any]) -> dict[str, Any]:
+    """One scenario with every number pre-formatted as text."""
+    time_text, compare = _time_text(s, horizon_months, cfg)
     item: dict[str, Any] = {
         "scenario": s.name, "assumed_annual_return": f"{s.annual_return_pct:.1f}%",
-        "projected_value_at_end": _money(s.final_value), "result_against_goal": result,
-        "monthly_contribution_needed_to_reach_goal": _money(s.required_monthly_contribution),
-        "time_to_reach_goal_at_current_contribution": months,
+        "projected_value_at_end": _money(s.final_value),
+        "surplus_or_shortfall_text": surplus_or_shortfall_text(s.shortfall, cfg),
+        "monthly_amount": _money(s.required_monthly_contribution),
+        "monthly_amount_meaning": s.required_label,
+        "years_months_to_goal": time_text,
+        "time_compared_with_horizon": compare,
     }
     if s.final_value_todays_money is not None:
         item["projected_value_at_end_in_todays_money"] = _money(s.final_value_todays_money)
@@ -167,11 +205,12 @@ def summary_input(plan: GoalPlan, cfg: dict[str, Any]) -> dict[str, Any]:
     i, a = plan.inputs, cfg["assumptions"]
     inflation: Any = "not applied"
     if i.inflation_adjust:
+        t = cfg["texts"]
         inflation = {
-            "applied_at": f"{a['inflation']['annual_pct']:.1f}% a year",
-            "goal_in_todays_money": _money(i.goal_amount),
-            "goal_in_future_money": _money(plan.target_amount),
-            "labels": cfg["labels"],
+            "goal_in_todays_money_text": t["goal_today"].format(amount=_money(i.goal_amount)),
+            "goal_in_future_money_text": t["goal_inflated"].format(
+                rate=f"{a['inflation']['annual_pct']:.1f}%", years=years_months_text(i.horizon_years * MONTHS_PER_YEAR, cfg),
+                amount=_money(plan.target_amount)),
         }
     return {
         "currency": cfg["currency"], "risk_profile": i.risk_profile, "horizon": f"{i.horizon_years} years",
@@ -181,5 +220,5 @@ def summary_input(plan: GoalPlan, cfg: dict[str, Any]) -> dict[str, Any]:
         "inflation": inflation,
         "assumptions": {"label": a["label"], "as_of": a["as_of"], "source": a["source"],
                         "notes": [a["deposit_timing_note"], a["step_up_note"], a["rate_note"]]},
-        "scenarios": [_scenario_summary(s) for s in plan.scenarios],
+        "scenarios": [_scenario_summary(s, i.horizon_years * MONTHS_PER_YEAR, cfg) for s in plan.scenarios],
     }

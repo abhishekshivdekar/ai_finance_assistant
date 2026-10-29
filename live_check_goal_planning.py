@@ -44,6 +44,10 @@ def show(title: str, params: dict) -> None:
     for s in data["scenarios"]:
         print(ROW.format(s["name"], f"{s['annual_return_pct']:.1f}", f"{s['final_value']:,.2f}", f"{s['shortfall']:,.2f}",
                          f"{s['required_monthly_contribution']:,.2f}", months_text(s["months_to_goal"]), s["months_note"] or ""))
+    print("
+=== Monthly amount meaning ===")
+    for s in data["scenarios"]:
+        print(f"  {s['name']:13s}{s['required_monthly_contribution']:,.2f}  = {s['required_label']}")
     if data["inflation"]:
         for s in data["scenarios"]:
             print(f"  {s['name']:13s} value in today's money: {s['final_value_todays_money']:,.2f}")
