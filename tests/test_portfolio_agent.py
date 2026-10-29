@@ -260,4 +260,5 @@ def test_not_provided_expense_ratio_is_sent_without_any_coverage_fraction():
     sent = json.loads(prompt.split("JSON:\n", 1)[1])["portfolios_by_currency"][0]
     assert sent["weighted_expense_ratio"] == "not provided" and "expense_ratio_coverage" not in sent
     assert "covers" not in prompt.split("JSON:\n", 1)[1]
-    assert "not provided" in PF["summary_prompt"] and "no\n      coverage figures" in PF["summary_prompt"]
+    instructions = " ".join(PF["summary_prompt"].split())   # ignore the YAML line breaks
+    assert "not provided" in instructions and "give no coverage figures" in instructions

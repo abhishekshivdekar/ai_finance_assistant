@@ -10,8 +10,8 @@ from src.core.usage_tracker import get_usage_registry
 SAMPLE_PORTFOLIO = [
     {"ticker": "RELIANCE.NS", "quantity": 10, "avg_cost": 2400.0, "asset_class": "equity"},
     {"ticker": "TCS.NS", "quantity": 5, "avg_cost": 3500.0, "asset_class": "equity"},
-    {"ticker": "NIFTYBEES.NS", "quantity": 100, "avg_cost": 240.0, "asset_class": "etf",
-     "expense_ratio_pct": 0.05},                                       # index ETF
+    {"ticker": "NIFTYBEES.NS", "quantity": 100, "avg_cost": 240.0, "instrument_type": "etf",
+     "asset_class": "equity", "expense_ratio_pct": 0.05},               # index ETF, still equity exposure
     {"ticker": "AAPL", "quantity": 4, "avg_cost": 170.0, "asset_class": "equity"},   # priced in USD
     {"ticker": "HDFCBANK.NS", "quantity": 8, "asset_class": "equity"},                # no avg_cost: no P&L
 ]
@@ -42,8 +42,8 @@ def main() -> None:
                   f" HHI {cm['hhi']:.3f}")
             print(f"  risk label:        {cm['risk_label']} (equity share {cm['equity_share'] * 100:.1f}%)")
             ratio = cm["expense_ratio_weighted_pct"]
-            print("  expense ratio:     " + ("not provided" if ratio is None else f"{ratio:.2f}%")
-                  + f" ({cm['expense_ratio_coverage']})")
+            print("  expense ratio:     " + ("not provided" if ratio is None
+                  else f"{ratio:.2f}% ({cm['expense_ratio_coverage']})"))
     print("\n=== Warnings ===")
     for warning in data.get("warnings", []) or ["none"]:
         print(f"  - {warning}")
