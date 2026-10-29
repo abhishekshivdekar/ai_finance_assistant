@@ -34,11 +34,11 @@ class Holding(_Frozen):
     """
 
     ticker: str
-    quantity: float = Field(gt=0)
-    avg_cost: float | None = Field(default=None, gt=0)   # per unit, in the quote's currency
+    quantity: float = Field(gt=0, allow_inf_nan=False)
+    avg_cost: float | None = Field(default=None, gt=0, allow_inf_nan=False)   # per unit, in the quote's currency
     instrument_type: InstrumentType = "stock"
     asset_class: AssetClass = "equity"
-    expense_ratio_pct: float | None = Field(default=None, ge=0)   # annual fund cost in percent
+    expense_ratio_pct: float | None = Field(default=None, ge=0, allow_inf_nan=False)   # annual fund cost in percent
 
     @field_validator("ticker")
     @classmethod

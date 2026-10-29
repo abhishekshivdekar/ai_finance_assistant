@@ -48,3 +48,19 @@ def test_goal_horizon_limits_must_be_consistent(tmp_path, low, high):
 
     with pytest.raises(ConfigError, match="horizon limits"):
         get_config(_goal_config(tmp_path, limits))
+
+
+def test_goal_returns_must_not_be_negative(tmp_path):
+    def negative(goal):
+        goal["assumptions"]["returns_pct"]["low"]["conservative"] = -1.0
+
+    with pytest.raises(ConfigError, match="negative"):
+        get_config(_goal_config(tmp_path, negative))
+
+
+def test_goal_inflation_must_not_be_negative(tmp_path):
+    def negative(goal):
+        goal["assumptions"]["inflation"]["annual_pct"] = -0.5
+
+    with pytest.raises(ConfigError, match="inflation"):
+        get_config(_goal_config(tmp_path, negative))

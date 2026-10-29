@@ -6,6 +6,7 @@ from src.agents import base_agent
 from src.agents.goal_planning import GoalPlanningAgent
 from src.core.goal_inputs import parse_goal_params
 from src.core.goal_metrics import build_plan, summary_input
+from src.core.portfolio_metrics import collect_numbers
 from src.utils.config import get_config
 
 CFG = get_config()["goal_planning"]
@@ -215,3 +216,43 @@ def test_invalid_input_needs_input_and_the_llm_is_not_called(changes, text):
 def test_missing_goal_params_need_input():
     agent = GoalPlanningAgent(llm=FakeLLM())
     assert agent.run({"turn_id": "t1"})["status"] == "needs_input"
+
+
+# ---- huge numbers through the agent ----
+
+@pytest.mark.parametrize("field", ["goal_amount", "current_savings", "monthly_contribution", "horizon_years", "annual_step_up_pct"])
+def test_a_huge_int_gives_needs_input_and_the_llm_is_not_called(field):
+    llm, result = run({**PARAMS, field: 10 ** 400})
+    assert result["status"] == "needs_input" and llm.calls == []
+    assert result["error"] is None and result["data"]["warnings"]
+
+
+# ---- the number whitelist holds only computed values and the user's inputs ----
+
+def test_dates_and_timing_numbers_from_the_assumptions_notes_are_not_allowed():
+    params = {**PARAMS, "monthly_contribution": 6_000}            # no computed text here contains 10 or 13
+    probe, _ = run(params)
+    notes = " ".join(sent_json(probe)["assumptions"]["notes"]) + " " + sent_json(probe)["assumptions"]["as_of"]
+    assert "13" in notes and "12" in notes and "2026" in notes        # they are in the JSON the LLM sees
+    allowed = collect_numbers({k: v for k, v in sent_json(probe).items() if k != "assumptions"})
+    assert not {10.0, 13.0, 29.0, 2026.0} & allowed                    # but not in the whitelist
+    for reply in ("It could take 10 years.", "From month 13 the amount rises.", "It takes 13 months.", "As of 2026-10-29 this holds."):
+        _, result = run(params, llm=FakeLLM(reply=reply))
+        assert result["answer"] == CFG["summary_fallback"].strip()
+        assert result["data"]["warnings"] == [CFG["texts"]["commentary_discarded"]]
+
+
+def test_computed_values_and_the_users_own_inputs_still_pass():
+    probe, _ = run()
+    sent = sent_json(probe)
+    reply = (f"With {sent['current_savings']} saved, {sent['monthly_contribution_now']} a month, a "
+             f"{sent['yearly_step_up']} yearly step-up over {sent['horizon']}, the goal is {sent['goal_used_for_comparison']}.")
+    _, result = run(llm=FakeLLM(reply=reply))
+    assert result["answer"] == reply and result["data"]["warnings"] == []
+
+
+def test_warning_sentences_come_from_the_config():
+    texts = CFG["texts"]
+    assert run(llm=FakeLLM(error=RuntimeError("down")))[1]["data"]["warnings"] == [texts["commentary_unavailable"]]
+    assert run(llm=FakeLLM(reply="  "))[1]["data"]["warnings"] == [texts["commentary_empty"]]
+    assert run(llm=FakeLLM(reply="It is 4242."))[1]["data"]["warnings"] == [texts["commentary_discarded"]]

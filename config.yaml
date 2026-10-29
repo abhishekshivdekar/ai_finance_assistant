@@ -289,6 +289,10 @@ goal_planning:                # Goal Planning agent (architecture section 2.4). 
     surplus: "surplus of {amount}"
     shortfall: "shortfall of {amount}"
     exact: no surplus or shortfall (the goal is met exactly)
+    inflation_not_applied: not applied
+    commentary_unavailable: The plain-language commentary was unavailable, so a standard description is shown.
+    commentary_empty: The plain-language commentary was empty, so a standard description is shown.
+    commentary_discarded: The plain-language commentary was discarded because it contained numbers that were not calculated.
     goal_today: "The goal of {amount} is stated in today's money."
     goal_inflated: "With inflation of {rate} a year over {years}, the same goal would need about {amount} in future money."
   errors:
@@ -340,6 +344,7 @@ goal_planning:                # Goal Planning agent (architecture section 2.4). 
       expected scenario the savings reach ..." or "a monthly amount of ... would
       be needed".
     - If a scenario says the goal is not reached, say so briefly.
+    - Do not repeat dates or numbers from the assumptions notes; refer to them in words.
 
     JSON:
     {results_json}

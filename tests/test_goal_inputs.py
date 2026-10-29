@@ -80,3 +80,41 @@ def test_all_problems_are_reported_together():
 def test_missing_or_malformed_params_need_input(params):
     inputs, errors = parse_goal_params(params, CFG)
     assert inputs is None and errors
+
+
+# ---- huge, infinite and NaN numbers never raise ----
+
+HUGE = 10 ** 400
+FIELD_MESSAGES = {
+    "goal_amount": "too large",
+    "current_savings": "too large",
+    "monthly_contribution": "too large",
+    "horizon_years": "between 1 and 40",
+    "annual_step_up_pct": "between 0 and 15 percent",
+}
+
+
+@pytest.mark.parametrize("field, text", FIELD_MESSAGES.items())
+@pytest.mark.parametrize("value", [HUGE, float(10 ** 300)])
+def test_huge_numbers_give_needs_input_not_an_overflow(field, text, value):
+    inputs, errors = parse(**{field: value})
+    assert inputs is None and any(text in e for e in errors)
+
+
+@pytest.mark.parametrize("field", FIELD_MESSAGES)
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_inf_and_nan_are_not_numbers(field, value):
+    inputs, errors = parse(**{field: value})
+    assert inputs is None and any(f"{field} must be a number" in e for e in errors)
+
+
+@pytest.mark.parametrize("field, text", [
+    ("goal_amount", "must be greater than zero"),
+    ("current_savings", "cannot be negative"),
+    ("monthly_contribution", "cannot be negative"),
+    ("horizon_years", "between 1 and 40"),
+    ("annual_step_up_pct", "between 0 and 15 percent"),
+])
+def test_hugely_negative_ints_are_reported_not_raised(field, text):
+    inputs, errors = parse(**{field: -HUGE})
+    assert inputs is None and any(text in e for e in errors)

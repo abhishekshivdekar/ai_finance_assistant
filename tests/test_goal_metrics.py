@@ -260,3 +260,10 @@ def test_plan_labels_follow_step_up_and_whether_the_goal_is_met():
     assert met.required_label == "minimum monthly amount to still reach the goal"
     data = gm.summary_input(gm.build_plan(stepped_inputs, cfg), cfg)
     assert data["scenarios"][0]["monthly_amount_meaning"] == "starting monthly amount (rises 5% a year)"
+
+
+def test_summary_input_wording_comes_from_the_config():
+    cfg = {**CFG, "texts": {**CFG["texts"], "inflation_not_applied": "no inflation", "years_many": "{n} yrs"}}
+    data = gm.summary_input(gm.build_plan(inputs(horizon_years=3), cfg), cfg)
+    assert data["inflation"] == "no inflation" and data["horizon"] == "3 yrs"
+    assert gm.summary_input(gm.build_plan(inputs(horizon_years=1), CFG), CFG)["horizon"] == "1 year"

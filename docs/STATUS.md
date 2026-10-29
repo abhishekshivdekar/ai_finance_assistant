@@ -10,7 +10,7 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - **Finance Q&A agent:** `src/agents/finance_qa.py` (commit `8037c30`).
 - **Portfolio agent:** `src/agents/portfolio.py`, metrics in `src/core/portfolio_metrics.py`, instrument_type/asset_class split, concurrent quotes, expense-ratio coverage (commits `3558497`, `1113286`, `99b0697`).
 - **Market agent:** `src/agents/market.py`; metrics in `src/core/market_metrics.py`, request/fetch in `src/core/market_history.py`, models in `src/core/market_models.py`; role `market_summary` and block `market_analysis:` in `config.yaml`; `GraphState` now has typed `market_params` and `topic_filter`. `live_check_market_agent.py` is written but **not run** (not verified against the real provider and LLM). Review follow-ups done: short-history flag, `sma_windows` validation, payload `source`, concurrency test.
-- **Goal Planning agent:** `src/agents/goal_planning.py`; math in `src/core/goal_metrics.py`, validation in `src/core/goal_inputs.py`, models in `src/core/goal_models.py`; role `goal_summary` and block `goal_planning:` in `config.yaml`; `GoalPayload` extended; config validation for the block in `src/utils/config.py`. `live_check_goal_planning.py` is written but **not run** (not verified against the real LLM). Spec: `docs/architecture.md` section 2.4.
+- **Goal Planning agent:** `src/agents/goal_planning.py`; math in `src/core/goal_metrics.py`, validation in `src/core/goal_inputs.py`, models in `src/core/goal_models.py`; role `goal_summary` and block `goal_planning:` in `config.yaml`; `GoalPayload` extended; config validation for the block in `src/utils/config.py`. `live_check_goal_planning.py` is written but **not run** (not verified against the real LLM). Spec: `docs/architecture.md` section 2.4. Review follow-ups done (huge-number validation, number-guard whitelist, strings moved to config, negative-rate config check).
 
 ## Next
 - News, Tax agents.
@@ -21,6 +21,12 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Optional: Docker / MCP.
 
 ## Decisions
+- Goal Planning: a step-up above `max_step_up_pct` is rejected with `needs_input` (message `step_up_range`), not capped; `docs/architecture.md` 2.4 now says so.
+- Goal Planning: numbers are validated without `float()`/`math.isfinite()` on huge ints (`_is_number` in `src/core/goal_inputs.py`): the limit is compared as an int first, so `10**400` gives `too_large` / horizon-range / step-up-range messages; `inf`/`nan` give "must be a number"; `-10**400` is clamped to `-limit` so the negative-value message shows.
+- Goal Planning: the number guard's whitelist leaves out the `assumptions` entry (as_of, timing notes, source), so an invented "10 years" or "13 months" is rejected; computed values and the user's inputs still pass. The prompt asks the LLM not to repeat numbers from the notes.
+- Goal Planning: the three commentary warnings and the "not applied" text moved to `goal_planning.texts`; the summary horizon now uses `years_months_text` (so 1 year reads "1 year").
+- Config load rejects negative scenario returns and negative inflation (`src/utils/config.py`).
+- Portfolio: `Holding` now rejects `inf` for `quantity`, `avg_cost`, `expense_ratio_pct` (`allow_inf_nan=False`); before, `inf` passed the `gt=0` / `ge=0` checks. Huge ints and `nan` were already rejected by pydantic. Market `parse_request` cannot raise on huge/inf/nan values (regression test added); it only echoes odd values in warnings.
 - Portfolio: `instrument_type` (what it is) is separate from `asset_class` (what it behaves like); risk, allocation and the single-class penalty use `asset_class` only (`docs/architecture.md` section 2.2).
 - RAG settings chosen by the eval harness (README "RAG tuning results").
 - Google News RSS: **not in `src/`**. It appears only in the root `debug_news.py` (a scratch script). The "market layer includes Google News RSS" claim is not verified; the News agent will need it built.
@@ -59,4 +65,4 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - README known limitation to add: the number guard accepts any number present anywhere in the input, so a coincidental match is not detected.
 
 ## Last updated
-2026-10-29, Goal Planning polish: required-amount labels, precomputed commentary text, plain-words prompt (see `git log -1` for the commit).
+2026-10-29, Goal Planning review follow-ups: safe number validation (Goal, Holding), number-guard whitelist, strings in config, negative-rate config check (see `git log -1` for the commit).

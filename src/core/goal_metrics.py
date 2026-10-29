@@ -203,9 +203,9 @@ def _scenario_summary(s: ScenarioResult, horizon_months: int, cfg: dict[str, Any
 def summary_input(plan: GoalPlan, cfg: dict[str, Any]) -> dict[str, Any]:
     """The only thing the LLM sees: the computed results with every number pre-formatted as text."""
     i, a = plan.inputs, cfg["assumptions"]
-    inflation: Any = "not applied"
+    t = cfg["texts"]
+    inflation: Any = t["inflation_not_applied"]
     if i.inflation_adjust:
-        t = cfg["texts"]
         inflation = {
             "goal_in_todays_money_text": t["goal_today"].format(amount=_money(i.goal_amount)),
             "goal_in_future_money_text": t["goal_inflated"].format(
@@ -213,7 +213,7 @@ def summary_input(plan: GoalPlan, cfg: dict[str, Any]) -> dict[str, Any]:
                 amount=_money(plan.target_amount)),
         }
     return {
-        "currency": cfg["currency"], "risk_profile": i.risk_profile, "horizon": f"{i.horizon_years} years",
+        "currency": cfg["currency"], "risk_profile": i.risk_profile, "horizon": years_months_text(i.horizon_years * MONTHS_PER_YEAR, cfg),
         "current_savings": _money(i.current_savings), "monthly_contribution_now": _money(i.monthly_contribution),
         "yearly_step_up": f"{i.annual_step_up_pct:.1f}%",
         "goal_used_for_comparison": _money(plan.target_amount),

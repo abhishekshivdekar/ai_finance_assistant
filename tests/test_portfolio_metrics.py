@@ -217,6 +217,13 @@ def test_number_helpers():
 
 # ---- parse_holdings ----
 
+@pytest.mark.parametrize("field", ["quantity", "avg_cost", "expense_ratio_pct"])
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan"), 10 ** 400])
+def test_parse_holdings_skips_infinite_nan_and_huge_numbers(field, value):
+    holdings, warnings = parse_holdings([{"ticker": "AAPL", "quantity": 1, field: value}], 5)
+    assert holdings == [] and warnings[0].startswith("Row 1 was skipped")
+
+
 def test_parse_holdings_skips_bad_rows_duplicates_and_extras():
     rows = [
         {"ticker": "A.NS", "quantity": 1},

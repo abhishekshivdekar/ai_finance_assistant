@@ -16,6 +16,13 @@ def test_no_params_gives_no_tickers_and_the_default_period():
     assert parse_request({"tickers": 5}, CFG)[0] == []
 
 
+def test_huge_infinite_and_odd_values_never_raise():
+    odd = [10 ** 400, float("inf"), float("nan"), None, {}]
+    for value in odd:
+        assert parse_request({"tickers": [value], "period": value}, CFG)[:2] == ([], CFG["default_period"])
+        assert parse_request({"tickers": value, "period": value}, CFG)[:2] == ([], CFG["default_period"])
+
+
 def test_tickers_are_normalised_deduplicated_and_capped():
     cap = CFG["max_tickers"]
     names = ["A", "B", "C", "D", "E", "F"][: cap + 1]

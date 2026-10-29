@@ -71,21 +71,27 @@ class GoalPlanningAgent(BaseAgent):
         )
 
     def _comment(self, plan: GoalPlan, cfg: dict[str, Any]) -> tuple[str, str | None]:
-        """(commentary, warning). Falls back to the fixed text on any failure or a bad number."""
-        fallback = cfg["summary_fallback"].strip()
+        """(commentary, warning). Falls back to the fixed text on any failure or a bad number.
+
+        The number whitelist is the computed values and the user's own inputs only: the
+        `assumptions` entry (as_of date, timing notes, source) is shown to the LLM but
+        not whitelisted, so "10 years" or "13 months" taken from it is rejected.
+        """
+        fallback, warn = cfg["summary_fallback"].strip(), cfg["texts"]
         payload = summary_input(plan, cfg)
         try:
             reply = self.llm.invoke(cfg["summary_prompt"].format(results_json=json.dumps(payload, indent=2)))
             text = str(getattr(reply, "content", reply)).strip()
         except Exception:
             self.log.warning("Goal commentary failed; using the fallback text", exc_info=True)
-            return fallback, "The plain-language commentary was unavailable, so a standard description is shown."
+            return fallback, warn["commentary_unavailable"]
         if not text:
-            return fallback, "The plain-language commentary was empty, so a standard description is shown."
-        invented = numbers_in(text) - collect_numbers(payload)
+            return fallback, warn["commentary_empty"]
+        allowed = collect_numbers({k: v for k, v in payload.items() if k != "assumptions"})
+        invented = numbers_in(text) - allowed
         if invented:
             self.log.warning("Commentary contains numbers not in the results: %s", sorted(invented))
-            return fallback, "The plain-language commentary was discarded because it contained numbers that were not calculated."
+            return fallback, warn["commentary_discarded"]
         return text, None
 
     def _execute(self, state: GraphState) -> AgentResult:

@@ -36,12 +36,16 @@ def _validate_sma_windows(windows: Any) -> None:
 
 
 def _validate_goal_planning(goal: dict[str, Any]) -> None:
-    """goal_planning: every risk profile needs all scenarios, lowest return first; limits must be consistent."""
+    """goal_planning: every risk profile needs all scenarios, lowest return first, no negative rates; limits must be consistent."""
     returns = goal["assumptions"]["returns_pct"]
     for profile in goal["risk_profiles"]:
         values = [returns[profile][name] for name in goal["scenarios"]]
+        if min(values) < 0:
+            raise ConfigError(f"goal_planning returns for {profile!r} must not be negative.")
         if values != sorted(values):
             raise ConfigError(f"goal_planning returns for {profile!r} must not decrease from conservative to optimistic.")
+    if goal["assumptions"]["inflation"]["annual_pct"] < 0:
+        raise ConfigError("goal_planning inflation must not be negative.")
     if goal["max_months"] < goal["max_horizon_years"] * 12:
         raise ConfigError("goal_planning.max_months must cover max_horizon_years.")
     if goal["min_horizon_years"] < 1 or goal["min_horizon_years"] > goal["max_horizon_years"]:
