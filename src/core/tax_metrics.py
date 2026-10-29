@@ -96,6 +96,16 @@ def fact_lines(facts: list[dict[str, Any]], cfg: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def quoted_fact_keys(text: str, facts: list[dict[str, Any]]) -> list[str]:
+    """Keys of the facts whose display text shares a number with `text` (the text must have no citation markers).
+
+    A coincidence (the text says 12 and a fact says 12 months) can only add a footer, which is the safe side.
+    Example: "taxed at 12.5%" matches every fact displayed as "12.5%".
+    """
+    found = numbers_in(text)
+    return [fact["key"] for fact in facts if numbers_in(fact["display"]) & found]
+
+
 def slab_rate_for(inputs: CapitalGainsInputs) -> Decimal:
     """The user's slab rate; calling the calculator without one for a slab-taxed gain is a programming error."""
     if inputs.slab_rate_pct is None:

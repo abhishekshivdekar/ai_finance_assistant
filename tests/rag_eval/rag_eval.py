@@ -14,6 +14,11 @@ Three sets are scored separately: "development" (questions), "held-out"
 off_topic plus near_miss. near_miss_false is always shown; held_out_hit_rate
 and held_out_mrr appear only once at least one held-out item is labelled.
 
+Every question goes through the SAME retrieval path as the app: `merge_retrieval`
+over `retrieve` (acronym expansion from rag.query_expansions, written query first,
+threshold, caps, top_k). Only the store, the embedder and the rag settings are the
+eval's own (`production_chunks`), so the numbers cannot drift from production.
+
 The "diversity" column says whether the result-diversity caps of the app
 (rag.max_chunks_per_article / rag.max_chunks_per_topic, applied by the shared
 `select_chunks`) were on or off, so the sweep shows what the caps are worth.
@@ -25,6 +30,7 @@ best row of the sweep.
 """
 from __future__ import annotations
 
+from functools import partial
 from itertools import product
 from statistics import median
 from pathlib import Path
@@ -34,7 +40,7 @@ import yaml
 
 from src.rag.embeddings import SentenceTransformerEmbedder, get_embedder
 from src.rag.ingest import Article, build_store, load_articles
-from src.rag.retriever import diversity_caps, select_chunks
+from src.rag.retriever import RetrievedChunk, expand_query, merge_retrieval, retrieve
 from src.utils.config import get_config
 from src.utils.logger import get_logger
 
@@ -68,31 +74,49 @@ def make_embedder(model_name: str | None = None) -> Any:
     )
 
 
-def kept_hits(
-    hits: list[tuple[dict[str, Any], float]], top_k: int, threshold: float, diversity: bool = True
-) -> list[tuple[dict[str, Any], float]]:
-    """The (chunk, score) pairs the app would keep, via the shared select_chunks.
+class CachedQueryEmbedder:
+    """Wraps an embedder and remembers query vectors (the sweep embeds the same question for every row)."""
 
-    diversity=True applies the caps from config.yaml exactly as retrieve() does;
-    False turns the caps off (threshold and top_k still apply).
+    def __init__(self, embedder: Any) -> None:
+        self.embedder, self.cache = embedder, {}
+
+    def embed_query(self, text: str) -> Any:
+        """The query vector, computed once per text."""
+        if text not in self.cache:
+            self.cache[text] = self.embedder.embed_query(text)
+        return self.cache[text]
+
+    def __getattr__(self, name: str) -> Any:
+        """Everything else (embed_documents ...) goes to the wrapped embedder."""
+        return getattr(self.embedder, name)
+
+
+def rag_settings(top_k: int, threshold: float, diversity: bool = True) -> dict[str, Any]:
+    """The rag section of config.yaml with this row's top_k and threshold; diversity=False turns the caps off."""
+    rag = {**get_config()["rag"], "top_k": top_k, "score_threshold": threshold}
+    if not diversity:
+        rag.update(max_chunks_per_article=None, max_chunks_per_topic={})
+    return rag
+
+
+def production_chunks(
+    question: str, embedder: Any, store: Any, rag: dict[str, Any], topic: str | None = None
+) -> list[RetrievedChunk]:
+    """The chunks the app would return for `question`: merge_retrieval over retrieve, on the eval's store.
+
+    Design pattern: SINGLE SOURCE OF TRUTH. This calls the function the agents call; only the store,
+    embedder and rag settings differ. Example: "What is LTCG?" is also searched as
+    "What is long-term capital gains tax?", exactly as in the app.
     """
-    max_per_article, max_per_topic = (
-        diversity_caps(get_config()["rag"]) if diversity else (None, {})
-    )
-    return select_chunks(hits, top_k, threshold, max_per_article, max_per_topic)
+    search = partial(retrieve, embedder=embedder, store=store, rag=rag)
+    return merge_retrieval(search, [question], topic, rag=rag)
 
 
-def rank_from_hits(
-    hits: list[tuple[dict[str, Any], float]],
-    top_k: int,
-    threshold: float,
-    diversity: bool = True,
-) -> list[str]:
-    """Article ids in rank order of the chunks kept by `kept_hits`."""
-    kept = [rec for rec, _ in kept_hits(hits, top_k, threshold, diversity)]
+def rank_articles(chunks: list[RetrievedChunk]) -> list[str]:
+    """Article ids in rank order of the chunks (an article counts once, at its first chunk)."""
     ranked: list[str] = []
-    for rec in kept:
-        art = article_id(rec["chunk_id"])
+    for chunk in chunks:
+        art = article_id(chunk.chunk_id)
         if art not in ranked:
             ranked.append(art)
     return ranked
@@ -157,18 +181,15 @@ def sweep(
     the grid product so that only those configurations run.
 
     Every combination is scored once per entry of `diversity_modes` (caps on,
-    caps off), shown in the "diversity" column. Each question searches the whole
-    store, as retrieve() does, so the caps have spare hits to choose from.
+    caps off), shown in the "diversity" column. Each question goes through
+    production_chunks (the app's merge_retrieval over retrieve).
 
     The development, held-out and off-topic sets are scored independently.
     Unlabelled held-out items are skipped; near_miss false matches are counted
     apart from off_topic ones.
     """
     held_out, _ = split_held_out(held_out or [])
-    q_vecs = [embedder.embed_query(q["question"]) for q in questions]
-    ho_vecs = [embedder.embed_query(q["question"]) for q in held_out]
-    off_vecs = [embedder.embed_query(q) for q in off_topic]
-    near_vecs = [embedder.embed_query(q) for q in near_miss or []]
+    embedder = CachedQueryEmbedder(embedder)
     rows: list[dict[str, Any]] = []
 
     if configs is None:
@@ -183,26 +204,23 @@ def sweep(
             log.warning("Skipping overlap %d >= chunk_size %d", overlap, size)
             continue
         store = build_store(articles, embedder, size, overlap)
-        every_chunk = len(store)
-        q_hits = [store.search(v, every_chunk) for v in q_vecs]
-        ho_hits = [store.search(v, every_chunk) for v in ho_vecs]
-        off_hits = [store.search(v, every_chunk) for v in off_vecs]
-        near_hits = [store.search(v, every_chunk) for v in near_vecs]
         for (top_k, threshold), diversity in product(settings[(size, overlap)], diversity_modes):
-            def rank(h: list[tuple[dict[str, Any], float]]) -> list[str]:
-                return rank_from_hits(h, top_k, threshold, diversity)
+            rag = rag_settings(top_k, threshold, diversity)
 
-            ranks = [rank_of_first_hit(rank(h), q["expected"]) for h, q in zip(q_hits, questions)]
-            ho_ranks = [rank_of_first_hit(rank(h), q["expected"]) for h, q in zip(ho_hits, held_out)]
+            def rank(question: str) -> list[str]:
+                return rank_articles(production_chunks(question, embedder, store, rag))
+
+            ranks = [rank_of_first_hit(rank(q["question"]), q["expected"]) for q in questions]
+            ho_ranks = [rank_of_first_hit(rank(q["question"]), q["expected"]) for q in held_out]
             rows.append(
                 {
                     "chunk_size": size, "chunk_overlap": overlap, "top_k": top_k,
                     "threshold": threshold, "diversity": "on" if diversity else "off",
                     "hit_rate": hit_rate_at_k(ranks, top_k), "mrr": mrr(ranks),
-                    "off_topic_false": sum(1 for h in off_hits if rank(h)),
+                    "off_topic_false": sum(1 for q in off_topic if rank(q)),
                     "held_out_hit_rate": hit_rate_at_k(ho_ranks, top_k),
                     "held_out_mrr": mrr(ho_ranks),
-                    "near_miss_false": sum(1 for h in near_hits if rank(h)),
+                    "near_miss_false": sum(1 for q in near_miss or [] if rank(q)),
                 }
             )
     return rows
@@ -286,11 +304,16 @@ def diagnostics(
     near_miss question, and whether the highest of those is below the lowest
     answerable score (a threshold between them separates the two sets).
     """
+    embedder = CachedQueryEmbedder(embedder)
     store = build_store(articles, embedder, chunk_size, chunk_overlap)
     every_chunk = len(store)
+    rag = rag_settings(top_k, threshold, diversity)
+    expansions = rag.get("query_expansions") or {}
 
     def search(question: str) -> list[tuple[dict[str, Any], float]]:
-        return store.search(embedder.embed_query(question), every_chunk)
+        """Raw scores of every chunk for the question as written and, like the app, its acronym-expanded form."""
+        texts = [question, expand_query(question, expansions)]
+        return [hit for text in texts if text for hit in store.search(embedder.embed_query(text), every_chunk)]
 
     lines = [
         f"Diagnostics for {label}: chunk_size={chunk_size}, "
@@ -303,11 +326,12 @@ def diagnostics(
     misses: list[str] = []
     for q in questions:
         hits = search(q["question"])
-        returned = rank_from_hits(hits, top_k, threshold, diversity)
+        chunks = production_chunks(q["question"], embedder, store, rag)
+        returned = rank_articles(chunks)
         best = best_by_article(hits)
         answerable.append(max((best.get(art, 0.0) for art in q["expected"]), default=0.0))
         if rank_of_first_hit(returned, q["expected"]) is None:
-            kept = best_by_article(kept_hits(hits, top_k, threshold, diversity))
+            kept = best_by_article([({"chunk_id": c.chunk_id}, c.score) for c in chunks])
             shown = _fmt_scores(list(kept.items())[:3]) or "nothing above threshold"
             misses.append(
                 f"  Q: {q['question']}\n"
@@ -340,6 +364,35 @@ def diagnostics(
     return "\n".join(lines)
 
 
+def question_report(
+    title: str,
+    items: list[dict[str, Any]],
+    articles: list[Article],
+    embedder: Any,
+    chunk_size: int,
+    chunk_overlap: int,
+    rag: dict[str, Any],
+) -> str:
+    """One block per question for ONE configuration: expected article (if any), its rank, and every returned chunk.
+
+    Used for the held-out and near-miss sets, so a reader sees what the app returns, not only the totals.
+    A near-miss item has no `expected`; any chunk listed for it is a false match.
+    """
+    embedder = CachedQueryEmbedder(embedder)
+    store = build_store(articles, embedder, chunk_size, chunk_overlap)
+    lines = [f"{title} ({len(items)} questions)"]
+    for item in items:
+        chunks = production_chunks(item["question"], embedder, store, rag)
+        expected = item.get("expected")
+        rank = rank_of_first_hit(rank_articles(chunks), expected) if expected else None
+        verdict = "" if not expected else f"  expected: {', '.join(expected)}  rank: {rank if rank else 'MISS'}"
+        lines.append(f"  Q: {item['question']}{verdict}")
+        lines.extend(f"     {c.score:.3f}  {c.chunk_id}" for c in chunks)
+        if not chunks:
+            lines.append("     nothing above threshold")
+    return "\n".join(lines)
+
+
 def main(
     embedding_model: str | None = None,
     configs: list[tuple[int, int, int, float]] | None = None,
@@ -369,6 +422,12 @@ def main(
         data, articles, embedder, cfg["chunk_size"], cfg["chunk_overlap"],
         cfg["top_k"], cfg["score_threshold"],
     ))
+    rag = rag_settings(cfg["top_k"], cfg["score_threshold"])
+    near = [{"question": q} if isinstance(q, str) else q for q in data.get("near_miss") or []]
+    labelled_held_out = split_held_out(held_out)[0]
+    for title, items in (("Held-out, config.yaml row", labelled_held_out), ("Near-miss, config.yaml row", near)):
+        print()
+        print(question_report(title, items, articles, embedder, cfg["chunk_size"], cfg["chunk_overlap"], rag))
     best = best_row(rows)
     if best:
         print()

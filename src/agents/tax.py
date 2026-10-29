@@ -12,8 +12,9 @@ Two paths, chosen by the state:
     (never the Chat dropdown), numbered chunks [1].. plus numbered config facts [F1]..; the
     answer is kept only if it cites at least one real chunk or fact and every number in it
     appears in the retrieved chunks, the question or the display text of a figure (fact ids,
-    as_of dates and source strings are NOT a whitelist). The footer is added when a fact is
-    cited or any number in the answer matches a figure. Otherwise: no_answer.
+    as_of dates and source strings are NOT a whitelist). A figure counts as present when the
+    answer cites it or states its number; the footer, exclusions and config_used use that union
+    (a coincidental number match can add an extra footer; accepted). Otherwise: no_answer.
 (b) CALCULATOR: state["tax_params"] = {"calculation": "capital_gains" | "small_savings_growth", ...}
     -> pure functions in src/core/tax_metrics.py; one optional LLM call writes plain-language
     commentary from the computed JSON only, with a fixed fallback line.
@@ -41,6 +42,7 @@ from src.core.tax_metrics import (
     fact_lines,
     figure_entry,
     footer,
+    quoted_fact_keys,
     small_savings_growth,
     summary_input,
 )
@@ -110,9 +112,11 @@ class TaxAgent(BaseAgent):
             self.log.warning("Answer contains numbers not in the chunks, facts or question: %s", sorted(invented))
             return discarded
 
-        # Matching a figure by number may widen the number whitelist above, but only a CITED figure
-        # adds the footer, the exclusions or a config_used entry.
-        used = {facts[n - 1]["key"]: figure_entry(cfg, facts[n - 1]["key"]) for n in fact_cited}
+        # A figure is present when the answer cites it ([Fn]) OR states its number. The footer, the
+        # exclusions (with stt_condition) and config_used all use that union; a coincidental number
+        # match can add an extra footer, which is accepted.
+        keys = list(dict.fromkeys([facts[n - 1]["key"] for n in fact_cited] + quoted_fact_keys(bare, facts)))
+        used = {key: figure_entry(cfg, key) for key in keys}
         if used:
             answer = f"{answer}\n\n{footer(used, cfg)}"
             payload["exclusions"] = exclusions_for("capital_gains", cfg, equity=any(e["stt_condition"] for e in used.values()))

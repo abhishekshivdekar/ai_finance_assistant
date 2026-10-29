@@ -98,8 +98,9 @@ def test_a_fact_citation_adds_the_fixed_label_as_of_date_and_tax_paid_note():
     _, _, result = ask("Equity fund gains held longer are taxed at 10% [F2] after an exemption of 100000 [F3].")
     assert result["status"] == "ok"
     data = result["data"]
-    # the test figures repeat 10 (equity long-term, cess, PPF); only the cited figures are listed
-    assert data["fact_citations"] == [2, 3] and set(data["config_used"]) == {"equity_ltcg_pct", "equity_ltcg_exemption"}
+    # the test figures repeat 10 (equity long-term, cess, PPF): cited figures plus every figure whose number is stated
+    assert data["fact_citations"] == [2, 3]
+    assert set(data["config_used"]) == {"equity_ltcg_pct", "equity_ltcg_exemption", "cess_pct", "ppf_pct"}
     assert data["config_used"]["equity_ltcg_pct"]["as_of"] == "2026-10-29" and data["config_used"]["equity_ltcg_pct"]["source"]
     assert "illustrative, verify before relying (as of 2026-10-29)" in result["answer"]
     assert result["answer"].endswith("Assumes the securities transaction tax was paid on the sale of listed equity and equity funds.")
@@ -322,11 +323,13 @@ def test_default_llm_comes_from_the_factory_with_the_tax_role(monkeypatch):
 def test_default_retrieve_function_is_the_shared_retriever():
     assert TaxAgent(llm=FakeLLM()).retrieve_fn is retrieve
 
-def test_a_quoted_fact_number_with_only_a_chunk_citation_gets_no_footer():
+def test_a_quoted_fact_number_with_only_a_chunk_citation_still_gets_the_footer():
     _, _, result = ask("Equity fund gains held long are taxed at 15% [1].")
-    assert result["status"] == "ok" and result["data"]["fact_citations"] == []   # the number passes the guard ...
-    assert result["data"]["config_used"] == {} and result["data"]["exclusions"] == []   # ... but nothing is shown as used
-    assert result["answer"] == "Equity fund gains held long are taxed at 15% [1]."
+    assert result["status"] == "ok" and result["data"]["fact_citations"] == []
+    assert "equity_stcg_pct" in result["data"]["config_used"]                      # matched by number: listed as used
+    assert result["data"]["exclusions"] == [CFG["stt_assumption"], *CFG["exclusions"]["capital_gains"]]
+    assert "illustrative, verify before relying (as of 2026-10-29)" in result["answer"]
+    assert result["answer"].endswith("equity funds.")
 
 
 def test_an_answer_with_no_figure_and_no_fact_citation_gets_no_footer():
@@ -391,7 +394,7 @@ def test_a_needs_input_result_already_carries_the_exclusions_of_the_requested_ca
     assert result["status"] == "needs_input" and result["data"]["exclusions"] == expected
 
 
-def test_an_answer_quoting_a_rate_and_citing_only_one_fact_lists_only_that_fact():
+def test_an_answer_quoting_a_rate_lists_the_cited_fact_and_every_figure_with_that_number():
     cfg = tax_cfg()
     cfg["figures"]["other_ltcg_pct"]["value"], cfg["figures"]["other_ltcg_pct"]["display"] = 10, "10%"   # like 12.5 in two figures
     original = tax_module.get_config
@@ -402,7 +405,7 @@ def test_an_answer_quoting_a_rate_and_citing_only_one_fact_lists_only_that_fact(
     finally:
         tax_module.get_config = original
     assert result["status"] == "ok" and result["data"]["fact_citations"] == [2]
-    assert set(result["data"]["config_used"]) == {"equity_ltcg_pct"} and "other_ltcg_pct" not in result["data"]["config_used"]
+    assert set(result["data"]["config_used"]) == {"equity_ltcg_pct", "other_ltcg_pct", "cess_pct", "ppf_pct"}   # the union, as accepted
     assert "illustrative, verify before relying" in result["answer"] and result["answer"].endswith("equity funds.")
 
 
@@ -413,7 +416,7 @@ def test_a_definition_answer_without_a_figure_or_a_fact_citation_has_no_exclusio
     assert "illustrative, verify" not in result["answer"]
 
 
-def test_a_figure_matched_only_by_number_adds_no_footer_no_exclusion_and_no_config_used_entry():
+def test_a_figure_matched_by_number_gets_the_footer_the_source_and_the_tax_paid_exclusion():
     cfg = tax_cfg()
     for key in ("equity_ltcg_pct", "other_ltcg_pct"):                     # 12.5 in two figures, as in the real config
         cfg["figures"][key]["value"], cfg["figures"][key]["display"] = 12.5, "12.5%"
@@ -425,15 +428,17 @@ def test_a_figure_matched_only_by_number_adds_no_footer_no_exclusion_and_no_conf
     finally:
         tax_module.get_config = original
     data = result["data"]
-    assert result["status"] == "ok" and result["answer"] == "Long-term gains are taxed at 12.5% [1]."   # the number passed the guard
-    assert data["config_used"] == {} and data["fact_citations"] == [] and data["exclusions"] == []
-    assert "illustrative, verify" not in result["answer"] and CFG["stt_assumption"] not in json.dumps(data)
+    assert result["status"] == "ok" and result["answer"].startswith("Long-term gains are taxed at 12.5% [1].")
+    assert f"(as of {cfg['figures']['equity_ltcg_pct']['as_of']})" in result["answer"] and cfg["stt_assumption"][1:] in result["answer"]
+    assert set(data["config_used"]) == {"equity_ltcg_pct", "other_ltcg_pct"} and data["fact_citations"] == []   # both matched figures, none cited
+    assert all(entry["source"] and entry["as_of"] for entry in data["config_used"].values())
+    assert data["exclusions"] == [cfg["stt_assumption"], *cfg["exclusions"]["capital_gains"]]
 
 
 def test_a_cited_equity_figure_adds_the_footer_the_figure_and_the_tax_paid_exclusion():
     _, _, result = ask("Long-term equity gains are taxed at 10% [F2].")
     data = result["data"]
-    assert set(data["config_used"]) == {"equity_ltcg_pct"} and data["fact_citations"] == [2]
+    assert {"equity_ltcg_pct"} <= set(data["config_used"]) and data["fact_citations"] == [2]
     assert data["exclusions"] == [CFG["stt_assumption"], *CFG["exclusions"]["capital_gains"]]
     assert "illustrative, verify before relying" in result["answer"]
 

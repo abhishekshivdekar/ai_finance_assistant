@@ -22,9 +22,6 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-WRITTEN_FIRST = 1.0   # sort bonus: written-query chunks rank above expansion-only ones
-
-
 @dataclass(frozen=True)
 class RetrievedChunk:
     """A retrieved chunk with the metadata needed for citations."""
@@ -48,8 +45,13 @@ def select_chunks(
     threshold: float,
     max_per_article: int | None = None,
     max_per_topic: dict[str, int] | None = None,
+    rank: Callable[[tuple[dict[str, Any], float]], Any] | None = None,
 ) -> list[tuple[dict[str, Any], float]]:
     """Threshold, sort best-first, cap per article and per topic, keep top_k.
+
+    `rank` is the sort key of a (record, score) pair; the default is the score. The threshold
+    always compares the score itself. Example: merge_retrieval ranks by (found by the original
+    query, score), so an acronym expansion cannot outrank a chunk the query found as written.
 
     Design pattern: SINGLE SOURCE OF TRUTH (one pure function shared by two
     callers). retrieve() uses it for the app and rank_from_hits() in the eval
@@ -68,7 +70,7 @@ def select_chunks(
     per_topic: dict[str, int] = {}
     kept: list[tuple[dict[str, Any], float]] = []
     ranked = sorted(
-        (pair for pair in hits if pair[1] >= threshold), key=lambda pair: pair[1], reverse=True
+        (pair for pair in hits if pair[1] >= threshold), key=rank or (lambda pair: pair[1]), reverse=True
     )
     for rec, score in ranked:
         if len(kept) >= top_k:
@@ -92,9 +94,13 @@ def retrieve(
     *,
     embedder: Any = None,
     store: Any = None,
+    rag: dict[str, Any] | None = None,
 ) -> list[RetrievedChunk]:
-    """Return the best chunks for `query`, or [] when nothing passes the threshold."""
-    rag = get_config()["rag"]
+    """Return the best chunks for `query`, or [] when nothing passes the threshold.
+
+    `rag` replaces the rag section of config.yaml (the eval harness uses it to try other settings).
+    """
+    rag = rag or get_config()["rag"]
     if not query or not query.strip():
         return []
     if topic is not None and topic not in rag["topics"]:
@@ -141,9 +147,16 @@ def expand_query(query: str, expansions: dict[str, str]) -> str | None:
 
 
 def merge_retrieval(
-    retrieve_fn: Callable[..., list[RetrievedChunk]], queries: list[str], topic: str | None
+    retrieve_fn: Callable[..., list[RetrievedChunk]],
+    queries: list[str],
+    topic: str | None,
+    rag: dict[str, Any] | None = None,
 ) -> list[RetrievedChunk]:
     """Retrieve for each query as written first, then fill the free slots from the acronym-expanded forms.
+
+    Design pattern: SINGLE SOURCE OF TRUTH. The agents and the RAG eval harness (tests/rag_eval) both
+    call this function, so the eval measures the retrieval path the app uses. Example: the harness
+    passes `partial(retrieve, embedder=..., store=...)` as retrieve_fn and its own `rag` settings.
 
     A query that holds an acronym such as LTCG is also searched expanded (see expand_query), because
     the articles use the long form. The expansion only FILLS: chunks found by a query as written come
@@ -155,11 +168,10 @@ def merge_retrieval(
 
     retrieve() already applied the threshold and caps per query; select_chunks runs again on the
     merged list so the per-article and glossary caps and top_k still hold (no second implementation).
-    Its sort key is the score plus WRITTEN_FIRST for a written-query chunk (a cosine score is at most 1),
-    which keeps the written results ahead without a second sorting rule. Used by the Finance Q&A agent
-    (original + rewritten query) and the Tax agent (one query, locked topic).
+    Its sort key is (found by a query as written, score), so the written results stay ahead. Used by
+    the Finance Q&A agent (original + rewritten query) and the Tax agent (one query, locked topic).
     """
-    rag = get_config()["rag"]
+    rag = rag or get_config()["rag"]
     expansions = rag.get("query_expansions") or {}
     searches: dict[str, bool] = {}          # query text -> searched as written? (insertion order = search order)
     for query in queries:
@@ -172,14 +184,13 @@ def merge_retrieval(
             known = found[is_written].get(chunk.chunk_id)
             if known is None or chunk.score > known.score:
                 found[is_written][chunk.chunk_id] = chunk
-    first = set(found[True])
     best = {**found[False], **found[True]}   # a written-query chunk keeps its own score even if the expansion scored higher
-    hits = [
-        ({"chunk_id": cid}, chunk.score + (WRITTEN_FIRST if cid in first else 0.0))
-        for cid, chunk in best.items() if chunk.score >= rag["score_threshold"]
-    ]
+    hits = [({"chunk_id": cid, "written": cid in found[True]}, chunk.score) for cid, chunk in best.items()]
     max_per_article, max_per_topic = diversity_caps(rag)
-    kept = select_chunks(hits, rag["top_k"], 0.0, max_per_article, max_per_topic)
+    kept = select_chunks(
+        hits, rag["top_k"], rag["score_threshold"], max_per_article, max_per_topic,
+        rank=lambda pair: (pair[0]["written"], pair[1]),
+    )
     return [best[rec["chunk_id"]] for rec, _ in kept]
 
 

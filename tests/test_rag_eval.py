@@ -18,7 +18,9 @@ format_table = rag_eval.format_table
 hit_rate_at_k = rag_eval.hit_rate_at_k
 load_questions = rag_eval.load_questions
 mrr = rag_eval.mrr
-rank_from_hits = rag_eval.rank_from_hits
+rank_articles = rag_eval.rank_articles
+production_chunks = rag_eval.production_chunks
+rag_settings = rag_eval.rag_settings
 rank_of_first_hit = rag_eval.rank_of_first_hit
 split_held_out = rag_eval.split_held_out
 summarize_sets = rag_eval.summarize_sets
@@ -71,16 +73,33 @@ def test_mrr():
     assert mrr([]) == 0.0
 
 
-def test_rank_from_hits_applies_threshold_topk_and_dedupes():
-    hits = [
-        ({"chunk_id": "t/a#0"}, 0.9),
-        ({"chunk_id": "t/a#1"}, 0.8),   # same article, counted once
-        ({"chunk_id": "t/b#0"}, 0.5),
-        ({"chunk_id": "t/c#0"}, 0.2),   # under threshold
-    ]
-    assert rank_from_hits(hits, top_k=10, threshold=0.3) == ["t/a", "t/b"]
-    assert rank_from_hits(hits, top_k=2, threshold=0.3) == ["t/a"]   # top_k counts chunks
-    assert rank_from_hits(hits, top_k=10, threshold=0.95) == []
+def _chunk(chunk_id, score):
+    return RetrievedChunk("t", "T", chunk_id.split("/")[0], REFS, chunk_id, score)
+
+
+def test_rank_articles_lists_each_article_once_in_rank_order():
+    chunks = [_chunk("t/a#0", 0.9), _chunk("t/a#1", 0.8), _chunk("t/b#0", 0.5)]
+    assert rank_articles(chunks) == ["t/a", "t/b"] and rank_articles([]) == []
+
+
+def test_rag_settings_override_top_k_and_threshold_and_can_turn_the_caps_off():
+    on, off = rag_settings(3, 0.4), rag_settings(3, 0.4, diversity=False)
+    assert on["top_k"] == 3 and on["score_threshold"] == 0.4 and on["max_chunks_per_article"] == 2
+    assert off["max_chunks_per_article"] is None and off["max_chunks_per_topic"] == {}
+    assert rag_eval.get_config()["rag"]["top_k"] == 6                         # the real config is not touched
+
+
+def test_the_query_embedder_cache_embeds_each_text_once_and_passes_other_calls_on():
+    class Counting(FakeEmbedder):
+        calls = 0
+
+        def embed_query(self, text):
+            Counting.calls += 1
+            return super().embed_query(text)
+
+    cached = rag_eval.CachedQueryEmbedder(Counting())
+    first, again = cached.embed_query("bond"), cached.embed_query("bond")
+    assert Counting.calls == 1 and first is again and len(cached.embed_documents(["bond"])) == 1
 
 
 def _toy_articles():
@@ -267,7 +286,7 @@ def test_diagnostics_handles_empty_sets():
 
 # --- diversity switch, shared rule, best row, embedding model ---
 from src.rag import retriever as retriever_module
-from src.rag.retriever import select_chunks
+from src.rag.retriever import RetrievedChunk
 
 
 def _hit(chunk_id, score):
@@ -280,34 +299,55 @@ CROWDED = [
 ]
 
 
-def test_rank_from_hits_diversity_switch():
+class CrowdedStore:
+    """A store that returns the CROWDED hits whatever the query is."""
+
+    def __init__(self):
+        self.records = [({**rec, "text": "t", "title": "T", "references": REFS}, score) for rec, score in CROWDED]
+
+    def __len__(self):
+        return len(self.records)
+
+    def search(self, vector, k):
+        return self.records[:k]
+
+
+def test_production_chunks_diversity_switch():
+    def ids(diversity):
+        chunks = production_chunks("anything", FakeEmbedder(), CrowdedStore(), rag_settings(4, 0.3, diversity))
+        return rank_articles(chunks)
+
     # caps on (config: 2 per article, 1 glossary): h#0 and a#2 are dropped
-    assert rank_from_hits(CROWDED, 4, 0.3, diversity=True) == ["glossary/g", "stocks/a", "bonds/b"]
+    assert ids(True) == ["glossary/g", "stocks/a", "bonds/b"]
     # caps off: top 4 chunks are g, h, a, a
-    assert rank_from_hits(CROWDED, 4, 0.3, diversity=False) == ["glossary/g", "glossary/h", "stocks/a"]
+    assert ids(False) == ["glossary/g", "glossary/h", "stocks/a"]
 
 
-def test_harness_and_retrieve_agree_on_the_same_hits(monkeypatch):
-    records = [({**rec, "text": "t", "title": "T", "references": REFS}, score) for rec, score in CROWDED]
-
-    class Store:
-        def __len__(self):
-            return len(records)
-
-        def search(self, vector, k):
-            return records[:k]
-
+def test_harness_and_retrieve_agree_when_the_question_has_no_acronym():
     for top_k in (2, 3, 4, 6):
-        chunks = retriever_module.retrieve("anything", top_k=top_k, embedder=FakeEmbedder(), store=Store())
-        app_ids = [c.chunk_id for c in chunks]
-        rag = rag_eval.get_config()["rag"]
-        shared = select_chunks(
-            records, top_k, rag["score_threshold"],
-            rag["max_chunks_per_article"], rag["max_chunks_per_topic"],
-        )
-        assert app_ids == [rec["chunk_id"] for rec, _ in shared]
-        harness = rag_eval.rank_from_hits(records, top_k, rag["score_threshold"], diversity=True)
-        assert harness == list(dict.fromkeys(i.split("#")[0] for i in app_ids))
+        rag = rag_settings(top_k, rag_eval.get_config()["rag"]["score_threshold"])
+        app = retriever_module.retrieve("anything", top_k=top_k, embedder=FakeEmbedder(), store=CrowdedStore())
+        shared = production_chunks("anything", FakeEmbedder(), CrowdedStore(), rag)
+        assert [c.chunk_id for c in shared] == [c.chunk_id for c in app]
+
+
+def test_the_harness_searches_the_acronym_expansion_like_the_app(monkeypatch):
+    rag = {**rag_settings(3, 0.3), "query_expansions": {"BND": "bond coupon maturity"}}
+    store = rag_eval.build_store(_toy_articles(), FakeEmbedder(), 200, 20)
+    chunks = production_chunks("BND", FakeEmbedder(), store, rag)
+    assert [c.chunk_id.split("#")[0] for c in chunks] == ["bonds/bonds"]
+    plain = production_chunks("BND", FakeEmbedder(), store, {**rag, "query_expansions": {}})
+    assert plain == []                                                         # without the table nothing matches
+
+
+def test_question_report_lists_expected_rank_and_every_returned_chunk():
+    items = [{"question": "bond coupon maturity", "expected": ["bonds/bonds"]},
+             {"question": "bond coupon maturity", "expected": ["stocks/shares"]},
+             {"question": "chocolate cake recipe"}]
+    report = rag_eval.question_report("Held-out", items, _toy_articles(), FakeEmbedder(), 200, 20, rag_settings(3, 0.3))
+    assert report.startswith("Held-out (3 questions)")
+    assert "expected: bonds/bonds  rank: 1" in report and "expected: stocks/shares  rank: MISS" in report
+    assert "bonds/bonds#0" in report and "nothing above threshold" in report
 
 
 def test_sweep_reports_diversity_on_and_off():
