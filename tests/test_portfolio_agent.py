@@ -82,7 +82,7 @@ def test_summary_prompt_receives_only_the_computed_metrics():
     for private in ("quantity", "avg_cost", "expense_ratio_pct", "price_source"):
         assert private not in prompt                                    # raw inputs are not sent
     assert sent["positions"][0]["unrealised_pnl_pct"] == "+25.0%"       # computed in code
-    assert sent["portfolios_by_currency"][0]["expense_ratio_coverage"] == "based on 1 of 2 holdings"
+    assert sent["portfolios_by_currency"][0]["expense_ratio_coverage"] == "covers 50% of value, 1 of 2 holdings"
     assert sent["portfolios_by_currency"][0]["weighted_expense_ratio"] == "0.50%"
 
 
@@ -156,13 +156,34 @@ def test_nothing_priced_returns_no_answer_without_calling_the_llm():
     assert len(result["data"]["warnings"]) == 2 and agent.llm.calls == []
 
 
-def test_provider_exception_becomes_an_error_result():
+def test_provider_exception_for_one_ticker_only_excludes_that_ticker():
+    class Boom:
+        def get_quote(self, ticker):
+            if ticker == "B.NS":
+                raise RuntimeError("provider exploded")
+            return quote(100)
+
+    agent = PortfolioAgent(llm=FakeLLM(), provider=Boom())
+    result = agent.run({"turn_id": "t1", "portfolio": TWO})
+    assert result["status"] == "ok" and result["data"]["metrics"]["currencies"]["INR"]["position_count"] == 1
+    assert "B.NS was left out: no price is available right now." in result["data"]["warnings"]
+
+
+def test_provider_exception_for_every_ticker_gives_no_answer():
     class Boom:
         def get_quote(self, ticker):
             raise RuntimeError("provider exploded")
 
-    agent = PortfolioAgent(llm=FakeLLM(), provider=Boom())
-    result = agent.run({"turn_id": "t1", "portfolio": TWO})
+    result = PortfolioAgent(llm=FakeLLM(), provider=Boom()).run({"turn_id": "t1", "portfolio": TWO})
+    assert result["status"] == "no_answer"
+
+
+def test_unexpected_failure_after_valuation_still_becomes_an_error_result(monkeypatch):
+    def broken(*args, **kwargs):
+        raise RuntimeError("metrics exploded")
+
+    monkeypatch.setattr(portfolio, "build_metrics", broken)
+    _, result = run(TWO, PROVIDER_TWO)
     assert result["status"] == "error" and result["answer"] == get_config()["agents"]["error_message"]
 
 
@@ -191,3 +212,52 @@ def test_usage_is_recorded_under_the_portfolio_summary_role():
         assert registry.totals("portfolio_summary")["output_tokens"] == 60
     finally:
         registry.reset()
+
+
+# ---- instrument type vs asset class, end to end ----
+
+def test_sample_style_portfolio_is_all_equity_with_the_penalty_and_not_well_diversified():
+    rows = [
+        {"ticker": "RELIANCE.NS", "quantity": 10},
+        {"ticker": "TCS.NS", "quantity": 10},
+        {"ticker": "NIFTYBEES.NS", "quantity": 10, "instrument_type": "etf", "asset_class": "equity",
+         "expense_ratio_pct": 0.05},
+        {"ticker": "HDFCBANK.NS", "quantity": 10},
+    ]
+    quotes = {r["ticker"]: quote(100) for r in rows}
+    agent, result = run(rows, quotes)
+    inr = result["data"]["metrics"]["currencies"]["INR"]
+    assert inr["allocation_by_asset_class"] == {"equity": 1.0}
+    assert inr["diversification_score"] == 79 - PF["single_class_penalty"]
+    assert inr["diversification_label"] == "Moderate"
+    assert inr["expense_ratio_coverage"] == "covers 25% of value, 1 of 4 holdings"
+    sent = json.loads(agent.llm.calls[0].split("JSON:\n", 1)[1])
+    assert sent["portfolios_by_currency"][0]["allocation_by_asset_class"] == {"equity": "100.0%"}
+    assert [p["instrument_type"] for p in sent["positions"]] == ["stock", "stock", "etf", "stock"]
+
+
+def test_old_style_etf_asset_class_is_rejected_with_a_warning():
+    rows = [{"ticker": "A.NS", "quantity": 1, "asset_class": "etf"}, {"ticker": "B.NS", "quantity": 1}]
+    _, result = run(rows, PROVIDER_TWO)
+    assert any(w.startswith("Row 1 was skipped") for w in result["data"]["warnings"])
+
+
+# ---- expense-ratio numbers pass the number guard; "not provided" has no coverage ----
+
+def test_number_guard_accepts_the_expense_ratio_coverage_numbers():
+    rows = [{"ticker": "A.NS", "quantity": 10, "expense_ratio_pct": 0.5}, {"ticker": "B.NS", "quantity": 10}]
+    reply = "The expense ratio is 0.50%, and it covers 50% of value, 1 of 2 holdings."
+    _, result = run(rows, PROVIDER_TWO, llm=FakeLLM(reply=reply))
+    assert result["answer"] == reply and not any("numbers" in w for w in result["data"]["warnings"])
+    wrong = "It covers 47% of value, 1 of 4 holdings."
+    _, result = run(rows, PROVIDER_TWO, llm=FakeLLM(reply=wrong))
+    assert result["answer"] == PF["summary_fallback"].strip()
+
+
+def test_not_provided_expense_ratio_is_sent_without_any_coverage_fraction():
+    agent, _ = run(TWO, PROVIDER_TWO)
+    prompt = agent.llm.calls[0]
+    sent = json.loads(prompt.split("JSON:\n", 1)[1])["portfolios_by_currency"][0]
+    assert sent["weighted_expense_ratio"] == "not provided" and "expense_ratio_coverage" not in sent
+    assert "covers" not in prompt.split("JSON:\n", 1)[1]
+    assert "not provided" in PF["summary_prompt"] and "no\n      coverage figures" in PF["summary_prompt"]

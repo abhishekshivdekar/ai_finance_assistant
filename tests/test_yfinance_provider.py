@@ -215,3 +215,38 @@ def test_fast_info_connection_error_is_transient_and_retried(monkeypatch):
     assert attempts["n"] == cfg["max_retries"]
     assert len(sleeps) == cfg["max_retries"] - 1
     assert result.source == "sample data"
+
+
+# ---- Pandas4Warning is silenced only when it comes from yfinance ----
+
+import warnings
+
+import pandas.errors
+
+
+def _emit(category, module):
+    warnings.warn_explicit("legacy feature", category, filename=f"{module}.py", lineno=1, module=module, registry={})
+
+
+def test_pandas4_warning_from_yfinance_is_ignored_but_other_warnings_are_not():
+    category = pandas.errors.Pandas4Warning
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")          # start from "show everything"
+        yfp.silence_pandas4_warning()            # then our targeted filter goes on top
+        _emit(category, "yfinance.utils")        # ignored
+        _emit(category, "yfinance")              # ignored (the package itself)
+        _emit(category, "src.data.market.cache")           # our own code: shown
+        _emit(category, "yfinance_extras")                 # a different package: shown
+        _emit(UserWarning, "yfinance.utils")               # other category from yfinance: shown
+    assert [(w.category, w.filename) for w in caught] == [
+        (category, "src.data.market.cache.py"), (category, "yfinance_extras.py"),
+        (UserWarning, "yfinance.utils.py"),
+    ]
+
+
+def test_filter_is_skipped_when_pandas_has_no_pandas4warning(monkeypatch):
+    monkeypatch.delattr(pandas.errors, "Pandas4Warning")
+    with warnings.catch_warnings():
+        before = list(warnings.filters)
+        yfp.silence_pandas4_warning()
+        assert list(warnings.filters) == before

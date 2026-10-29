@@ -34,7 +34,10 @@ def unrealised_pnl(price: float, quantity: float, avg_cost: float | None) -> tup
 
 
 def allocation_by_asset_class(positions: list[Position]) -> dict[str, float]:
-    """Share of total value per asset class (positions are in one currency)."""
+    """Share of total value per asset_class (positions are in one currency).
+
+    Only asset_class counts here; instrument_type (stock, etf, ...) is ignored.
+    """
     total = sum(p.value for p in positions)
     shares: dict[str, float] = defaultdict(float)
     for p in positions:
@@ -57,11 +60,13 @@ def diversification_score(weights: list[float], single_asset_class: bool, cfg: d
     """Diversification score from 0 to 100 (an educational indicator, not a rating).
 
     score = clamp(100 x (1 - HHI) / (1 - 1/N_full), 0, 100), then minus
-    single_class_penalty when every position is the same asset class, floored at 0.
-    N_full = portfolio.full_diversification_holdings is the number of equal
-    positions that counts as fully spread. Example with N_full = 20: one holding
-    scores 0; five equal positions (HHI 0.2) score round(100 x 0.8 / 0.95) = 84,
-    and 69 if they are all equities with a penalty of 15.
+    single_class_penalty when every position has the same asset_class (instrument
+    type is ignored), floored at 0. N_full = portfolio.full_diversification_holdings
+    is the number of equal positions that counts as fully spread. Example with
+    N_full = 20 and a penalty of 15: one holding scores 0; five equal positions
+    (HHI 0.2) score round(100 x 0.8 / 0.95) = 84, and 69 if they are all equity
+    asset class; four equal positions, one of them an ETF, all equity, score
+    round(100 x 0.75 / 0.95) = 79 - 15 = 64 (Moderate, not Well diversified).
     """
     n_full = max(int(cfg["full_diversification_holdings"]), 2)
     raw = (1 - hhi(weights)) / (1 - 1 / n_full)
@@ -82,7 +87,7 @@ def diversification_label(score: int, cfg: dict[str, Any]) -> str:
 
 
 def equity_share(positions: list[Position], cfg: dict[str, Any]) -> float:
-    """Share of value in the asset classes listed in portfolio.equity_like_classes."""
+    """Share of value whose asset_class is listed in portfolio.equity_like_classes."""
     like = set(cfg["equity_like_classes"])
     total = sum(p.value for p in positions)
     return sum(p.value for p in positions if p.asset_class in like) / total if total > 0 else 0.0
@@ -117,6 +122,20 @@ def weighted_expense_ratio(positions: list[Position]) -> tuple[float | None, int
     return average, len(with_ratio), len(positions)
 
 
+def expense_ratio_value_share(positions: list[Position]) -> float:
+    """Share of total value (0-1) held in positions that provide an expense ratio."""
+    total = sum(p.value for p in positions)
+    covered = sum(p.value for p in positions if p.expense_ratio_pct is not None)
+    return covered / total if total > 0 else 0.0
+
+
+def expense_ratio_coverage(value_share: float, with_ratio: int, total: int) -> str:
+    """"covers 47% of value, 1 of 4 holdings", or "not provided" when no holding has a ratio."""
+    if with_ratio == 0:
+        return "not provided"
+    return f"covers {value_share * 100:.0f}% of value, {with_ratio} of {total} holdings"
+
+
 def currency_metrics(currency: str, positions: list[Position], cfg: dict[str, Any]) -> CurrencyMetrics:
     """Compose the metrics for the positions of ONE currency."""
     weights = position_weights([p.value for p in positions])
@@ -125,6 +144,7 @@ def currency_metrics(currency: str, positions: list[Position], cfg: dict[str, An
     score = diversification_score(weights, len({p.asset_class for p in positions}) == 1, cfg)
     equity = equity_share(positions, cfg)
     average, with_ratio, total = weighted_expense_ratio(positions)
+    value_share = expense_ratio_value_share(positions)
     return CurrencyMetrics(
         currency=currency,
         total_value=sum(p.value for p in positions),
@@ -141,7 +161,8 @@ def currency_metrics(currency: str, positions: list[Position], cfg: dict[str, An
         expense_ratio_weighted_pct=average,
         expense_ratio_holdings=with_ratio,
         expense_ratio_total=total,
-        expense_ratio_coverage=f"based on {with_ratio} of {total} holdings",
+        expense_ratio_value_share=value_share,
+        expense_ratio_coverage=expense_ratio_coverage(value_share, with_ratio, total),
     )
 
 
@@ -191,10 +212,8 @@ def summary_input(metrics: PortfolioMetrics) -> dict[str, Any]:
 
     currencies = []
     for cm in metrics.currencies.values():
-        ratio = (
-            "not provided" if cm.expense_ratio_weighted_pct is None
-            else f"{cm.expense_ratio_weighted_pct:.2f}%"
-        )
+        provided = cm.expense_ratio_weighted_pct is not None
+        ratio = f"{cm.expense_ratio_weighted_pct:.2f}%" if provided else "not provided"
         currencies.append({
             "currency": cm.currency,
             "total_value": f"{cm.total_value:,.2f}",
@@ -207,11 +226,13 @@ def summary_input(metrics: PortfolioMetrics) -> dict[str, Any]:
             "equity_share": pct(cm.equity_share),
             "risk_label": cm.risk_label,
             "weighted_expense_ratio": ratio,
-            "expense_ratio_coverage": cm.expense_ratio_coverage,
+            # coverage is only given when a ratio exists ("not provided" has no coverage fraction)
+            **({"expense_ratio_coverage": cm.expense_ratio_coverage} if provided else {}),
         })
     positions = [
         {
-            "ticker": p.ticker, "currency": p.currency, "asset_class": p.asset_class,
+            "ticker": p.ticker, "currency": p.currency,
+            "instrument_type": p.instrument_type, "asset_class": p.asset_class,
             "weight": pct(p.weight),
             "unrealised_pnl_pct": None if p.pnl_pct is None else f"{p.pnl_pct:+.1f}%",
             "price_is_stale_or_sample": p.price_stale,

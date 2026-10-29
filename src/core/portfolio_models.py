@@ -14,7 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.data.market.provider import validate_symbol
 
-AssetClass = Literal["equity", "bond", "etf", "fund", "cash", "other"]
+InstrumentType = Literal["stock", "etf", "fund", "bond", "cash", "other"]   # what the holding IS
+AssetClass = Literal["equity", "debt", "gold", "cash", "other"]            # what it behaves like (drives risk)
 
 
 class _Frozen(BaseModel):
@@ -24,11 +25,18 @@ class _Frozen(BaseModel):
 
 
 class Holding(_Frozen):
-    """One line of the user's portfolio. The currency comes from the quote, not from here."""
+    """One line of the user's portfolio. The currency comes from the quote, not from here.
+
+    instrument_type says what the holding is; asset_class says what it behaves
+    like. Allocation, equity share, risk and the single-asset-class penalty use
+    asset_class only. Example: NIFTYBEES.NS is instrument_type "etf" with
+    asset_class "equity", so it counts as equity exposure like a stock does.
+    """
 
     ticker: str
     quantity: float = Field(gt=0)
     avg_cost: float | None = Field(default=None, gt=0)   # per unit, in the quote's currency
+    instrument_type: InstrumentType = "stock"
     asset_class: AssetClass = "equity"
     expense_ratio_pct: float | None = Field(default=None, ge=0)   # annual fund cost in percent
 
@@ -43,6 +51,7 @@ class Position(_Frozen):
     """A holding valued at a quote. weight is the share of its own currency's total."""
 
     ticker: str
+    instrument_type: InstrumentType
     asset_class: AssetClass
     quantity: float
     avg_cost: float | None
@@ -76,7 +85,8 @@ class CurrencyMetrics(_Frozen):
     expense_ratio_weighted_pct: float | None      # None when no holding provides one
     expense_ratio_holdings: int
     expense_ratio_total: int
-    expense_ratio_coverage: str                   # "based on N of M holdings"
+    expense_ratio_value_share: float              # share of value (0-1) held in holdings that have a ratio
+    expense_ratio_coverage: str                   # "covers 47% of value, 1 of 4 holdings" or "not provided"
 
 
 class PortfolioMetrics(_Frozen):

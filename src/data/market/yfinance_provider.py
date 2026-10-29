@@ -10,8 +10,11 @@ never touch the network.
 """
 from __future__ import annotations
 
+import warnings
 from datetime import datetime, timezone
 from typing import Any, Callable
+
+import pandas.errors
 
 from src.core.models import MarketResult
 from src.data.market.provider import (
@@ -22,6 +25,22 @@ from src.data.market.provider import (
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
+
+
+def silence_pandas4_warning() -> None:
+    """Ignore pandas' Pandas4Warning when it comes from yfinance (and only then).
+
+    yfinance still uses pandas features that pandas 4 will remove, and each call
+    would print a warning we cannot fix. The filter is limited to that warning
+    category AND to code in the yfinance package, so a Pandas4Warning raised by
+    our own code, or any other warning, is still shown. Called once at import.
+    """
+    category = getattr(pandas.errors, "Pandas4Warning", None)   # absent on older pandas
+    if category is not None:
+        warnings.filterwarnings("ignore", category=category, module=r"yfinance(\.|$)")
+
+
+silence_pandas4_warning()
 
 _TRANSIENT_NAMES = {
     "YFRateLimitError", "ReadTimeout", "ConnectTimeout", "Timeout",

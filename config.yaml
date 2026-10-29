@@ -122,10 +122,11 @@ finance_qa:                   # Finance Q&A agent prompts and messages (architec
 
 portfolio:                    # Portfolio agent (architecture section 2.2). All values illustrative.
   max_holdings: 50            # holdings beyond this are ignored (bounds the number of quote calls)
+  max_workers: 8              # quotes are fetched concurrently with at most this many threads
   full_diversification_holdings: 20   # equal positions in one currency that count as fully spread (HHI scaling)
   single_class_penalty: 15    # points taken off the diversification score when everything is one asset class
   concentration_warning: 0.40 # largest-position share (0-1) that adds a warning
-  equity_like_classes: [equity, etf, fund, other]   # asset classes counted in the equity share (cautious)
+  equity_like_classes: [equity, other]   # asset_class values counted in the equity share (unknown counts as risky)
   diversification_bands:      # diversification score (0-100)
     concentrated_below: 40
     diversified_from: 70
@@ -155,8 +156,10 @@ portfolio:                    # Portfolio agent (architecture section 2.2). All 
       calculate, round, convert or invent a number, and never convert currencies.
     - Each currency is a separate portfolio; never add them together.
     - Mention the concentration (the largest position), the diversification score
-      and label, the risk label, and how many holdings the expense ratio is based
-      on (or that it was not provided).
+      and label, the risk label, and the expense ratio together with how much of
+      the value and how many holdings it covers (use the coverage text exactly as
+      written). If the expense ratio is "not provided", say that and give no
+      coverage figures.
     - Describe what the numbers show, for example "the largest holding is 42.0%
       of the INR portfolio". This is educational information, not personal
       advice: never tell the reader to buy, sell, hold or rebalance anything and
