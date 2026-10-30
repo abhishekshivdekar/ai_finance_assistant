@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from src.core.number_guard import numbers_in
 from src.utils.config import get_config
 from src.utils.logger import get_logger
 
@@ -25,8 +26,13 @@ def find_violation(text: str) -> str | None:
     return None
 
 
-def guard_answer(answer: str, llm: Any) -> str:
-    """Return `answer` if clean; otherwise one rewording retry, then a safe message."""
+def guard_answer(answer: str, llm: Any, check_numbers: bool = True) -> str:
+    """Return `answer` if clean; otherwise one rewording retry, then a safe message.
+
+    A reworded text is also checked for numbers (unless the caller does its own check, check_numbers=False): one that
+    is not in the original answer (an invented figure or citation marker) is rejected and the safe message is used,
+    so a rewording cannot add numbers.
+    """
     pattern = find_violation(answer)
     if pattern is None:
         return answer
@@ -40,7 +46,11 @@ def guard_answer(answer: str, llm: Any) -> str:
         log.exception("Output guard rewording failed")
         return cfg["safe_message"].strip()
 
-    if find_violation(reworded) is None:
-        return reworded
-    log.warning("Reworded answer still matched the guard; using the safe message")
+    if find_violation(reworded) is not None:
+        log.warning("Reworded answer still matched the guard; using the safe message")
+        return cfg["safe_message"].strip()
+    if check_numbers and numbers_in(reworded) - numbers_in(answer):
+        log.warning("Reworded answer contains numbers that are not in the original; using the safe message")
+        return cfg["safe_message"].strip()
+    return reworded
     return cfg["safe_message"].strip()

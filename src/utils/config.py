@@ -154,7 +154,7 @@ def _validate_tax(tax: dict[str, Any]) -> None:
 
 WORKFLOW_MESSAGES = (
     "clarify_low_confidence", "out_of_scope", "advice_static", "fallback", "needs_input_note", "error_note", "no_answer_note",
-    "section_heading", "unsourced_marker", "budget_exceeded",
+    "section_heading", "unsourced_marker", "budget_exceeded", "partial_note",
 )
 WORKFLOW_REQUIRED_INTENTS = ("clarify", "out_of_scope", "specific_advice")
 
@@ -183,9 +183,10 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
         for candidate in candidates:
             if candidate.get("agent") not in agents or not str(candidate.get("needs") or "").strip():
                 raise ConfigError(f"workflow.reroute.{source} needs entries with an agent from workflow.agent_intents and a `needs` key.")
-    chars = wf["router_history_max_chars"]
-    if isinstance(chars, bool) or not isinstance(chars, int) or chars < 1:
-        raise ConfigError("workflow.router_history_max_chars must be a positive whole number.")
+    for key in ("router_history_max_chars", "part_max_chars"):
+        chars = wf[key]
+        if isinstance(chars, bool) or not isinstance(chars, int) or chars < 1:
+            raise ConfigError(f"workflow.{key} must be a positive whole number.")
     for prompt in ("router_prompt", "synthesizer_prompt", "safe_response_prompt"):
         if not str(wf.get(prompt) or "").strip():
             raise ConfigError(f"workflow.{prompt} must not be empty.")

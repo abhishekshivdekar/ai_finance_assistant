@@ -285,7 +285,8 @@ def test_payload_source_is_the_least_live_source_among_the_tickers():
 def test_summary_prompt_asks_for_short_per_ticker_paragraphs_and_a_limited_set_of_numbers():
     prompt = CFG["summary_prompt"]
     assert "ONE short paragraph per ticker" in prompt
-    assert "at most 3 numbers per ticker" in prompt
+    assert "at most 3 more numbers" in prompt and "at most 4 numbers per ticker" in prompt
+    assert '"latest_price_text"' in prompt and "copied exactly" in prompt and "the price is the first number" in prompt
     for allowed in ("return over the period", "20-day and 50-day averages", "52-week high"):
         assert allowed in prompt
     assert "closing sentence" in prompt and "moving average" in prompt and "drawdown" in prompt

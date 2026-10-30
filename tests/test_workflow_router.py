@@ -28,9 +28,9 @@ MIN = WF["router_min_confidence"]
 EMPTY = {"tickers": [], "period": None, "news_query": None}
 
 
-def reply(intents=("finance_qa",), confidence=0.9, **entities):
-    """A router reply as a plain dict, like a parsed structured output."""
-    return {"intents": list(intents), "confidence": confidence, "entities": {**EMPTY, **entities}}
+def reply(intents=("finance_qa",), confidence=0.9, parts=(), **entities):
+    """A router reply as a plain dict, like a parsed structured output (`parts`: [{"agent", "question"}])."""
+    return {"intents": list(intents), "confidence": confidence, "entities": {**EMPTY, **entities}, "parts": list(parts)}
 
 
 class FakeRunner:
@@ -109,7 +109,7 @@ def test_the_real_chat_class_parses_a_json_reply_through_a_mocked_transport():
     decision = Router(llm)({"query": "How is Tesla doing?", "messages": [HumanMessage(content="How is Tesla doing?")]})
     assert decision == Decision(["market"], 0.9, {"tickers": ["TSLA"]}, {"ticker": "TSLA"})
     schema = seen[0]["response_format"]["json_schema"]["schema"]
-    assert {"intents", "confidence", "entities"} <= set(schema["properties"])
+    assert {"intents", "confidence", "entities", "parts"} <= set(schema["properties"])
 
 
 def test_the_real_chat_class_with_a_non_json_reply_falls_back_to_finance_qa():
@@ -126,7 +126,7 @@ def test_the_real_chat_class_with_a_non_json_reply_falls_back_to_finance_qa():
 
 def test_a_valid_reply_is_read_as_given():
     assert read_output(reply(("market", "finance_qa"), 0.8), WF)[:2] == (["market", "finance_qa"], 0.8)
-    assert read_output(RouterOutput(intents=["news"], confidence=1, entities={**EMPTY}), WF)[:2] == (["news"], 1.0)
+    assert read_output(RouterOutput(intents=["news"], confidence=1, entities={**EMPTY}, parts=[]), WF)[:2] == (["news"], 1.0)
     assert read_output(reply(("market", "market"), 0), WF)[:2] == (["market"], 0.0)          # duplicates collapse; 0 is allowed
     assert read_output({"intents": ["market"], "confidence": 0.5, "entities": "junk"}, WF)[2] == {}
 
@@ -135,7 +135,7 @@ def test_a_valid_reply_is_read_as_given():
     None, "market", 7, [],
     {"confidence": 0.9}, {"intents": [], "confidence": 0.9}, {"intents": "market", "confidence": 0.9},
     {"intents": [1], "confidence": 0.9}, {"intents": ["not_an_intent"], "confidence": 0.9},
-    reply(("market", "news", "finance_qa")),
+    reply(("market", "news", "finance_qa", "portfolio")),
     reply(confidence=True), reply(confidence=1.5), reply(confidence=-0.1), reply(confidence=float("nan")),
     reply(confidence=float("inf")), reply(confidence="0.9"), reply(confidence=None),
 ])
@@ -150,7 +150,7 @@ def test_three_agent_intents_are_fine_when_specific_advice_empties_the_queue():
 
 @pytest.mark.parametrize("bad", [
     reply(("not_an_intent",)), reply(()), reply(confidence=2), reply(confidence=float("nan")),
-    reply(("market", "news", "finance_qa")), "plain text", None, ValueError("not json"), TimeoutError("llm down"),
+    "plain text", None, ValueError("not json"), TimeoutError("llm down"),
 ])
 def test_an_unusable_reply_makes_the_router_choose_finance_qa_at_the_minimum_confidence(bad):
     decision, _ = classify(bad, "Tell me about bonds")

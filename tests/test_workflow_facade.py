@@ -98,6 +98,7 @@ def test_every_call_sends_a_complete_fresh_input(use):
     assert set(turn) == set(get_type_hints(GraphState)) - set(APPEND_ONLY_KEYS)   # the two append-reducers cannot be cleared
     assert turn["query"] == "hello" and turn["intent_hint"] is None and turn["intents"] == [] and turn["agents_to_run"] == []
     assert turn["route_attempts"] == 0 and turn["final_answer"] == "" and turn["merge_mode"] is None and turn["sources"] == []
+    assert turn["agent_parts"] is None and turn["partial_handled"] is False
     assert all(turn[key] is None for key in ("portfolio", "goal_params", "market_params", "news_params", "tax_params", "topic_filter"))
 
 

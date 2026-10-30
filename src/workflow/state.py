@@ -49,6 +49,8 @@ class GraphState(TypedDict):
     tax_params: dict[str, Any] | None  # from the Tax tab form: {"calculation": "capital_gains" | "small_savings_growth", ...inputs}
     topic_filter: str | None  # set by the Chat tab dropdown; the facade passes it to the retriever
     final_answer: str
+    agent_parts: dict[str, str] | None  # router: agent intent -> its own short question (only with two or more agents; single writer: router)
+    partial_handled: bool  # router: the question needed more agents than workflow.max_agents_per_turn (the synthesizer adds a note)
     merge_mode: str | None  # "llm" | "verbatim" when the synthesizer merged two or more answers, else None (single writer: synthesizer)
 
 

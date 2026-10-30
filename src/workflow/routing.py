@@ -30,6 +30,8 @@ class Decision:
     confidence: float
     market_params: dict[str, Any] | None = None
     news_params: dict[str, Any] | None = None
+    parts: dict[str, str] | None = None   # agent intent -> its own short question (only with two or more agents)
+    partial: bool = False                 # the question needed more agents than workflow.max_agents_per_turn
 
 
 def plan_agents(intents: list[str], cfg: dict[str, Any]) -> list[str]:
@@ -61,10 +63,11 @@ def reroute_target(state: GraphState, cfg: dict[str, Any]) -> str | None:
 
     Candidates come from workflow.reroute[latest agent]; one qualifies when it has not run or been queued
     and the state holds the params it needs. Example: finance_qa -> market only if state["market_params"]
-    was filled by the router (the query contained a ticker).
+    was filled by the router (the query contained a ticker). A re-route is a rescue: when ANY result of this
+    turn is ok there is nothing to rescue, so the answer is None (market ok + finance_qa no_answer adds no news).
     """
     results = current_results(state)
-    if not results:
+    if not results or any(result["status"] == "ok" for result in results):
         return None
     ran = set(ran_agents(state)) | set(state.get("agents_to_run") or [])
     for candidate in cfg["reroute"].get(results[-1]["agent"], []):

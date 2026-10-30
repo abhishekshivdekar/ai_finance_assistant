@@ -221,6 +221,26 @@ def test_summary_input_formats_every_number_and_puts_label_numbers_in_the_values
     assert t["price_is_stale_or_sample"] is False
 
 
+def test_the_price_text_names_the_price_the_currency_and_where_it_came_from():
+    live = tm(ticker="AAPL", currency="USD").model_copy(update={"latest_price": 270.12, "price_source": "live"})
+    assert mm.price_text(live, CFG) == "AAPL last price USD 270.12 (live)"
+    when = datetime(2026, 10, 30, 9, 15)
+    stale = live.model_copy(update={"price_source": "stale cache", "as_of": when})
+    assert mm.price_text(stale, CFG) == "AAPL last price USD 270.12 (stale cache, as of 2026-10-30 09:15)"
+    assert mm.price_text(stale.model_copy(update={"as_of": None}), CFG) == "AAPL last price USD 270.12 (stale cache)"
+    assert mm.price_text(live.model_copy(update={"price_source": ""}), CFG) == "AAPL last price USD 270.12 (live)"
+
+
+def test_the_summary_input_carries_the_price_text_and_its_numbers_pass_the_number_guard():
+    from src.core.number_guard import collect_numbers, numbers_in
+
+    found = tm(ticker="AAPL", source="cache", as_of=datetime(2026, 10, 30, 9, 15)).model_copy(update={"latest_price": 1270.5})
+    sent = mm.summary_input(MarketMetrics(period="6mo", tickers=[found], warnings=[]), CFG)
+    text = sent["tickers"][0]["latest_price_text"]
+    assert text == "AAPL last price USD 1,270.50 (cache, as of 2026-10-30 09:15)"
+    assert numbers_in(text) - collect_numbers(sent) == set()
+
+
 def test_summary_input_describes_a_fall_and_marks_missing_values_not_available():
     full = tm()
     sparse = TickerMetrics(

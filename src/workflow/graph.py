@@ -55,7 +55,7 @@ def build_graph(
     builder = StateGraph(GraphState)
     builder.add_node("router", make_router_node(classify))
     for name in names:
-        builder.add_node(name, make_agent_node(agents[name]))
+        builder.add_node(name, make_agent_node(agents[name], name))
     builder.add_node("reroute", reroute_node)
     for name, node in (("clarify", clarify_node), ("fallback", fallback_node),
                        ("safe_response", make_safe_response_node(LazyLLM("safe_response", safe_response_llm), retrieve_fn or retrieve)),

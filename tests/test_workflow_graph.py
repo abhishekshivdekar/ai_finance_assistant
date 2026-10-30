@@ -167,8 +167,8 @@ def test_two_agents_run_in_the_routers_order_then_the_synthesizer_merges():
 
 
 def test_more_agents_than_the_cap_are_dropped():
-    visited, _ = run(build_graph(Classify(["market", "news", "finance_qa"]), agents()))
-    assert visited == ["router", "market", "news", "synthesizer"]
+    visited, _ = run(build_graph(Classify(["market", "news", "finance_qa", "portfolio"]), agents()))
+    assert visited == ["router", "market", "news", "finance_qa", "synthesizer"]
 
 
 def test_the_router_keeps_a_tab_param_when_it_found_nothing_and_writes_what_it_found():

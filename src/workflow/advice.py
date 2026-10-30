@@ -57,7 +57,7 @@ def educational_answer(
     if not cited or numbers_in(strip_citations(answer)) - allowed:
         log.warning("Educational answer cites nothing or has an unsupported number; using the static text")
         return None
-    guarded = guard_answer(answer, llm)
+    guarded = guard_answer(answer, llm, check_numbers=False)      # the number check below uses the chunks, a wider set
     if guarded == answer:
         return answer, to_sources(cited)
     if numbers_in(guarded) - allowed:

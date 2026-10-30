@@ -56,11 +56,19 @@ def finish(answer: str, sources: list[Source] | None = None) -> dict[str, Any]:
     return reply(add_disclaimer(answer), sources)
 
 
-def make_agent_node(agent: Any) -> Node:
-    """Wrap one agent: run it and return its result (and its error, tagged with the turn) for the reducers."""
+def make_agent_node(agent: Any, name: str | None = None) -> Node:
+    """Wrap one agent: run it and return its result (and its error, tagged with the turn) for the reducers.
+
+    When the router gave this agent its own part of a compound question (state["agent_parts"][name]), the agent
+    receives a COPY of the state with `query` replaced by that part; the full query stays in the real state and in
+    `messages`. Example: "What is Apple trading at, and what is a P/E ratio?" -> market gets "What is Apple
+    trading at?" and finance_qa gets "What is a P/E ratio?". A re-routed agent has no part and gets the full query.
+    """
+    name = name or getattr(agent, "name", "")
 
     def node(state: GraphState) -> dict[str, Any]:
-        result: AgentResult = agent.run(state)
+        part = (state.get("agent_parts") or {}).get(name)
+        result: AgentResult = agent.run({**state, "query": part} if part else state)
         update: dict[str, Any] = {"agent_outputs": [result]}
         if result["error"]:
             update["errors"] = [{"turn_id": result["turn_id"], "message": result["error"]}]
@@ -78,6 +86,8 @@ def make_router_node(classify: Callable[[GraphState], Decision]) -> Node:
             "intents": list(decision.intents),
             "router_confidence": decision.confidence,
             "agents_to_run": plan_agents(list(decision.intents), workflow_cfg()),
+            "agent_parts": decision.parts,
+            "partial_handled": decision.partial,
         }
         for key in ("market_params", "news_params"):
             if getattr(decision, key):
@@ -132,7 +142,8 @@ def make_synthesizer_node(llm: LazyLLM) -> Node:
     """synthesizer: one ok result is its answer (no LLM call); two or more are merged by ONE LLM call.
 
     The merge is checked in code and falls back to a verbatim join (merge_with_llm). Notes for needs_input /
-    error / no_answer results come from code. Only no_answer results: that message. Nothing usable: the fallback.
+    error / no_answer results come from code, plus `messages.partial_note` when the router could handle only part of
+    the question. Only no_answer results: that message. Nothing usable: the fallback.
     """
 
     def node(state: GraphState) -> dict[str, Any]:
@@ -140,7 +151,10 @@ def make_synthesizer_node(llm: LazyLLM) -> Node:
         ok = [r for r in results if r["status"] == "ok"]
         if ok:
             answer, sources, mode = (ok[0]["answer"], ok[0]["sources"], None) if len(ok) == 1 else merge_with_llm(ok, llm.get())
-            return {**finish("\n\n".join([answer, *notes_for(results)]), sources), "merge_mode": mode}
+            notes = notes_for(results)
+            if state.get("partial_handled"):
+                notes.append(" ".join(workflow_cfg()["messages"]["partial_note"].split()))
+            return {**finish("\n\n".join([answer, *notes]), sources), "merge_mode": mode}
         no_answer = [r for r in results if r["status"] == "no_answer"]
         if no_answer:
             return finish(no_answer[-1]["answer"])

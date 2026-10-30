@@ -38,7 +38,7 @@ def route_after_router(state: GraphState) -> str:
 
 
 def route_after_agent(state: GraphState) -> str:
-    """After an agent node: re-route on no_answer / wrong_agent while attempts remain, else the next agent, else the end rules.
+    """After an agent node: re-route on no_answer / wrong_agent while attempts remain and no result is ok, else the next agent, else the end rules.
 
     needs_input is an ordinary non-ok result: the queue goes on, and route_at_end decides (architecture 4.4
     deviation, see the Decisions list).

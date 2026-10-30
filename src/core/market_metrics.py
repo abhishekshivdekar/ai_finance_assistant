@@ -246,7 +246,22 @@ def _pct(x: float) -> str:
     return f"{x:.1f}%"
 
 
-def _ticker_summary(t: TickerMetrics) -> dict[str, Any]:
+def price_text(t: TickerMetrics, cfg: dict[str, Any]) -> str:
+    """The latest price as one sentence part the summary copies: ticker, currency, price and where/when it came from.
+
+    Example: "AAPL last price USD 270.12 (live)"; a price that is not live names its source and time, for example
+    "AAPL last price USD 270.12 (stale cache, as of 2026-10-30 09:15)". Wording comes from market_analysis.price_*.
+    """
+    if t.price_source in ("", "live"):
+        freshness = cfg["price_freshness_live"]
+    elif t.as_of is None:
+        freshness = t.price_source
+    else:
+        freshness = cfg["price_freshness_other"].format(source=t.price_source, as_of=t.as_of.strftime("%Y-%m-%d %H:%M"))
+    return cfg["price_text"].format(ticker=t.ticker, currency=t.currency, price=f"{t.latest_price:,.2f}", freshness=freshness)
+
+
+def _ticker_summary(t: TickerMetrics, cfg: dict[str, Any]) -> dict[str, Any]:
     """One ticker with every number pre-formatted; label numbers (20-day, 52-week) sit inside the values."""
     if t.day_change is None or t.day_change_pct is None:
         day = NOT_AVAILABLE
@@ -271,7 +286,7 @@ def _ticker_summary(t: TickerMetrics) -> dict[str, Any]:
         drawdown = f"{_pct(abs(t.max_drawdown_pct))} fall from a peak"
     covered = {"period_covered": f"only {t.span_days} days of data (shorter than the requested period)"} if t.period_is_short else {}
     return {
-        "ticker": t.ticker, "currency": t.currency, "latest_price": f"{t.latest_price:,.2f}",
+        "ticker": t.ticker, "currency": t.currency, "latest_price": f"{t.latest_price:,.2f}", "latest_price_text": price_text(t, cfg),
         **covered,
         "day_change": day,
         "return_over_period": NOT_AVAILABLE if t.period_return_pct is None else f"{t.period_return_pct:+.1f}%",
@@ -288,6 +303,6 @@ def summary_input(metrics: MarketMetrics, cfg: dict[str, Any]) -> dict[str, Any]
     """The only thing the LLM sees: the computed metrics with every number pre-formatted as text."""
     return {
         "analysis_period": cfg["period_labels"][metrics.period],
-        "tickers": [_ticker_summary(t) for t in metrics.tickers],
+        "tickers": [_ticker_summary(t, cfg) for t in metrics.tickers],
         "warnings": metrics.warnings,
     }

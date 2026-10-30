@@ -24,7 +24,7 @@ from src.core.llm_factory import get_llm
 from src.data.market.provider import InvalidSymbolError, validate_symbol
 from src.utils.config import get_config
 from src.utils.logger import get_logger
-from src.workflow.routing import Decision, workflow_cfg
+from src.workflow.routing import Decision, plan_agents, workflow_cfg
 from src.workflow.state import GraphState
 
 log = get_logger(__name__)
@@ -38,16 +38,32 @@ class RouterEntities(BaseModel):
     news_query: str | None
 
 
+class RouterPart(BaseModel):
+    """One agent intent and the short standalone question that agent should answer."""
+
+    agent: str
+    question: str
+
+
 class RouterOutput(BaseModel):
-    """The schema sent to the model (structured output). Its reply is validated again by read_output()."""
+    """The schema sent to the model (structured output). Its reply is validated again by read_output().
+
+    `parts` is a list of {agent, question} (empty unless two or more agent intents), not a mapping: a schema with
+    fixed fields is what structured output handles reliably. read_parts() turns it into {agent: question}.
+    """
 
     intents: list[str]
     confidence: float
     entities: RouterEntities
+    parts: list[RouterPart]
 
 
 class RouterError(ValueError):
     """The router's reply is not usable."""
+
+
+class TooManyAgentsError(RouterError):
+    """The reply names more agent intents than workflow.max_agents_per_turn."""
 
 
 def _as_dict(raw: Any) -> dict[str, Any]:
@@ -76,12 +92,35 @@ def read_output(raw: Any, cfg: dict[str, Any]) -> tuple[list[str], float, dict[s
         raise RouterError(f"unknown intents {unknown}")
     agents = [i for i in intents if i in cfg["agent_intents"]]
     if "specific_advice" not in intents and len(agents) > cfg["max_agents_per_turn"]:
-        raise RouterError(f"{len(agents)} agent intents; at most {cfg['max_agents_per_turn']} allowed")
+        raise TooManyAgentsError(f"{len(agents)} agent intents; at most {cfg['max_agents_per_turn']} allowed")
     confidence = data.get("confidence")
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
         raise RouterError("confidence must be a number from 0 to 1")
     entities = data.get("entities")
     return intents, float(confidence), dict(entities) if isinstance(entities, Mapping) else {}
+
+
+def read_parts(raw: Any, queue: list[str], cfg: dict[str, Any]) -> dict[str, str] | None:
+    """{agent: question} for the agents in `queue`, or None.
+
+    Only used with two or more queued agents. A part is dropped (that agent then gets the full query) when its agent
+    is not in the queue, it is not a non-empty string, or it is longer than workflow.part_max_chars. Accepts a list of
+    {agent, question} (the schema) or a mapping. Example: [{"agent": "market", "question": "What is Apple trading
+    at?"}, {"agent": "news", "question": ""}] -> {"market": "What is Apple trading at?"}.
+    """
+    if len(queue) < 2:
+        return None
+    pairs = list(raw.items()) if isinstance(raw, Mapping) else []
+    for item in raw if isinstance(raw, list) else []:
+        item = item.model_dump() if isinstance(item, BaseModel) else item
+        if isinstance(item, Mapping):
+            pairs.append((item.get("agent"), item.get("question")))
+    parts: dict[str, str] = {}
+    for agent, question in pairs:
+        text = " ".join(question.split()) if isinstance(question, str) else ""
+        if agent in queue and agent not in parts and 0 < len(text) <= cfg["part_max_chars"]:
+            parts[str(agent)] = text
+    return parts or None
 
 
 def resolve_mention(mention: Any, query: str, aliases: dict[str, str]) -> str | None:
@@ -167,12 +206,16 @@ class Router:
     def _decide(self, state: GraphState, cfg: dict[str, Any]) -> Decision:
         """One LLM call, validated and grounded; raises on anything unusable."""
         query = state.get("query") or ""
-        intents, confidence, entities = read_output(self.chain.invoke(build_messages(state, cfg)), cfg)
+        raw = self.chain.invoke(build_messages(state, cfg))
+        intents, confidence, entities = read_output(raw, cfg)
         market, news = ground_params(entities, query, cfg)
-        return Decision(intents, confidence, market, news)
+        return Decision(intents, confidence, market, news, parts=read_parts(_as_dict(raw).get("parts"), plan_agents(intents, cfg), cfg))
 
     def __call__(self, state: GraphState) -> Decision:
         """The decision. An empty query is `clarify`; an unusable reply is finance_qa (then the graph's fallback).
+
+        A reply with too many agent intents is also finance_qa but marked `partial`, so the answer says that only
+        part of the question was handled.
 
         The advice patterns run last and add specific_advice whatever the model said, even after a failed call.
         """
@@ -182,9 +225,9 @@ class Router:
             return Decision(["clarify"], 1.0)
         try:
             decision = self._decide(state, cfg)
-        except Exception:
+        except Exception as exc:
             log.warning("Router reply unusable; defaulting to finance_qa", exc_info=True)
-            decision = Decision(["finance_qa"], cfg["router_min_confidence"])
+            decision = Decision(["finance_qa"], cfg["router_min_confidence"], partial=isinstance(exc, TooManyAgentsError))
         if advice_hit(query, cfg) and "specific_advice" not in decision.intents:
             log.info("Advice pattern matched; adding specific_advice")
             decision = replace(decision, intents=[*decision.intents, "specific_advice"])

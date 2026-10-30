@@ -25,7 +25,7 @@ def result(agent, status="ok", answer="text", sources=None, turn_id="t1", error=
 
 def test_plan_agents_keeps_agent_intents_in_order_without_duplicates_up_to_the_cap():
     assert plan_agents(["news", "market", "news", "clarify"], WF) == ["news", "market"]
-    assert plan_agents(["market", "news", "finance_qa"], WF) == ["market", "news"]
+    assert plan_agents(["market", "news", "finance_qa", "portfolio"], WF) == ["market", "news", "finance_qa"]
     assert plan_agents(["out_of_scope"], WF) == [] and plan_agents([], WF) == []
 
 
@@ -166,6 +166,9 @@ def test_a_valid_workflow_block_loads(tmp_path):
     lambda w: w["messages"].update(out_of_scope="  "),
     lambda w: w["messages"].pop("no_answer_note"),
     lambda w: w.update(router_history_max_chars=0),
+    lambda w: w.update(part_max_chars=0),
+    lambda w: w.update(part_max_chars=True),
+    lambda w: w["messages"].pop("partial_note"),
     lambda w: w.update(router_history_max_chars=True),
     lambda w: w.update(router_prompt="  "),
     lambda w: w.update(synthesizer_prompt=""),
