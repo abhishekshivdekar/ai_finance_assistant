@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import math
 import statistics
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from src.core.market_models import AverageMetric, MarketMetrics, Range52w, TickerMetrics
@@ -250,14 +250,16 @@ def price_text(t: TickerMetrics, cfg: dict[str, Any]) -> str:
     """The latest price as one sentence part the summary copies: ticker, currency, price and where/when it came from.
 
     Example: "AAPL last price USD 270.12 (live)"; a price that is not live names its source and time, for example
-    "AAPL last price USD 270.12 (stale cache, as of 2026-10-30 09:15)". Wording comes from market_analysis.price_*.
+    "AAPL last price USD 270.12 (stale cache, as of 2026-10-30 09:15 UTC)". Times are shown in UTC: the providers stamp
+    UTC-aware times, and a naive time is taken as UTC. Wording comes from market_analysis.price_*.
     """
     if t.price_source in ("", "live"):
         freshness = cfg["price_freshness_live"]
     elif t.as_of is None:
         freshness = t.price_source
     else:
-        freshness = cfg["price_freshness_other"].format(source=t.price_source, as_of=t.as_of.strftime("%Y-%m-%d %H:%M"))
+        as_of = t.as_of.astimezone(timezone.utc) if t.as_of.tzinfo else t.as_of
+        freshness = cfg["price_freshness_other"].format(source=t.price_source, as_of=as_of.strftime("%Y-%m-%d %H:%M"))
     return cfg["price_text"].format(ticker=t.ticker, currency=t.currency, price=f"{t.latest_price:,.2f}", freshness=freshness)
 
 

@@ -181,7 +181,7 @@ def test_stale_and_sample_prices_are_flagged():
     assert any("not live" in w and "AAA (stale cache)" in w and "BBB (sample data)" in w
                for w in result["data"]["warnings"])
     _, live = run(["AAA"], TWO)
-    assert live["data"]["is_stale"] is False and live["data"]["as_of"] == T0.isoformat()
+    assert live["data"]["is_stale"] is False and live["data"]["as_of"] == T0.isoformat() and live["data"]["as_of"].endswith("+00:00")      # the payload time carries its zone
 
 
 def test_short_history_omits_metrics_with_warnings_but_still_answers():

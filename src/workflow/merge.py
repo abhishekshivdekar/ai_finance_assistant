@@ -29,6 +29,7 @@ log = get_logger(__name__)
 LABELLED = re.compile(r"\[[A-Za-z][A-Za-z ]*? \d+(?:\s*,\s*[A-Za-z][A-Za-z ]*? \d+)*\]")
 _LABELLED_TOKEN = re.compile(r"([A-Za-z][A-Za-z ]*?) (\d+)")
 _FACT_TOKEN = re.compile(r"F\d+")
+JSON_WORD = re.compile(r"\bjson\b", re.IGNORECASE)
 
 
 def _norm(text: str) -> str:
@@ -73,7 +74,7 @@ def validate_merge(
 ) -> str | None:
     """The merged text with invalid [n] dropped, or None when any check fails.
 
-    Checks: not empty; the output guard patterns do not match; the disclaimer is not in it (it is added once, later); [Fn] and [Label n] markers all appear in the
+    Checks: not empty; the word "JSON" appears only if an input answer has it (the model must not talk about its input); the output guard patterns do not match; the disclaimer is not in it (it is added once, later); [Fn] and [Label n] markers all appear in the
     input answers; every number is one of the numbers in the input answers (markers removed first); every
     text in `keep` still appears.
     """
@@ -81,6 +82,8 @@ def validate_merge(
     if not text or find_violation(text) or _norm(get_config()["app"]["disclaimer"]) in _norm(text):
         return None
     inputs = [body for _, body in sections]
+    if JSON_WORD.search(text) and not any(JSON_WORD.search(body) for body in inputs):
+        return None
     if not marker_tokens(text) <= set().union(*(marker_tokens(body) for body in inputs)):
         return None
     cleaned, _ = drop_invalid_citations(text, source_count)

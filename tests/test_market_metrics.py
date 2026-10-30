@@ -226,7 +226,10 @@ def test_the_price_text_names_the_price_the_currency_and_where_it_came_from():
     assert mm.price_text(live, CFG) == "AAPL last price USD 270.12 (live)"
     when = datetime(2026, 10, 30, 9, 15)
     stale = live.model_copy(update={"price_source": "stale cache", "as_of": when})
-    assert mm.price_text(stale, CFG) == "AAPL last price USD 270.12 (stale cache, as of 2026-10-30 09:15)"
+    assert mm.price_text(stale, CFG) == "AAPL last price USD 270.12 (stale cache, as of 2026-10-30 09:15 UTC)"
+    ist = timezone(timedelta(hours=5, minutes=30))
+    aware = stale.model_copy(update={"as_of": datetime(2026, 10, 30, 14, 45, tzinfo=ist)})        # 14:45 IST is 09:15 UTC
+    assert mm.price_text(aware, CFG) == "AAPL last price USD 270.12 (stale cache, as of 2026-10-30 09:15 UTC)"
     assert mm.price_text(stale.model_copy(update={"as_of": None}), CFG) == "AAPL last price USD 270.12 (stale cache)"
     assert mm.price_text(live.model_copy(update={"price_source": ""}), CFG) == "AAPL last price USD 270.12 (live)"
 
@@ -237,7 +240,7 @@ def test_the_summary_input_carries_the_price_text_and_its_numbers_pass_the_numbe
     found = tm(ticker="AAPL", source="cache", as_of=datetime(2026, 10, 30, 9, 15)).model_copy(update={"latest_price": 1270.5})
     sent = mm.summary_input(MarketMetrics(period="6mo", tickers=[found], warnings=[]), CFG)
     text = sent["tickers"][0]["latest_price_text"]
-    assert text == "AAPL last price USD 1,270.50 (cache, as of 2026-10-30 09:15)"
+    assert text == "AAPL last price USD 1,270.50 (cache, as of 2026-10-30 09:15 UTC)"
     assert numbers_in(text) - collect_numbers(sent) == set()
 
 

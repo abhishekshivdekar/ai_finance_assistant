@@ -153,6 +153,33 @@ def test_must_keep_lists_payload_texts_that_the_agent_answer_contains():
     assert must_keep(QA) == [] and must_keep(result("x", "t", None, {"label": 5, "exclusions": None, "config_used": {"a": 3}})) == []
 
 
+def test_a_merged_text_that_mentions_json_is_rejected_unless_an_input_does():
+    sections = [("Concepts", "A bond is a loan [1].")]
+    assert validate_merge("Here is the JSON: a bond is a loan [1].", sections, 1, []) is None
+    assert validate_merge("A bond is a loan [1] (json).", sections, 1, []) is None
+    assert validate_merge("A bond is a loan [1].", sections, 1, []) == "A bond is a loan [1]."
+    with_json = [("Concepts", "A JSON file is not a bond [1].")]
+    assert validate_merge("A JSON file is not a bond [1].", with_json, 1, []) == "A JSON file is not a bond [1]."
+
+
+def test_a_merge_that_mentions_json_gives_the_verbatim_join():
+    results = [{"agent": "market", "turn_id": "t", "status": "ok", "answer": "Apple is up.", "sources": [], "error": None, "data": None},
+               {"agent": "finance_qa", "turn_id": "t", "status": "ok", "answer": "A bond is a loan.", "sources": [], "error": None, "data": None}]
+    text, _, mode = merge_with_llm(results, FakeLLM("Based on the JSON you gave me: Apple is up. A bond is a loan."))
+    assert mode == "verbatim" and "JSON" not in text and "Apple is up." in text and "A bond is a loan." in text
+
+
+def test_the_synthesizer_prompt_forbids_talking_about_its_input():
+    prompt = get_config()["workflow"]["synthesizer_prompt"]
+    assert 'Never mention JSON, data, inputs, tags, "the answers" or other assistants' in prompt and "one answer written" in prompt
+
+
+def test_the_safe_response_prompt_opens_with_a_cannot_recommend_sentence():
+    prompt = " ".join(get_config()["workflow"]["safe_response_prompt"].split())
+    assert "Open with ONE short sentence" in prompt and "I can't recommend a specific stock or fund." in prompt
+    assert "I can't predict whether a price will go up." in prompt and "each with its citation" in prompt
+
+
 def test_validate_merge_returns_none_for_text_with_no_overlap_rules_broken():
     sections = [("Concepts", "A bond is a loan [1].")]
     assert validate_merge("A bond is a loan [1].", sections, 1, []) == "A bond is a loan [1]."
