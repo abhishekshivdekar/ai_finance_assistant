@@ -56,13 +56,16 @@ def must_keep(result: AgentResult) -> list[str]:
     """Texts the agent put in its answer from its payload that a merge must not drop.
 
     The payload `label` (Tax: "illustrative, verify before relying"), the `source` of stale or sample prices
-    (Market), every `exclusions` line and the `as_of` dates of `config_used` figures, each only when the
-    agent's own answer contains it (an agent that left it out leaves nothing to keep).
+    and every whole price sentence of a price that is not live (Market `freshness_texts`), every `exclusions` line
+    and the `as_of` dates of `config_used` figures, each only when the agent's own answer contains it (an agent
+    that left it out leaves nothing to keep).
     Example: a Tax answer ending "Figures quoted are illustrative, verify before relying (as of 2026-10-29)..."
-    keeps the label, the date and, for equity figures, the securities-transaction-tax line.
+    keeps the label, the date and, for equity figures, the securities-transaction-tax line; a Market answer with
+    "AAPL last price USD 270.12 (cache, as of 2026-10-30 09:15 UTC)" keeps that whole sentence part.
     """
     data = result.get("data") or {}
     candidates: list[Any] = [data.get("label"), data.get("source") if data.get("is_stale") else None]
+    candidates += list(data.get("freshness_texts") or [])
     candidates += list(data.get("exclusions") or [])
     candidates += [entry.get("as_of") for entry in (data.get("config_used") or {}).values() if isinstance(entry, dict)]
     answer = _norm(result["answer"])
@@ -70,20 +73,23 @@ def must_keep(result: AgentResult) -> list[str]:
 
 
 def validate_merge(
-    text: str, sections: list[tuple[str, str]], source_count: int, keep: list[str],
+    text: str, sections: list[tuple[str, str]], source_count: int, keep: list[str], banned: list[str] | None = None,
 ) -> str | None:
     """The merged text with invalid [n] dropped, or None when any check fails.
 
-    Checks: not empty; the word "JSON" appears only if an input answer has it (the model must not talk about its input); the output guard patterns do not match; the disclaimer is not in it (it is added once, later); [Fn] and [Label n] markers all appear in the
-    input answers; every number is one of the numbers in the input answers (markers removed first); every
-    text in `keep` still appears.
+    Checks: not empty; the output guard patterns do not match; the disclaimer is not in it (it is added once,
+    later); no `banned` phrase (default `workflow.merge_banned_phrases`, regexes) appears unless an input answer has
+    it too (the model must not talk about its input); [Fn] and [Label n] markers all appear in the input answers;
+    every number is one of the numbers in the input answers (markers removed first); every text in `keep` appears.
     """
     text = text.strip()
     if not text or find_violation(text) or _norm(get_config()["app"]["disclaimer"]) in _norm(text):
         return None
     inputs = [body for _, body in sections]
-    if JSON_WORD.search(text) and not any(JSON_WORD.search(body) for body in inputs):
-        return None
+    for pattern in workflow_cfg()["merge_banned_phrases"] if banned is None else banned:
+        phrase = re.compile(pattern, re.IGNORECASE)
+        if phrase.search(text) and not any(phrase.search(body) for body in inputs):
+            return None
     if not marker_tokens(text) <= set().union(*(marker_tokens(body) for body in inputs)):
         return None
     cleaned, _ = drop_invalid_citations(text, source_count)
@@ -120,7 +126,7 @@ def merge_with_llm(
         log.warning("Merge call failed; joining the answers verbatim", exc_info=True)
         return verbatim
     keep = [item for result in results for item in must_keep(result)]
-    merged = validate_merge(text, sections, len(sources), keep)
+    merged = validate_merge(text, sections, len(sources), keep, cfg["merge_banned_phrases"])
     if merged is None:
         log.warning("Merged text failed a check; joining the answers verbatim")
         return verbatim

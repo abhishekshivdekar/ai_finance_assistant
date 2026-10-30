@@ -1,5 +1,6 @@
 """The LLM merge of several agent answers, the educational safe_response and the lazy LLMs (all with fake LLMs)."""
 import json
+import re
 
 import pytest
 
@@ -153,31 +154,96 @@ def test_must_keep_lists_payload_texts_that_the_agent_answer_contains():
     assert must_keep(QA) == [] and must_keep(result("x", "t", None, {"label": 5, "exclusions": None, "config_used": {"a": 3}})) == []
 
 
-def test_a_merged_text_that_mentions_json_is_rejected_unless_an_input_does():
-    sections = [("Concepts", "A bond is a loan [1].")]
-    assert validate_merge("Here is the JSON: a bond is a loan [1].", sections, 1, []) is None
-    assert validate_merge("A bond is a loan [1] (json).", sections, 1, []) is None
-    assert validate_merge("A bond is a loan [1].", sections, 1, []) == "A bond is a loan [1]."
-    with_json = [("Concepts", "A JSON file is not a bond [1].")]
-    assert validate_merge("A JSON file is not a bond [1].", with_json, 1, []) == "A JSON file is not a bond [1]."
+# One merged text per banned phrase (workflow.merge_banned_phrases); each is rejected unless an input answer has the phrase too.
+BANNED_TEXTS = {
+    "json": "Here is the JSON: a bond is a loan [1].",
+    "the answers": "Combining the answers: a bond is a loan [1].",
+    "other assistants": "Other assistants said a bond is a loan [1].",
+    "the inputs": "Using the inputs, a bond is a loan [1].",
+}
 
 
-def test_a_merge_that_mentions_json_gives_the_verbatim_join():
-    results = [{"agent": "market", "turn_id": "t", "status": "ok", "answer": "Apple is up.", "sources": [], "error": None, "data": None},
-               {"agent": "finance_qa", "turn_id": "t", "status": "ok", "answer": "A bond is a loan.", "sources": [], "error": None, "data": None}]
-    text, _, mode = merge_with_llm(results, FakeLLM("Based on the JSON you gave me: Apple is up. A bond is a loan."))
-    assert mode == "verbatim" and "JSON" not in text and "Apple is up." in text and "A bond is a loan." in text
+def test_the_banned_phrase_list_in_the_config_starts_with_the_four_known_leaks():
+    patterns = WF["merge_banned_phrases"]
+    assert len(patterns) == len(BANNED_TEXTS)
+    for (name, text), pattern in zip(BANNED_TEXTS.items(), patterns):
+        assert re.search(pattern, text, re.IGNORECASE) and name.split()[-1] in pattern
 
 
-def test_the_synthesizer_prompt_forbids_talking_about_its_input():
-    prompt = get_config()["workflow"]["synthesizer_prompt"]
-    assert 'Never mention JSON, data, inputs, tags, "the answers" or other assistants' in prompt and "one answer written" in prompt
+@pytest.mark.parametrize("name", list(BANNED_TEXTS))
+def test_a_merged_text_with_a_banned_phrase_is_rejected_unless_an_input_has_it(name):
+    text = BANNED_TEXTS[name]
+    plain = [("Concepts", "A bond is a loan [1].")]
+    assert validate_merge(text, plain, 1, []) is None
+    assert validate_merge(text.upper(), plain, 1, []) is None                              # case-insensitive
+    assert validate_merge(text, [("Concepts", text)], 1, []) == text                       # the input says it too: the user asked about it
+    assert validate_merge("A bond is a loan [1].", plain, 1, []) == "A bond is a loan [1]."
 
 
-def test_the_safe_response_prompt_opens_with_a_cannot_recommend_sentence():
-    prompt = " ".join(get_config()["workflow"]["safe_response_prompt"].split())
-    assert "Open with ONE short sentence" in prompt and "I can't recommend a specific stock or fund." in prompt
-    assert "I can't predict whether a price will go up." in prompt and "each with its citation" in prompt
+def test_validate_merge_takes_the_banned_list_as_a_parameter():
+    sections = [("Concepts", "A bond is a debt [1].")]
+    assert validate_merge("A bond is a loan [1].", sections, 1, [], banned=["loan"]) is None
+    assert validate_merge("A bond is a loan [1].", sections, 1, [], banned=["house"]) == "A bond is a loan [1]."
+    assert validate_merge("A bond is a loan [1].", sections, 1, [], banned=[]) == "A bond is a loan [1]."
+    assert validate_merge("A bond is a loan [1].", [("Concepts", "A loan is a bond [1].")], 1, [], banned=["loan"]) is not None   # input has it too
+
+
+@pytest.mark.parametrize("name", list(BANNED_TEXTS))
+def test_a_merge_with_a_banned_phrase_gives_the_verbatim_join(name):
+    results = [result("market", "Apple is up."), result("finance_qa", "A bond is a loan.")]
+    reply = f"{BANNED_TEXTS[name].replace(' [1]', '')} Apple is up."
+    text, _, mode = merge_with_llm(results, FakeLLM(reply))
+    assert mode == "verbatim" and text == verbatim_of(*results)[0] and "Apple is up." in text
+
+
+def test_the_synthesizer_prompt_names_what_not_to_mention_and_keeps_the_stale_notes_rule():
+    prompt = " ".join(WF["synthesizer_prompt"].split())
+    assert "Never mention the JSON object, the answers, the inputs, tags or other assistants" in prompt
+    assert "Never mention JSON, data," not in prompt                                         # the bare word "data" is gone
+    assert "Keep every note that says figures are illustrative, stale, sample data or must be verified" in prompt
+
+
+def test_the_safe_response_prompt_tells_the_model_not_to_write_its_own_opening():
+    prompt = " ".join(WF["safe_response_prompt"].split())
+    assert "Do not write an opening sentence saying you cannot recommend or predict; it is added for you" in prompt
+    assert "Open with ONE short sentence" not in prompt
+
+
+# ---- the Market price sentence of a price that is not live must survive a merge ----
+
+SAMPLE_SENTENCE = "AAPL last price USD 190.50 (sample data, as of 2026-10-27 00:00 UTC)"
+CACHE_SENTENCE = "AAPL last price USD 270.12 (cache, as of 2026-10-30 09:15 UTC)"
+MARKET_SAMPLE = result("market", f"{SAMPLE_SENTENCE}, a flat month.", None,
+                       {"source": "sample data", "is_stale": True, "freshness_texts": [SAMPLE_SENTENCE]})
+MARKET_CACHE = result("market", f"{CACHE_SENTENCE}, a flat month.", None,
+                      {"source": "cache", "is_stale": False, "freshness_texts": [CACHE_SENTENCE]})
+CONCEPT = result("finance_qa", "A bond is a loan.")
+
+
+def test_must_keep_lists_the_whole_price_sentence_of_a_price_that_is_not_live():
+    assert must_keep(MARKET_SAMPLE) == ["sample data", SAMPLE_SENTENCE]
+    assert must_keep(MARKET_CACHE) == [CACHE_SENTENCE]                       # source "cache" is not flagged stale, the sentence still counts
+    quiet = result("market", "AAPL is flat.", None, {"source": "cache", "is_stale": False, "freshness_texts": [CACHE_SENTENCE]})
+    assert must_keep(quiet) == []                                            # the agent's own answer left it out: nothing to keep
+    assert must_keep(result("market", CACHE_SENTENCE, None, {"freshness_texts": None})) == []
+
+
+@pytest.mark.parametrize("market, sentence", [(MARKET_SAMPLE, SAMPLE_SENTENCE), (MARKET_CACHE, CACHE_SENTENCE)])
+def test_a_merge_that_keeps_the_price_sentence_is_used(market, sentence):
+    reply = f"{sentence}, a flat month. A bond is a loan."
+    assert merge_with_llm([market, CONCEPT], FakeLLM(reply))[2] == "llm"
+
+
+@pytest.mark.parametrize("market, sentence, dropped, reworded", [
+    (MARKET_SAMPLE, SAMPLE_SENTENCE, "AAPL is a flat month at 190.50. A bond is a loan.",
+     "AAPL last price USD 190.50 (sample data, as of 2026-10-27 00:00), a flat month. A bond is a loan."),
+    (MARKET_CACHE, CACHE_SENTENCE, "AAPL is a flat month at 270.12. A bond is a loan.",
+     "AAPL last price USD 270.12 (cache, as of 2026-10-30 09:15), a flat month. A bond is a loan."),
+])
+def test_a_merge_that_drops_or_rewords_the_price_sentence_gives_the_verbatim_join(market, sentence, dropped, reworded):
+    for reply in (dropped, reworded):
+        text, _, mode = merge_with_llm([market, CONCEPT], FakeLLM(reply))
+        assert mode == "verbatim" and sentence in text
 
 
 def test_validate_merge_returns_none_for_text_with_no_overlap_rules_broken():
@@ -242,6 +308,8 @@ class Retrieve:
 
 
 EDU = "People weigh risk, time horizon and diversification [1]. A 5 year horizon is common [1]."
+OPENING = " ".join(MSG["advice_opening"].split())
+EDU_OPENED = f"{OPENING} {EDU}"                                                             # what the user sees: the opening is added in code
 
 
 def advice_run(llm, chunks=None, query="Should I buy Tesla?", intents=("specific_advice",), **kw):
@@ -256,7 +324,7 @@ def test_an_advice_request_gets_a_cited_educational_answer_from_the_retrieved_co
     llm = FakeLLM(EDU)
     visited, state, retrieve_fn, _ = advice_run(llm, topic_filter="risk")
     assert visited == ["router", "safe_response"] and retrieve_fn.calls == [("Should I buy Tesla?", "risk")]
-    assert state["final_answer"] == f"{EDU}\n\n{DISCLAIMER}" and [s["chunk_id"] for s in state["sources"]] == ["risk/article-1#0"]
+    assert state["final_answer"] == f"{EDU_OPENED}\n\n{DISCLAIMER}" and [s["chunk_id"] for s in state["sources"]] == ["risk/article-1#0"]
     system, human = llm.calls[0]
     assert system.content == WF["safe_response_prompt"] and "Never recommend, rank or predict" in system.content
     assert human.content.startswith("<context>\n[1] Article 1") and '<user_input>\n{"query": "Should I buy Tesla?"}\n</user_input>' in human.content
@@ -312,7 +380,32 @@ def test_educational_answer_can_be_called_directly_and_returns_none_without_cont
     state = {"query": "Should I sell?", "intents": ["specific_advice"]}
     assert educational_answer(state, FakeLLM(EDU), Retrieve([])) is None
     answer, sources = educational_answer(state, FakeLLM(EDU), Retrieve([chunk(1)]))
-    assert answer == EDU and len(sources) == 1
+    assert answer == EDU_OPENED and len(sources) == 1
+
+
+@pytest.mark.parametrize("model_text", [
+    "I can't recommend a specific stock. " + EDU,
+    "I can’t predict prices. " + EDU,
+    "No one can recommend that, and I cannot either. " + EDU,
+    "I am unable to say what to buy. " + EDU,
+])
+def test_a_model_that_already_says_it_cannot_recommend_gets_no_second_opening(model_text):
+    answer, _ = educational_answer({"query": "Should I sell?"}, FakeLLM(model_text), Retrieve([chunk(1)]))
+    assert answer == model_text and OPENING not in answer
+
+
+def test_a_model_that_skips_the_opening_gets_it_prepended_and_one_that_says_it_late_does_too():
+    state = {"query": "Should I sell?"}
+    assert educational_answer(state, FakeLLM(EDU), Retrieve([chunk(1)]))[0] == EDU_OPENED
+    late = EDU + " I can't recommend anything [1]."
+    assert educational_answer(state, FakeLLM(late), Retrieve([chunk(1)]))[0] == f"{OPENING} {late}"      # only the first sentence counts
+
+
+def test_the_opening_is_checked_with_the_answer_so_a_number_in_it_gives_the_static_text(monkeypatch):
+    cfg = {**WF, "messages": {**MSG, "advice_opening": "I can't recommend any of 99 things."}}
+    monkeypatch.setattr("src.workflow.advice.workflow_cfg", lambda: cfg)
+    assert educational_answer({"query": "Should I sell?"}, FakeLLM(EDU), Retrieve([chunk(1)])) is None
+    assert educational_answer({"query": "Should I sell?"}, FakeLLM("I can't say. " + EDU), Retrieve([chunk(1)])) is not None   # no opening added: no 99
 
 
 # ---- the disclaimer exactly once in every final node ----

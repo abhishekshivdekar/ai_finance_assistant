@@ -154,7 +154,7 @@ def _validate_tax(tax: dict[str, Any]) -> None:
 
 WORKFLOW_MESSAGES = (
     "clarify_low_confidence", "out_of_scope", "advice_static", "fallback", "needs_input_note", "error_note", "no_answer_note",
-    "section_heading", "unsourced_marker", "budget_exceeded", "partial_note",
+    "section_heading", "unsourced_marker", "budget_exceeded", "partial_note", "advice_opening",
 )
 WORKFLOW_REQUIRED_INTENTS = ("clarify", "out_of_scope", "specific_advice")
 
@@ -195,6 +195,16 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
             re.compile(str(pattern))
         except re.error as exc:
             raise ConfigError(f"workflow.advice_patterns has an invalid regex {pattern!r}: {exc}") from exc
+    banned, opening = wf.get("merge_banned_phrases"), wf.get("advice_opening_pattern")
+    if not isinstance(banned, list) or not banned or not all(isinstance(p, str) and p.strip() for p in banned):
+        raise ConfigError("workflow.merge_banned_phrases must be a non-empty list of regexes.")
+    if not isinstance(opening, str) or not opening.strip():
+        raise ConfigError("workflow.advice_opening_pattern must be a non-empty regex.")
+    for pattern in [*banned, opening]:
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ConfigError(f"workflow has an invalid regex {pattern!r} (merge_banned_phrases or advice_opening_pattern): {exc}") from exc
     aliases = wf["ticker_aliases"]
     if not isinstance(aliases, dict) or any(not str(k).strip() or not isinstance(v, str) or not v.strip() for k, v in aliases.items()):
         raise ConfigError("workflow.ticker_aliases must map a name to a non-empty symbol.")

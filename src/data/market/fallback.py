@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
@@ -166,6 +166,8 @@ class SampleHandler(Handler):
         if entry is None or request.kind == "news":
             return None
         as_of = datetime.fromisoformat(snapshot["_meta"]["as_of"])
+        if as_of.tzinfo is None:
+            as_of = as_of.replace(tzinfo=timezone.utc)                 # a snapshot time written without an offset is UTC
         if request.kind == "history":
             data: Any = entry["history"]
         else:

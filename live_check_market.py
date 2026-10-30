@@ -2,6 +2,7 @@
 import time
 
 from src.data.market import get_market_provider
+from live_checks.transcript import run_with_transcript
 
 
 def show(label, result):
@@ -30,4 +31,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_with_transcript(main, __file__)

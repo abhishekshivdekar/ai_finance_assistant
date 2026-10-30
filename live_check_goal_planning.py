@@ -6,6 +6,7 @@ the commentary and the token cost. The numbers come from code; only the commenta
 """
 from src.agents.goal_planning import GoalPlanningAgent
 from src.core.usage_tracker import get_usage_registry
+from live_checks.transcript import run_with_transcript
 
 GOALS = {
     "15-year retirement-style goal with a yearly step-up": {
@@ -70,4 +71,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_with_transcript(main, __file__)

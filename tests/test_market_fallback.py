@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -177,3 +178,21 @@ def test_chain_without_next_handler_returns_error():
     handler = fallback.FreshCacheHandler(fallback.TTLCache(Clock()))
     request = fallback.Request("quote", "AAPL", None, lambda: ok(), timedelta(minutes=1))
     assert handler.handle(request).error
+
+
+def test_a_snapshot_time_written_without_an_offset_is_taken_as_utc(tmp_path):
+    snapshot = {"_meta": {"as_of": "2026-10-27T00:00:00"}, "tickers": {"AAPL": {"currency": "USD", "price": 110.0, "previous_close": 100.0}}}
+    path = tmp_path / "snapshot.json"
+    path.write_text(json.dumps(snapshot), encoding="utf-8")
+    fallback.load_snapshot.cache_clear()
+    try:
+        result = fallback.SampleHandler(str(path)).handle(fallback.Request("quote", "AAPL", None, lambda: ok(), timedelta(minutes=1)))
+    finally:
+        fallback.load_snapshot.cache_clear()
+    assert result.source == "sample data" and result.as_of == datetime(2026, 10, 27, tzinfo=timezone.utc)
+    assert result.as_of.utcoffset() == timedelta(0)
+
+
+def test_the_bundled_snapshot_time_carries_its_zone():
+    assert fallback.SampleHandler(get_config()["market_data"]["snapshot_path"]).handle(
+        fallback.Request("quote", "AAPL", None, lambda: ok(), timedelta(minutes=1))).as_of.utcoffset() == timedelta(0)

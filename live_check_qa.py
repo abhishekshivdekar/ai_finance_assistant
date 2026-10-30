@@ -12,6 +12,7 @@ import yaml
 from src.agents.finance_qa import FinanceQAAgent
 from src.core.usage_tracker import get_usage_registry
 from src.utils.config import PROJECT_ROOT
+from live_checks.transcript import run_with_transcript
 
 ANSWERABLE = [
     "What is the difference between an ETF and a mutual fund?",
@@ -73,4 +74,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_with_transcript(main, __file__)

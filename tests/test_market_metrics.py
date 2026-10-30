@@ -234,6 +234,30 @@ def test_the_price_text_names_the_price_the_currency_and_where_it_came_from():
     assert mm.price_text(live.model_copy(update={"price_source": ""}), CFG) == "AAPL last price USD 270.12 (live)"
 
 
+def test_a_naive_price_time_is_taken_as_utc_with_a_log_warning_and_an_aware_one_is_not_warned_about(caplog):
+    live = tm(ticker="AAPL", currency="USD").model_copy(update={"latest_price": 270.12})
+    naive = live.model_copy(update={"price_source": "cache", "as_of": datetime(2026, 10, 30, 9, 15)})
+    with caplog.at_level("WARNING"):
+        mm.price_text(naive, CFG)
+    assert any("no time zone" in r.getMessage() and "AAPL" in r.getMessage() for r in caplog.records)
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        mm.price_text(naive.model_copy(update={"as_of": datetime(2026, 10, 30, 9, 15, tzinfo=timezone.utc)}), CFG)
+    assert not caplog.records
+
+
+def test_the_real_config_template_ends_the_time_with_utc():
+    """Reads config.yaml from disk (not the cached CFG), so editing the template cannot drift from the code unnoticed."""
+    import yaml
+    from src.utils.config import PROJECT_ROOT
+
+    real = yaml.safe_load((PROJECT_ROOT / "config.yaml").read_text(encoding="utf-8"))["market_analysis"]
+    assert real["price_freshness_other"].endswith("as of {as_of} UTC") and "UTC" not in real["price_freshness_live"]
+    stale = tm(ticker="AAPL", currency="USD", source="stale cache", as_of=datetime(2026, 10, 30, 9, 15, tzinfo=timezone.utc))
+    stale = stale.model_copy(update={"latest_price": 270.12, "price_source": "stale cache"})
+    assert mm.price_text(stale, real) == "AAPL last price USD 270.12 (stale cache, as of 2026-10-30 09:15 UTC)"
+
+
 def test_the_summary_input_carries_the_price_text_and_its_numbers_pass_the_number_guard():
     from src.core.number_guard import collect_numbers, numbers_in
 

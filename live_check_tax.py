@@ -8,6 +8,7 @@ verified on incometax.gov.in before it is relied on. Do not run this without che
 """
 from src.agents.tax import TaxAgent
 from src.core.usage_tracker import get_usage_registry
+from live_checks.transcript import run_with_transcript
 
 QUESTIONS = [
     "What is LTCG?",
@@ -84,4 +85,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_with_transcript(main, __file__)

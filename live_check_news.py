@@ -6,6 +6,7 @@ its citations, the warnings and, at the end, the token cost.
 """
 from src.agents.news import NewsAgent
 from src.core.usage_tracker import get_usage_registry
+from live_checks.transcript import run_with_transcript
 
 REQUESTS = [
     {"ticker": "AAPL"},
@@ -41,4 +42,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_with_transcript(main, __file__)

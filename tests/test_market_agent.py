@@ -184,6 +184,18 @@ def test_stale_and_sample_prices_are_flagged():
     assert live["data"]["is_stale"] is False and live["data"]["as_of"] == T0.isoformat() and live["data"]["as_of"].endswith("+00:00")      # the payload time carries its zone
 
 
+def test_the_payload_lists_the_price_sentence_of_every_price_that_is_not_live():
+    histories = {"AAA": history(RISING, source="cache"), "BBB": history(FALLING, "INR", source="sample data"), "CCC": history(RISING)}
+    _, result = run(["AAA", "BBB", "CCC"], histories)
+    texts = result["data"]["freshness_texts"]
+    assert texts == [
+        "AAA last price USD 100.00 (cache, as of 2026-10-01 00:00 UTC)",
+        "BBB last price INR 101.00 (sample data, as of 2026-10-01 00:00 UTC)",
+    ]                                                                         # CCC is live: nothing to keep
+    _, live = run(["AAA"], TWO)
+    assert live["data"]["freshness_texts"] == []
+
+
 def test_short_history_omits_metrics_with_warnings_but_still_answers():
     _, result = run(["AAA"], {"AAA": history(list(range(70, 101)))})        # 31 days
     t = result["data"]["metrics"]["tickers"][0]

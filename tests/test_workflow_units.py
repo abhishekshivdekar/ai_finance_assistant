@@ -177,6 +177,15 @@ def test_a_valid_workflow_block_loads(tmp_path):
     lambda w: w.update(ticker_aliases=["apple"]),
     lambda w: w["ticker_aliases"].update(broken=""),
     lambda w: w["ticker_aliases"].update({"": "AAPL"}),
+    lambda w: w.pop("merge_banned_phrases"),
+    lambda w: w.update(merge_banned_phrases=[]),
+    lambda w: w.update(merge_banned_phrases="json"),
+    lambda w: w.update(merge_banned_phrases=["json", " "]),
+    lambda w: w.update(merge_banned_phrases=["(unclosed"]),
+    lambda w: w.pop("advice_opening_pattern"),
+    lambda w: w.update(advice_opening_pattern="  "),
+    lambda w: w.update(advice_opening_pattern="(unclosed"),
+    lambda w: w["messages"].pop("advice_opening"),
 ])
 def test_a_broken_workflow_block_is_rejected(tmp_path, change):
     with pytest.raises(ConfigError):

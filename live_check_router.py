@@ -10,6 +10,7 @@ from src.core.usage_tracker import get_usage_registry
 from src.workflow.edges import route_after_router
 from src.workflow.router import Router
 from src.workflow.routing import plan_agents, workflow_cfg
+from live_checks.transcript import run_with_transcript
 
 QUERIES: list[tuple[str, str]] = [
     ("finance_qa", "What is the difference between an ETF and a mutual fund?"),
@@ -64,4 +65,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_with_transcript(main, __file__)

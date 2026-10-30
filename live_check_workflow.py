@@ -10,6 +10,7 @@ import uuid
 
 from src.core.usage_tracker import get_usage_registry
 from src.workflow.facade import run_query
+from live_checks.transcript import run_with_transcript
 
 # (label, query); a label starting with "thread:" shares the conversation thread with the other turns of that name.
 TURNS: list[tuple[str, str]] = [
@@ -74,4 +75,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_with_transcript(main, __file__)

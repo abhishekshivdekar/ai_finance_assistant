@@ -5,6 +5,7 @@ Prints the metrics table, the comparison, the warnings, the plain-language summa
 """
 from src.agents.market import MarketAgent
 from src.core.usage_tracker import get_usage_registry
+from live_checks.transcript import run_with_transcript
 
 TICKERS = ["RELIANCE.NS", "TCS.NS", "^NSEI", "AAPL"]    # three in INR, one in USD: each is reported in its own currency
 PERIOD = "6mo"
@@ -60,4 +61,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_with_transcript(main, __file__)

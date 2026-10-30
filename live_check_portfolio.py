@@ -6,6 +6,7 @@ The sample numbers below (quantities, costs, the fund's expense ratio) are made 
 """
 from src.agents.portfolio import PortfolioAgent
 from src.core.usage_tracker import get_usage_registry
+from live_checks.transcript import run_with_transcript
 
 SAMPLE_PORTFOLIO = [
     {"ticker": "RELIANCE.NS", "quantity": 10, "avg_cost": 2400.0, "asset_class": "equity"},
@@ -58,4 +59,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_with_transcript(main, __file__)

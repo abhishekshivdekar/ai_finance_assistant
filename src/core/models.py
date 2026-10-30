@@ -25,13 +25,15 @@ class MarketPayload(TypedDict, total=False):
 
     `metrics` is MarketMetrics as a dict (one entry per ticker, each in its own
     currency), `comparison` holds the table rows, `source` is the least live
-    source among the analysed tickers and `warnings` lists everything left out.
+    source among the analysed tickers, `freshness_texts` the price sentence part of every ticker whose price is not
+    live (a merge must keep them) and `warnings` lists everything left out.
     """
 
     history: list[dict[str, Any]]
     as_of: str
     source: str
     is_stale: bool
+    freshness_texts: list[str]
     metrics: dict[str, Any]
     comparison: list[dict[str, Any]]
     warnings: list[str]
