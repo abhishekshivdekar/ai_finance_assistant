@@ -193,6 +193,7 @@ workflow:                     # LangGraph router and nodes (architecture section
       I can't tell you what to buy, sell or hold. I can explain how people usually think about
       such a decision, such as risk, time horizon and diversification, if you ask about those.
     fallback: "Sorry, I couldn't prepare an answer this time. Please try again in a moment."
+    budget_exceeded: "The usage limit for this session has been reached, so I can't answer more questions right now. Please start a new session later."
     needs_input_note: "Note: {label} needs more information. {message}"
     error_note: "Note: the {label} part of your question could not be answered right now. Please try again later."
     no_answer_note: "Note: the {label} part of your question had no answer. {message}"

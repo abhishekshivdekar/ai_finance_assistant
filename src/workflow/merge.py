@@ -92,11 +92,19 @@ def validate_merge(
     return cleaned
 
 
-def merge_with_llm(results: list[AgentResult], llm: Any, cfg: dict[str, Any] | None = None) -> tuple[str, list[Source]]:
-    """One LLM call joins the ok answers; any failed check or error gives the verbatim join instead."""
+MERGE_LLM, MERGE_VERBATIM = "llm", "verbatim"
+
+
+def merge_with_llm(
+    results: list[AgentResult], llm: Any, cfg: dict[str, Any] | None = None,
+) -> tuple[str, list[Source], str]:
+    """One LLM call joins the ok answers; any failed check or error gives the verbatim join instead.
+
+    Returns (text, sources, mode) with mode MERGE_LLM or MERGE_VERBATIM, so the caller can tell which text it got.
+    """
     cfg = cfg or workflow_cfg()
     sections, sources = renumber_results(results, cfg)
-    verbatim = (join_sections(sections, cfg), sources)
+    verbatim = (join_sections(sections, cfg), sources, MERGE_VERBATIM)
     data = json.dumps({"answers": [{"label": label, "text": body} for label, body in sections]}, ensure_ascii=False)
     messages = [
         SystemMessage(content=cfg["synthesizer_prompt"]),
@@ -113,4 +121,4 @@ def merge_with_llm(results: list[AgentResult], llm: Any, cfg: dict[str, Any] | N
     if merged is None:
         log.warning("Merged text failed a check; joining the answers verbatim")
         return verbatim
-    return merged, sources
+    return merged, sources, MERGE_LLM

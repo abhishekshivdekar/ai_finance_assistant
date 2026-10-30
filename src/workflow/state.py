@@ -49,6 +49,7 @@ class GraphState(TypedDict):
     tax_params: dict[str, Any] | None  # from the Tax tab form: {"calculation": "capital_gains" | "small_savings_growth", ...inputs}
     topic_filter: str | None  # set by the Chat tab dropdown; the facade passes it to the retriever
     final_answer: str
+    merge_mode: str | None  # "llm" | "verbatim" when the synthesizer merged two or more answers, else None (single writer: synthesizer)
 
 
 def current_results(state: GraphState) -> list[AgentResult]:

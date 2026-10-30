@@ -154,7 +154,7 @@ def _validate_tax(tax: dict[str, Any]) -> None:
 
 WORKFLOW_MESSAGES = (
     "clarify_low_confidence", "out_of_scope", "advice_static", "fallback", "needs_input_note", "error_note", "no_answer_note",
-    "section_heading", "unsourced_marker",
+    "section_heading", "unsourced_marker", "budget_exceeded",
 )
 WORKFLOW_REQUIRED_INTENTS = ("clarify", "out_of_scope", "specific_advice")
 

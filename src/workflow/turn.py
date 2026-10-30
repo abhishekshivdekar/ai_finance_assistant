@@ -48,4 +48,5 @@ def new_turn_input(
         "tax_params": tax_params,
         "topic_filter": topic_filter,
         "final_answer": "",
+        "merge_mode": None,
     }

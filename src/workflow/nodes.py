@@ -139,8 +139,8 @@ def make_synthesizer_node(llm: LazyLLM) -> Node:
         results = current_results(state)
         ok = [r for r in results if r["status"] == "ok"]
         if ok:
-            answer, sources = (ok[0]["answer"], ok[0]["sources"]) if len(ok) == 1 else merge_with_llm(ok, llm.get())
-            return finish("\n\n".join([answer, *notes_for(results)]), sources)
+            answer, sources, mode = (ok[0]["answer"], ok[0]["sources"], None) if len(ok) == 1 else merge_with_llm(ok, llm.get())
+            return {**finish("\n\n".join([answer, *notes_for(results)]), sources), "merge_mode": mode}
         no_answer = [r for r in results if r["status"] == "no_answer"]
         if no_answer:
             return finish(no_answer[-1]["answer"])
