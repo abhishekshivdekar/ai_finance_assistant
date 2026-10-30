@@ -19,15 +19,16 @@ def search():
     """A retrieve function bound to the real store and embedder, or a skip when either is unavailable."""
     import huggingface_hub.constants as hub
 
-    saved = hub.HF_HUB_OFFLINE
-    hub.HF_HUB_OFFLINE = True                    # use the cached model; never call the hub from a test
-    try:
-        store, embedder = get_vector_store(), get_embedder()
-        embedder.embed_query("warm up")
-    except (IndexNotFoundError, OSError) as exc:
-        pytest.skip(f"saved index or local embedding model not available: {exc}")
-    finally:
-        hub.HF_HUB_OFFLINE = saved
+    # Use the cached model; never call the hub from a test. The env var covers libraries that read it later, the
+    # constant covers huggingface_hub, which read the env var when it was first imported.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("HF_HUB_OFFLINE", "1")
+        patch.setattr(hub, "HF_HUB_OFFLINE", True)
+        try:
+            store, embedder = get_vector_store(), get_embedder()   # get_embedder() is the process-wide Singleton
+            embedder.embed_query("warm up")
+        except (IndexNotFoundError, OSError) as exc:
+            pytest.skip(f"saved index or local embedding model not available: {exc}")
     yield partial(retrieve, embedder=embedder, store=store)
 
 

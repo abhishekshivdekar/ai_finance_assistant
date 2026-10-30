@@ -1,5 +1,6 @@
 import pytest
 
+import network_guard
 from src.utils.config import get_config
 
 
@@ -9,6 +10,13 @@ def _clear_config_cache():
     get_config.cache_clear()
     yield
     get_config.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_outside_network(request, monkeypatch):
+    """No test may open a connection to a non-local host. Opt out only with @pytest.mark.network."""
+    if request.node.get_closest_marker("network") is None:
+        network_guard.block(monkeypatch)
 
 
 class OfflineLLM:
