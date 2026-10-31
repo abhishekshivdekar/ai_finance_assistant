@@ -1,0 +1,206 @@
+
+======== Question: What is LTCG? ========
+status: ok
+
+LTCG means long-term capital gains: a gain on an asset held longer than the holding period set for that type of asset. [1]
+
+--- Facts cited by the model (0 of 10 offered) ---
+
+--- Sources ---
+  Capital Gains Basics (accounts_and_taxes_india/capital-gains-basics#20, score 0.64)
+
+Label: illustrative, verify before relying
+
+======== Question: Which rate applies to equity fund gains held for 2 years? ========
+status: ok
+
+Assuming securities transaction tax was paid on the sale, an equity fund held for 2 years is long-term because it was held for more than 12 months. [F4] The rate is 12.5% on gains above the yearly exemption of ₹1,25,000. [F2] [F3]
+
+These figures are illustrative; verify before relying. Consult a chartered accountant about your own situation.
+
+Figures quoted are illustrative, verify before relying (as of 2026-10-29). This is general education, not personal tax advice; please check the official site and consider a chartered accountant for your own situation. Assumes the securities transaction tax was paid on the sale of listed equity and equity funds.
+
+--- Config values used ---
+  equity_ltcg_pct: 12.5% (Long-term capital gains tax rate on listed equity and equity funds (above the yearly exemption)); as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in; verify: True
+  equity_ltcg_exemption: ₹1,25,000 (₹1.25 lakh) per financial year (Long-term capital gains on listed equity and equity funds exempt per financial year); as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in; verify: True
+  holding_months_equity: 12 months (Listed equity and equity funds count as long-term when held for more than this many months); as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in; verify: True
+  other_ltcg_pct: 12.5% (Long-term capital gains tax rate on property, unlisted shares and other assets (no indexation)); as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in; verify: True
+
+--- Facts cited by the model (3 of 10 offered) ---
+  F2: Long-term capital gains tax rate on listed equity and equity funds (above the yearly exemption) = 12.5%; as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in
+  F3: Long-term capital gains on listed equity and equity funds exempt per financial year = ₹1,25,000 (₹1.25 lakh) per financial year; as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in
+  F4: Listed equity and equity funds count as long-term when held for more than this many months = 12 months; as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in
+
+--- Exclusions ---
+  - assumes the securities transaction tax was paid on the sale of listed equity and equity funds
+  - surcharge is not included
+  - indexation for older property purchases is not included
+  - set-off of losses against other gains or income is not included
+  - income tax slabs are not modelled; where a slab rate applies you enter it yourself
+
+Label: illustrative, verify before relying
+
+======== Question: How does PPF work? ========
+status: ok
+
+PPF is a government-backed savings account for individuals. You deposit money into it and earn interest declared by the government. [1] [2]
+
+The interest is not linked to share prices, and its rate is reviewed periodically, so it can change. [2] The account has a long lock-in period. [1]
+
+For advice about your own situation, consult a chartered accountant.
+
+--- Facts cited by the model (0 of 10 offered) ---
+
+--- Sources ---
+  Indian Savings and Tax-Advantaged Accounts Overview (accounts_and_taxes_india/indian-savings-and-tax-accounts-overview#10, score 0.69)
+  Public Provident Fund (PPF) Explained (accounts_and_taxes_india/ppf-explained#5, score 0.69)
+
+Label: illustrative, verify before relying
+
+======== Question: What is STT? ========
+status: ok
+
+STT, or securities transaction tax, is a tax collected on certain transactions in listed securities on recognised stock exchanges. It is separate from tax on the profit itself. [1]
+
+--- Facts cited by the model (0 of 10 offered) ---
+
+--- Sources ---
+  Capital Gains Basics (accounts_and_taxes_india/capital-gains-basics#16, score 0.61)
+
+Label: illustrative, verify before relying
+
+======== Question: What is the difference between PPF and NPS? ========
+status: ok
+
+PPF is a government-backed savings scheme: you deposit money and earn interest at a rate declared by the government, rather than returns tied to the stock market. [1] NPS is market-linked: its investments may include shares and bonds, so what you receive depends on how they perform. [2] Part of the NPS amount collected at retirement must be turned into regular income. [2]
+
+This is general education, not personal tax advice. Rules can change; consult a chartered accountant about your own situation. [3]
+
+--- Facts cited by the model (0 of 10 offered) ---
+
+--- Sources ---
+  Public Provident Fund (PPF) Explained (accounts_and_taxes_india/ppf-explained#5, score 0.56)
+  National Pension System (NPS) Explained (accounts_and_taxes_india/nps-explained#23, score 0.78)
+  Indian Savings and Tax-Advantaged Accounts Overview (accounts_and_taxes_india/indian-savings-and-tax-accounts-overview#25, score 0.58)
+
+Label: illustrative, verify before relying
+
+======== Equity fund sold after 18 months ========
+status: ok
+
+This illustrative calculation shows a long-term gain of ₹249,000.00 after expenses. After the ₹125,000.00 exemption, the taxable gain is ₹124,000.00; tax is ₹15,500.00, cess is ₹620.00, and total tax is ₹16,120.00.
+
+It assumes STT was paid and excludes surcharge, indexation for older property purchases, loss set-off, and income-tax slab modelling. Verify the rates on the official site, and consult a chartered accountant about your own situation.
+
+Figures quoted are illustrative, verify before relying (as of 2026-10-29). This is general education, not personal tax advice; please check the official site and consider a chartered accountant for your own situation. Assumes the securities transaction tax was paid on the sale of listed equity and equity funds.
+
+--- Steps ---
+  Gain or loss = sale value - purchase value - expenses = 650,000.00 - 400,000.00 - 1,000.00 = 249,000.00
+  Holding period 18 months is more than 12 months, so the gain is long-term.
+  Exemption available = 125,000.00 - 0.00 already used = 125,000.00; exemption applied = 125,000.00
+  Taxable gain = gain - exemption applied = 249,000.00 - 125,000.00 = 124,000.00
+  Tax = taxable gain x rate = 124,000.00 x 12.5% = 15,500.00
+  Cess = tax x cess rate = 15,500.00 x 4% = 620.00
+  Total = tax + cess = 15,500.00 + 620.00 = 16,120.00
+
+--- Results ---
+  gain_or_loss: 249000.0
+  term: long_term
+  exemption_applied: 125000.0
+  taxable_gain: 124000.0
+  rate_pct: 12.5
+  tax: 15500.0
+  cess: 620.0
+  total_tax: 16120.0
+
+--- Config values used ---
+  holding_months_equity: 12 months (Listed equity and equity funds count as long-term when held for more than this many months); as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in; verify: True
+  equity_ltcg_pct: 12.5% (Long-term capital gains tax rate on listed equity and equity funds (above the yearly exemption)); as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in; verify: True
+  equity_ltcg_exemption: ₹1,25,000 (₹1.25 lakh) per financial year (Long-term capital gains on listed equity and equity funds exempt per financial year); as of 2026-10-29; source: Secondary sources (Taxgarden, Tata MF, TaxGuru); verify on incometax.gov.in; verify: True
+  cess_pct: 4% (Health and education cess charged on the tax); as of 2026-10-29; source: Not cross-checked; verify on incometax.gov.in; verify: True
+
+--- Notes ---
+  - The yearly exemption already used is subtracted from the exemption available.
+
+--- Exclusions ---
+  - assumes the securities transaction tax was paid on the sale of listed equity and equity funds
+  - surcharge is not included
+  - indexation for older property purchases is not included
+  - set-off of losses against other gains or income is not included
+  - income tax slabs are not modelled; where a slab rate applies you enter it yourself
+
+Label: illustrative, verify before relying
+
+======== Debt fund bought after the rule change, user supplies the slab rate ========
+status: ok
+
+This illustrative calculation shows a gain of ₹50,000.00, with a taxable gain of ₹50,000.00 after an exemption of ₹0.00. At the entered slab rate of 30%, the tax is ₹15,000.00, cess is ₹600.00, and total tax is ₹15,600.00. The calculation excludes surcharge, indexation for older property purchases, and set-off of losses; income tax slabs are not modelled. Verify the rates on the official site, and consult a chartered accountant about your own situation.
+
+Figures quoted are illustrative, verify before relying (as of 2026-10-29). This is general education, not personal tax advice; please check the official site and consider a chartered accountant for your own situation.
+
+--- Steps ---
+  Gain or loss = sale value - purchase value - expenses = 350,000.00 - 300,000.00 - 0.00 = 50,000.00
+  Debt fund units bought after the change in rules are taxed at your slab rate whatever the holding period.
+  Taxable gain = gain - exemption applied = 50,000.00 - 0.00 = 50,000.00
+  Tax = taxable gain x rate = 50,000.00 x 30% = 15,000.00
+  Cess = tax x cess rate = 15,000.00 x 4% = 600.00
+  Total = tax + cess = 15,000.00 + 600.00 = 15,600.00
+
+--- Results ---
+  gain_or_loss: 50000.0
+  term: slab_rate
+  exemption_applied: 0.0
+  taxable_gain: 50000.0
+  rate_pct: 30.0
+  tax: 15000.0
+  cess: 600.0
+  total_tax: 15600.0
+
+--- Config values used ---
+  cess_pct: 4% (Health and education cess charged on the tax); as of 2026-10-29; source: Not cross-checked; verify on incometax.gov.in; verify: True
+
+--- Notes ---
+  - This gain is taxed at the slab rate you entered, not at a fixed rate from the configuration.
+
+--- Exclusions ---
+  - surcharge is not included
+  - indexation for older property purchases is not included
+  - set-off of losses against other gains or income is not included
+  - income tax slabs are not modelled; where a slab rate applies you enter it yourself
+
+Label: illustrative, verify before relying
+
+======== PPF with a yearly deposit ========
+status: ok
+
+With annual deposits of ₹100,000.00 over 15 years at 7.1%, the illustrative projection shows a total deposited of ₹1,500,000.00, a final value of ₹2,712,139.48 and interest earned of ₹1,212,139.48. This is an approximate illustration, not a promise of returns; verify the rate on the official site. The estimate assumes a constant rate and deposits at the start of each year; actual interest calculation differs, and scheme limits, lock-in periods and eligibility are not checked. For your own situation, consult a chartered accountant.
+
+Figures quoted are illustrative, verify before relying (as of 2026-10-29). This is general education, not personal tax advice; please check the official site and consider a chartered accountant for your own situation.
+
+--- Steps ---
+  Interest rate used: 7.1% a year, compounded once a year.
+  Each year: balance = (previous balance + deposit for that year) x (one plus the yearly rate)
+  Year 15: deposits so far 1,500,000.00, balance 2,712,139.48
+
+--- Results ---
+  scheme: ppf
+  rate_pct: 7.1
+  total_deposited: 1500000.0
+  final_value: 2712139.48
+  interest_earned: 1212139.48
+
+--- Config values used ---
+  ppf_pct: 7.1% (Public Provident Fund interest rate (current quarter)); as of 2026-10-29; source: Business Today, 30 Sep 2026; verify; verify: True
+
+--- Notes ---
+  - These are approximate projections, not a promise of returns.
+
+--- Exclusions ---
+  - interest simplified to annual compounding; actual scheme interest calculation differs; check the official scheme rules
+  - deposits are assumed at the start of each year and the rate is assumed constant for all years
+  - scheme limits, lock-in periods and eligibility are not checked; check the official scheme rules
+
+Label: illustrative, verify before relying
+
+=== Token cost ===
+  tax_summary          in=  8157 out=  2085 cost=$0.001858

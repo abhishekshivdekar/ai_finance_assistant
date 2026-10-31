@@ -1,0 +1,112 @@
+
+[answerable] What is the difference between an ETF and a mutual fund?
+  status:    ok
+  rewritten: ETF vs mutual fund differences
+  answer:    Both pool investors’ money and invest it in a basket of securities. [1][2] The key difference here is that ETF units trade on a stock exchange like shares, while a mutual fund is described as a professionally managed pool of money. [2]
+  sources:   
+    [1] etfs_and_funds/etfs-and-mutual-funds-basics
+    [2] glossary/finance-glossary-essentials
+  tokens:    in=661 out=156
+
+[answerable] How does compound interest work?
+  status:    ok
+  rewritten: compound interest formula investment growth calculation
+  answer:    Compound interest means earning interest on both your original amount and the interest already earned. So, over time, interest can begin earning interest of its own. [1][2]
+
+For example, if ₹10,000 grows by 8% in a year, it becomes ₹10,800. The next year’s 8% is calculated on ₹10,800, not just the original ₹10,000. [3]
+  sources:   
+    [1] goals_and_retirement/compound-interest-explained
+    [2] glossary/finance-glossary-essentials
+    [3] goals_and_retirement/setting-financial-goals
+  tokens:    in=681 out=135
+
+[answerable] What is a stop-loss order?
+  status:    ok
+  rewritten: stop-loss order definition
+  answer:    A stop-loss order stays inactive until a chosen trigger price is reached. Then it becomes an active order, such as a market or limit order. [1][2]
+  sources:   
+    [1] glossary/market-and-trading-terms
+    [2] market_basics/market-orders-versus-limit-orders
+  tokens:    in=683 out=82
+
+[answerable] What is the difference between short-term and long-term capital gains in India?
+  status:    ok
+  rewritten: India short-term and long-term capital gains tax differences
+  answer:    Short-term capital gains arise when an asset is sold relatively soon after it was acquired. Long-term capital gains arise when it has been held longer than a threshold period. [1]
+
+The holding-period cutoff varies by asset type and can change, and the tax treatment can differ accordingly. [2][3]
+  sources:   
+    [1] accounts_and_taxes_india/capital-gains-basics
+    [2] glossary/india-account-and-tax-terms
+    [3] accounts_and_taxes_india/indian-savings-and-tax-accounts-overview
+  tokens:    in=677 out=152
+
+[answerable] will my pile last after my salary stops
+  status:    ok
+  rewritten: retirement corpus withdrawal how long savings last
+  answer:    It depends on how much you’ve saved and how much you expect to spend each year. A common way to assess it is to compare your yearly spending with a **sustainable withdrawal rate**—the share of your savings you take out each year. These rates are rough guides, not guarantees. [1][2]
+
+A lower withdrawal rate means you need a larger savings pool to support the same spending. [3]
+  sources:   
+    [1] goals_and_retirement/setting-financial-goals
+    [2] goals_and_retirement/setting-financial-goals
+    [3] goals_and_retirement/retirement-planning-basics
+  tokens:    in=651 out=264
+
+[answerable] why did my fund lose money when the RBI raised rates
+  status:    ok
+  rewritten: bond fund losses interest rate hikes NAV decline
+  answer:    If your fund holds bonds, a rate rise can make existing bonds less valuable, so the fund’s value can fall even if no borrower defaults. Bond funds are valued daily, so that drop can show up as a loss. Longer-term bonds tend to move more when rates change. [1][2][3]
+  sources:   
+    [1] bonds/bond-prices-and-interest-rates
+    [2] bonds/bond-prices-and-interest-rates
+    [3] bonds/bond-risks
+  tokens:    in=587 out=231
+
+[near-miss] How does a home loan EMI work?
+  status:    no_answer
+  rewritten: home loan EMI calculation amortization schedule
+  answer:    I couldn't find this in my knowledge base. I can explain topics such as stocks, bonds, ETFs and mutual funds, risk and diversification, saving and retirement goals, how markets work, and basic Indian savings and tax accounts. Try asking about one of these.
+  sources:   -
+  tokens:    in=598 out=48
+
+[near-miss] Is bitcoin a good investment?
+  status:    no_answer
+  rewritten: bitcoin investment risk and return
+  answer:    I couldn't find this in my knowledge base. I can explain topics such as stocks, bonds, ETFs and mutual funds, risk and diversification, saving and retirement goals, how markets work, and basic Indian savings and tax accounts. Try asking about one of these.
+  sources:   -
+  tokens:    in=666 out=88
+
+[near-miss] Which insurance policy should I buy?
+  status:    no_answer
+  rewritten: insurance policy selection coverage premiums comparison
+  answer:    I couldn't find this in my knowledge base. I can explain topics such as stocks, bonds, ETFs and mutual funds, risk and diversification, saving and retirement goals, how markets work, and basic Indian savings and tax accounts. Try asking about one of these.
+  sources:   -
+  tokens:    in=647 out=86
+
+[near-miss] What is a credit score and how do I improve it?
+  status:    no_answer
+  rewritten: credit score factors and improvement strategies
+  answer:    I couldn't find this in my knowledge base. I can explain topics such as stocks, bonds, ETFs and mutual funds, risk and diversification, saving and retirement goals, how markets work, and basic Indian savings and tax accounts. Try asking about one of these.
+  sources:   -
+  tokens:    in=699 out=67
+
+[near-miss] How do I file my GST return?
+  status:    no_answer
+  rewritten: GST return filing tax compliance
+  answer:    I couldn't find this in my knowledge base. I can explain topics such as stocks, bonds, ETFs and mutual funds, risk and diversification, saving and retirement goals, how markets work, and basic Indian savings and tax accounts. Try asking about one of these.
+  sources:   -
+  tokens:    in=645 out=122
+
+[off-topic] What is the best recipe for a chocolate cake?
+  status:    no_answer
+  rewritten: What is the best recipe for a chocolate cake?
+  answer:    I couldn't find this in my knowledge base. I can explain topics such as stocks, bonds, ETFs and mutual funds, risk and diversification, saving and retirement goals, how markets work, and basic Indian savings and tax accounts. Try asking about one of these.
+  sources:   -
+  tokens:    in=109 out=45
+
+=== Usage summary ===
+  finance_qa           in=  6004 out=   860 cost=$0.001030
+  finance_qa_rewrite   in=  1300 out=   616 cost=$0.000438
+  total tokens: 8780
+  total cost:   $0.001468
