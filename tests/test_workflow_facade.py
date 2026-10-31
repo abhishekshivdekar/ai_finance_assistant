@@ -402,13 +402,15 @@ def clean_registry():
     registry.reset()
 
 
-def test_usage_summary_reads_the_registry_and_has_no_limit_by_default(clean_registry):
-    assert facade.usage_summary() == facade.UsageSummary(tokens=0, cost=0.0, limit=None, exceeded=False)
+def test_usage_summary_reads_the_registry_and_the_limit_from_the_config(clean_registry):
+    limit = get_config()["llm"]["max_session_tokens"]
+    assert limit == 2_000_000
+    assert facade.usage_summary() == facade.UsageSummary(tokens=0, cost=0.0, limit=limit, exceeded=False)
     clean_registry.record("router", get_config()["llm"]["model"], 1000, 500)
     clean_registry.record("synthesizer", get_config()["llm"]["model"], 100, 50)
     summary = facade.usage_summary()
     price = get_config()["pricing"][get_config()["llm"]["model"]]
-    assert summary.tokens == 1650 and summary.limit is None and not summary.exceeded
+    assert summary.tokens == 1650 and summary.limit == limit and not summary.exceeded
     assert summary.cost == pytest.approx((1100 * price["input"] + 550 * price["output"]) / 1_000_000)
 
 

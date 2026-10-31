@@ -13,6 +13,7 @@ llm:
   model: gpt-6-luna    # if Google has retired this name, pick a current Flash model in AI Studio
   temperature: null
   max_retries: 3
+  max_session_tokens: 2000000 # a runaway-loop guard for the whole running app (all visitors), NOT a per-visitor quota; only a restart clears it
   roles:                      # per-role overrides merged over llm.*
     router:
       model: gpt-6-luna
@@ -778,3 +779,36 @@ tax:                          # Tax Education agent (architecture section 2.6). 
 
 agents:
   error_message: "Sorry, something went wrong while preparing this answer. Please try again."
+
+ui:                           # Streamlit UI texts (architecture section 13). Every label, tab name and message shown by src/web_app comes from here.
+  page_title: "AI Finance Assistant"
+  app_title: "AI Finance Assistant"
+  app_tagline: "Plain-language answers about investing, markets, taxes in India and saving goals."
+  tabs:
+    chat: "Chat"
+  sidebar:
+    usage_title: "Usage"
+    usage_tokens: "Tokens used since the app started (all visitors)"
+    usage_limit: "Limit: {limit} tokens for the whole running app. Only restarting the app clears it."
+    usage_no_limit: "No token limit is set."
+    usage_cost: "Estimated cost: USD {cost}"
+    usage_cost_unknown: "Estimated cost: not available (a model has no price in config.yaml)."
+    new_conversation: "New conversation"
+    new_conversation_help: "Starts a fresh chat. It does not reset the usage count."
+    status_title: "Status"
+    warmup_running: "Loading the search index and models. The first start can take a while..."
+    warmup_ok: "Ready: search index and models are loaded."
+    warmup_failed: "Start-up loading failed ({error}). Questions still work, but the first one may be slow."
+  chat:
+    placeholder: "Ask about investing, markets, taxes in India or saving goals"
+    placeholder_busy: "Working on your question..."
+    placeholder_stopped: "Questions are paused: the usage limit has been reached."
+    empty_state: "Ask a question to get started, for example: What is the difference between an ETF and a mutual fund?"
+    thinking: "Thinking..."
+    sources_title: "Sources ({count})"
+    source_link: "Open source"
+  messages:
+    budget_stopped: "The usage limit for this run of the app has been reached, so no more questions can be answered. It applies to all visitors, and starting a new conversation does not clear it. Please try again after the app has been restarted."
+    empty_answer: "Sorry, I couldn't prepare an answer this time. Please try again in a moment."
+    needs_input_hint: "I need a little more information. Please add the missing details and ask again."
+    no_answer_hint: "I couldn't find a grounded answer to that. Try rephrasing, or ask about a specific topic."

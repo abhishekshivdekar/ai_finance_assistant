@@ -219,6 +219,36 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
         raise ConfigError(f"workflow.messages is missing {missing}.")
 
 
+UI_TEXT_KEYS = (
+    "page_title", "app_title", "app_tagline", "tabs.chat",
+    "sidebar.usage_title", "sidebar.usage_tokens", "sidebar.usage_limit", "sidebar.usage_no_limit", "sidebar.usage_cost",
+    "sidebar.usage_cost_unknown", "sidebar.new_conversation", "sidebar.new_conversation_help", "sidebar.status_title",
+    "sidebar.warmup_running", "sidebar.warmup_ok", "sidebar.warmup_failed",
+    "chat.placeholder", "chat.placeholder_busy", "chat.placeholder_stopped", "chat.empty_state", "chat.thinking",
+    "chat.sources_title", "chat.source_link",
+    "messages.budget_stopped", "messages.empty_answer", "messages.needs_input_hint", "messages.no_answer_hint",
+)
+
+
+def _validate_ui(ui: Any) -> None:
+    """Every key in UI_TEXT_KEYS must be a non-empty string, so a typo fails at load, not in the browser."""
+    if not isinstance(ui, dict):
+        raise ConfigError("ui must be a mapping of UI texts.")
+    for dotted in UI_TEXT_KEYS:
+        node: Any = ui
+        for part in dotted.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if not isinstance(node, str) or not node.strip():
+            raise ConfigError(f"ui.{dotted} must be a non-empty text.")
+
+
+def _validate_llm(llm: Any) -> None:
+    """llm.max_session_tokens (optional): null for no limit, else a positive whole number."""
+    limit = llm.get("max_session_tokens") if isinstance(llm, dict) else None
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise ConfigError("llm.max_session_tokens must be a positive whole number or null.")
+
+
 def _validate(cfg: dict[str, Any]) -> None:
     """Fail clearly on settings that would otherwise break an agent later."""
     market = cfg.get("market_analysis")
@@ -239,6 +269,9 @@ def _validate(cfg: dict[str, Any]) -> None:
     workflow = cfg.get("workflow")
     if workflow is not None:
         _validate_workflow(workflow)
+    _validate_llm(cfg.get("llm"))
+    if "ui" in cfg:
+        _validate_ui(cfg["ui"])
 
 
 @lru_cache(maxsize=1)
