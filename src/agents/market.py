@@ -23,7 +23,7 @@ from typing import Any
 from src.agents.base_agent import BaseAgent
 from src.core.market_history import fetch_histories, parse_request
 from src.core.market_metrics import (
-    build_metrics, comparison_rows, history_points, price_series, price_text, summary_input, ticker_metrics, worst_source,
+    LIVE_SOURCES, build_metrics, comparison_rows, history_points, price_series, price_text, summary_input, ticker_metrics, worst_source,
 )
 from src.core.market_models import MarketMetrics, TickerMetrics
 from src.core.models import AgentResult, MarketPayload
@@ -108,7 +108,7 @@ class MarketAgent(BaseAgent):
             "as_of": metrics.as_of.isoformat() if metrics.as_of else "",
             "source": worst_source([t.price_source for t in metrics.tickers]),
             "is_stale": metrics.uses_stale_or_sample,
-            "freshness_texts": [price_text(t, cfg) for t in metrics.tickers if t.price_source not in ("", "live")],
+            "freshness_texts": [price_text(t, cfg) for t in metrics.tickers if t.price_source not in LIVE_SOURCES],
             "warnings": all_warnings,
         }
         return self._result("ok", summary, payload)

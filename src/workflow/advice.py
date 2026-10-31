@@ -26,17 +26,37 @@ from src.workflow.state import GraphState
 
 log = get_logger(__name__)
 
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def first_sentence(text: str, abbreviations: list[str]) -> str:
+    """The first sentence of the text; a full stop after an abbreviation or an initialism does not end it.
+
+    Example: "Rs. 5 lakh is common. Next." -> "Rs. 5 lakh is common."; "Funds in the U.S. matter, e.g. index funds. More."
+    -> "Funds in the U.S. matter, e.g. index funds."; "It rose 3.5 percent. More." splits after "percent." only (a
+    decimal point has no space after it). `abbreviations` (`workflow.sentence_abbreviations`) are compared in
+    lower case without the final dot; a word with a dot inside ("U.S.", "e.g.", "i.e.") is always an abbreviation.
+    """
+    text = text.strip()
+    known = {a.casefold() for a in abbreviations}
+    for boundary in _SENTENCE_END.finditer(text):
+        word = text[: boundary.start()].rsplit(None, 1)[-1]
+        if word.endswith(".") and (word[:-1].casefold() in known or "." in word[:-1]):
+            continue
+        return text[: boundary.start()]
+    return text
 
 
 def with_advice_opening(text: str, cfg: dict[str, Any]) -> str:
-    """The text, starting with `messages.advice_opening` unless its first sentence already says it cannot recommend.
+    """The text, starting with `messages.advice_opening` unless its first sentence already refuses the request.
 
     Design pattern: GUARD. The prompt only asks the model for the opening, so code makes sure of it. Example: "People weigh risk [1]." becomes "I can't recommend a
     specific investment or predict prices. People weigh risk [1]."; "I can't predict prices. People weigh risk [1]."
-    is left alone (no duplicate). The test is `workflow.advice_opening_pattern` on the first sentence only.
+    is left alone (no duplicate); "Investors can't ignore risk [1]." is not a refusal, so it gets the opening. The test
+    is `workflow.advice_opening_pattern` (first person: I can't / cannot / am unable ... recommend / predict / advise /
+    tell) on the first sentence only.
     """
-    first = _SENTENCE_END.split(text.strip(), maxsplit=1)[0]
+    first = first_sentence(text, cfg["sentence_abbreviations"])
     if re.search(cfg["advice_opening_pattern"], first, re.IGNORECASE):
         return text
     return f"{' '.join(cfg['messages']['advice_opening'].split())} {text}"

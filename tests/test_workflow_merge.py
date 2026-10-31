@@ -8,9 +8,9 @@ from src.core.number_guard import numbers_in
 from src.rag.retriever import RetrievedChunk
 from src.utils.config import get_config
 from src.workflow import nodes
-from src.workflow.advice import educational_answer
+from src.workflow.advice import educational_answer, first_sentence, with_advice_opening
 from src.workflow.graph import build_graph
-from src.workflow.merge import marker_tokens, merge_with_llm, must_keep, strip_markers, validate_merge
+from src.workflow.merge import malformed_markers, marker_tokens, merge_with_llm, must_keep, strip_markers, validate_merge
 from src.workflow.nodes import LazyLLM
 from test_workflow_graph import Classify, FakeAgent, agents, run
 
@@ -194,6 +194,50 @@ def test_a_merge_with_a_banned_phrase_gives_the_verbatim_join(name):
     reply = f"{BANNED_TEXTS[name].replace(' [1]', '')} Apple is up."
     text, _, mode = merge_with_llm(results, FakeLLM(reply))
     assert mode == "verbatim" and text == verbatim_of(*results)[0] and "Apple is up." in text
+
+
+# ---- malformed markers ----
+
+@pytest.mark.parametrize("marker", ["[News4]", "[Market1]", "[ News 4 ]", "[ 1 ]", "[F 1]", "[1a]"])
+def test_a_marker_that_is_not_valid_is_rejected_so_the_verbatim_join_is_used(marker):
+    plain = [("Concepts", "A bond is a loan [1].")]
+    assert validate_merge(f"A bond is a loan {marker}.", plain, 1, []) is None
+    results = [result("market", "Apple is up."), result("finance_qa", "A bond is a loan.")]
+    text, _, mode = merge_with_llm(results, FakeLLM(f"Apple is up. A bond is a loan {marker}."))
+    assert mode == "verbatim" and text == verbatim_of(*results)[0]
+
+
+@pytest.mark.parametrize("text", [
+    "A bond is a loan [1].", "A bond is a loan [1, 2].", "A bond is a loan [1][2].", "Apple rose [News 1] and [News 1, News 2].",
+    "Tax is due [F1] and [F1, F2].", "No markers at all, and [a note] or [] in brackets.",
+])
+def test_valid_markers_and_plain_brackets_still_pass(text):
+    sections = [("A", "A bond is a loan [1]. [2]. Apple rose [News 1] and [News 2]. Tax is due [F1] and [F2]. Note.")]
+    assert malformed_markers(text) == set()
+    assert validate_merge(text, sections, 2, []) is not None
+
+
+def test_a_malformed_marker_that_an_input_answer_also_has_is_not_held_against_the_merge():
+    sections = [("Report", "The paper [Ref4] says a bond is a loan [1].")]
+    assert malformed_markers(sections[0][1]) == {"[Ref4]"}
+    merged = "The paper [Ref4] says a bond is a loan [1]."
+    assert validate_merge(merged, sections, 1, []) == merged
+    assert validate_merge("The paper [Ref5] says a bond is a loan [1].", sections, 1, []) is None
+
+
+# ---- banned phrases in finance prose ----
+
+PROSE = "A DCF model depends on the inputs to a DCF, such as growth and the discount rate. Read the answers carefully [1]."
+
+
+def test_a_banned_phrase_used_as_finance_prose_passes_when_an_input_answer_has_it_too():
+    sections = [("Concepts", PROSE)]
+    assert validate_merge(PROSE, sections, 1, []) == PROSE
+
+
+def test_the_same_prose_only_in_the_merge_is_rejected():
+    sections = [("Concepts", "A DCF model depends on growth and the discount rate [1].")]
+    assert validate_merge(PROSE, sections, 1, []) is None
 
 
 def test_the_synthesizer_prompt_names_what_not_to_mention_and_keeps_the_stale_notes_rule():
@@ -386,12 +430,44 @@ def test_educational_answer_can_be_called_directly_and_returns_none_without_cont
 @pytest.mark.parametrize("model_text", [
     "I can't recommend a specific stock. " + EDU,
     "I can’t predict prices. " + EDU,
-    "No one can recommend that, and I cannot either. " + EDU,
-    "I am unable to say what to buy. " + EDU,
+    "I am unable to tell you what to buy. " + EDU,
+    "I'm not able to advise on a specific fund. " + EDU,
+    "I cannot predict where Tesla will go. " + EDU,
 ])
 def test_a_model_that_already_says_it_cannot_recommend_gets_no_second_opening(model_text):
     answer, _ = educational_answer({"query": "Should I sell?"}, FakeLLM(model_text), Retrieve([chunk(1)]))
     assert answer == model_text and OPENING not in answer
+
+
+@pytest.mark.parametrize("model_text", [
+    "Investors can't ignore risk [1]. " + EDU,
+    "People can't predict markets. " + EDU,
+    "No one can recommend that, and I cannot either. " + EDU,
+    "I am unable to say what to buy. " + EDU,                                        # first person, but not recommend/predict/advise/tell
+    "It is a fund, and funds are not able to promise returns [1]. " + EDU,
+])
+def test_a_first_sentence_that_only_contains_cant_is_not_an_opening_and_gets_one(model_text):
+    answer, _ = educational_answer({"query": "Should I sell?"}, FakeLLM(model_text), Retrieve([chunk(1)]))
+    assert answer == f"{OPENING} {model_text}"
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("Rs. 5 lakh is common. Next one.", "Rs. 5 lakh is common."),
+    ("Funds in the U.S. matter, e.g. index funds, i.e. cheap ones. More.", "Funds in the U.S. matter, e.g. index funds, i.e. cheap ones."),
+    ("It cost approx. 3.5 percent. More.", "It cost approx. 3.5 percent."),
+    ("A rise of 3.5 percent! More.", "A rise of 3.5 percent!"),
+    ("One sentence only", "One sentence only"),
+    ("  Is it?  Yes.", "Is it?"),
+    ("Ends with an abbreviation vs.", "Ends with an abbreviation vs."),
+])
+def test_first_sentence_is_not_cut_at_abbreviations_or_decimals(text, expected):
+    assert first_sentence(text, WF["sentence_abbreviations"]) == expected
+
+
+def test_an_opening_after_an_abbreviation_is_found_in_the_whole_first_sentence():
+    text = "In the U.S. I can't recommend a fund. " + EDU
+    assert with_advice_opening(text, WF) == text
+    assert with_advice_opening("Rs. 5 lakh is a lot. I can't recommend a fund. " + EDU, WF).startswith(OPENING)   # the refusal is the second sentence
 
 
 def test_a_model_that_skips_the_opening_gets_it_prepended_and_one_that_says_it_late_does_too():
@@ -405,7 +481,7 @@ def test_the_opening_is_checked_with_the_answer_so_a_number_in_it_gives_the_stat
     cfg = {**WF, "messages": {**MSG, "advice_opening": "I can't recommend any of 99 things."}}
     monkeypatch.setattr("src.workflow.advice.workflow_cfg", lambda: cfg)
     assert educational_answer({"query": "Should I sell?"}, FakeLLM(EDU), Retrieve([chunk(1)])) is None
-    assert educational_answer({"query": "Should I sell?"}, FakeLLM("I can't say. " + EDU), Retrieve([chunk(1)])) is not None   # no opening added: no 99
+    assert educational_answer({"query": "Should I sell?"}, FakeLLM("I can't recommend one. " + EDU), Retrieve([chunk(1)])) is not None   # no opening added: no 99
 
 
 # ---- the disclaimer exactly once in every final node ----

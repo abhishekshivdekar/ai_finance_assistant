@@ -33,6 +33,7 @@ log = get_logger(__name__)
 Series = list[tuple[date, float]]          # (day, close), oldest first
 NOT_AVAILABLE = "not available"
 SOURCE_ORDER = ("live", "cache", "stale cache", "sample data")   # best to worst (MarketResult.source)
+LIVE_SOURCES = ("", "live")                 # a price source that needs no freshness note ("" = unknown, treated as live)
 
 
 def _parse_day(value: Any) -> date | None:
@@ -256,7 +257,7 @@ def price_text(t: TickerMetrics, cfg: dict[str, Any]) -> str:
     "AAPL last price USD 270.12 (stale cache, as of 2026-10-30 09:15 UTC)". Times are shown in UTC: the providers stamp
     UTC-aware times, and a naive time is taken as UTC (with a warning in the log). Wording comes from market_analysis.price_*.
     """
-    if t.price_source in ("", "live"):
+    if t.price_source in LIVE_SOURCES:
         freshness = cfg["price_freshness_live"]
     elif t.as_of is None:
         freshness = t.price_source

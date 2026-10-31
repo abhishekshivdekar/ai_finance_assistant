@@ -29,7 +29,8 @@ log = get_logger(__name__)
 LABELLED = re.compile(r"\[[A-Za-z][A-Za-z ]*? \d+(?:\s*,\s*[A-Za-z][A-Za-z ]*? \d+)*\]")
 _LABELLED_TOKEN = re.compile(r"([A-Za-z][A-Za-z ]*?) (\d+)")
 _FACT_TOKEN = re.compile(r"F\d+")
-JSON_WORD = re.compile(r"\bjson\b", re.IGNORECASE)
+_BRACKET = re.compile(r"\[[^\[\]\n]{0,60}\]")                   # any short bracket token; malformed_markers() filters it
+_VALID_MARKERS = (CITATION, FACT_CITATION, LABELLED)
 
 
 def _norm(text: str) -> str:
@@ -50,6 +51,15 @@ def marker_tokens(text: str) -> set[str]:
     for match in FACT_CITATION.finditer(text):
         tokens |= set(_FACT_TOKEN.findall(match.group(0)))
     return tokens
+
+
+def malformed_markers(text: str) -> set[str]:
+    """Bracket tokens with a digit that look like a marker but are not a valid one.
+
+    Valid: "[1]", "[1, 2]", "[F1]", "[News 1]". Not valid: "[News4]", "[Market1]", "[ News 4 ]", "[ 1 ]". Such a token
+    would pass unseen (the checks only know valid markers), so validate_merge rejects it.
+    """
+    return {t for t in _BRACKET.findall(text) if re.search(r"\d", t) and not any(p.fullmatch(t) for p in _VALID_MARKERS)}
 
 
 def must_keep(result: AgentResult) -> list[str]:
@@ -79,7 +89,8 @@ def validate_merge(
 
     Checks: not empty; the output guard patterns do not match; the disclaimer is not in it (it is added once,
     later); no `banned` phrase (default `workflow.merge_banned_phrases`, regexes) appears unless an input answer has
-    it too (the model must not talk about its input); [Fn] and [Label n] markers all appear in the input answers;
+    it too (the model must not talk about its input); no malformed marker such as "[News4]" or "[ News 4 ]" (unless an
+    input answer has it); [Fn] and [Label n] markers all appear in the input answers;
     every number is one of the numbers in the input answers (markers removed first); every text in `keep` appears.
     """
     text = text.strip()
@@ -90,6 +101,8 @@ def validate_merge(
         phrase = re.compile(pattern, re.IGNORECASE)
         if phrase.search(text) and not any(phrase.search(body) for body in inputs):
             return None
+    if malformed_markers(text) - set().union(*(malformed_markers(body) for body in inputs)):
+        return None
     if not marker_tokens(text) <= set().union(*(marker_tokens(body) for body in inputs)):
         return None
     cleaned, _ = drop_invalid_citations(text, source_count)

@@ -200,6 +200,9 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
         raise ConfigError("workflow.merge_banned_phrases must be a non-empty list of regexes.")
     if not isinstance(opening, str) or not opening.strip():
         raise ConfigError("workflow.advice_opening_pattern must be a non-empty regex.")
+    abbreviations = wf.get("sentence_abbreviations")
+    if not isinstance(abbreviations, list) or not all(isinstance(a, str) and a.strip() for a in abbreviations):
+        raise ConfigError("workflow.sentence_abbreviations must be a list of non-empty words (it may be empty).")
     for pattern in [*banned, opening]:
         try:
             re.compile(pattern)

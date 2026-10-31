@@ -186,6 +186,9 @@ def test_a_valid_workflow_block_loads(tmp_path):
     lambda w: w.update(advice_opening_pattern="  "),
     lambda w: w.update(advice_opening_pattern="(unclosed"),
     lambda w: w["messages"].pop("advice_opening"),
+    lambda w: w.pop("sentence_abbreviations"),
+    lambda w: w.update(sentence_abbreviations="rs"),
+    lambda w: w.update(sentence_abbreviations=["rs", " "]),
 ])
 def test_a_broken_workflow_block_is_rejected(tmp_path, change):
     with pytest.raises(ConfigError):
