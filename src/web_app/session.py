@@ -81,8 +81,13 @@ def has_pending(tab: str) -> bool:
 
 
 def active_tab() -> str | None:
-    """The tab that made the last request (None before any)."""
+    """The tab that made the last request, until the render that shows its answer has been drawn (else None)."""
     return st.session_state[ACTIVE_TAB]  # type: ignore[no-any-return]
+
+
+def clear_active_tab() -> None:
+    """Forget the tab of the last request, so a later rerun does not pass `default=` to st.tabs again."""
+    st.session_state[ACTIVE_TAB] = None
 
 
 def set_result(tab: str, result: QueryResult) -> None:

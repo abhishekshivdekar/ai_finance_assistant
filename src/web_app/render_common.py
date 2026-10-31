@@ -20,6 +20,7 @@ from src.web_app.format import display_snippet, format_timestamp
 from src.web_app.text import ui_text
 
 STOPPED_BUDGET = "budget"
+LIVE_SOURCE = "live"          # the payload `source` of data fetched just now (see LIVE_SOURCES in src/core/market_metrics.py)
 _LINK = re.compile(r"(!?)\[([^\]\n]*)\]\(((?:[^()\s]|\([^()]*\))*)(?:\s+\"[^\"]*\")?\)")    # [label](target) and ![alt](target)
 _REFERENCE_DEFINITION = re.compile(r"^[ ]{0,3}\[[^\]\n]+\]:[ \t]*\S.*$", re.MULTILINE)     # [ref]: target
 _MARKDOWN_SPECIALS = re.compile(r"([\\`*_{}\[\]()#+\-!|~$])")
@@ -132,15 +133,16 @@ def render_warnings(data: dict[str, Any]) -> None:
 
 
 def render_freshness(source: str, as_of: str, stale: bool, details: list[str]) -> None:
-    """Where the data came from and when, from the payload: green when live, blue for a cache, orange when stale or sample.
+    """Where the data came from and when, from the payload: green when live, blue for a fresh cache, orange when stale or sample.
 
-    `details` are the payload's own sentences for prices that are not live (Market `freshness_texts`); `stale` is its flag.
+    The colour follows `source` and `stale` only (stale/sample = orange; "live" = green; anything else = blue), the same for
+    every tab. `details` are the payload's own sentences for prices that are not live (Market `freshness_texts`).
     """
     if not source:
         return
     when = format_timestamp(as_of) if as_of else ""
     line = ui_text("freshness.with_time", source=plain_text(source), as_of=when) if when else ui_text("freshness.no_time", source=plain_text(source))
-    show = st.warning if stale else st.info if details else st.success
+    show = st.warning if stale else st.success if source == LIVE_SOURCE else st.info
     show(line)
     for detail in details:
         st.caption(plain_text(detail))

@@ -70,7 +70,8 @@ def _render_result(result: backend.QueryResult) -> None:
     data = payload_of(result, "market")
     if data is None:
         return
-    render_freshness(str(data.get("source") or ""), str(data.get("as_of") or ""), bool(data.get("is_stale")), list(data.get("freshness_texts") or []))
+    unsaid = [text for text in data.get("freshness_texts") or [] if text not in result.answer]    # a price sentence the answer already carries is not repeated
+    render_freshness(str(data.get("source") or ""), str(data.get("as_of") or ""), bool(data.get("is_stale")), unsaid)
     render_warnings(data)
     _charts(data)
     _comparison(data)

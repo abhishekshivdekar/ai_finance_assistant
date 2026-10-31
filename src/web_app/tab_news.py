@@ -19,11 +19,15 @@ from src.web_app.text import ui_text
 
 TAB, HINT = "news", "news"
 MODES = ("query", "ticker")                     # the keys of news_params the agent understands
-_MARKER = re.compile(r"\[(?:[A-Za-z][A-Za-z ]*? )?\d+(?:\s*,\s*(?:[A-Za-z][A-Za-z ]*? )?\d+)*\]")
+_CITE = r"(?:News )?\d+"                      # "3" or "News 3": the two forms the backend writes (src/workflow/answers.py)
+_MARKER = re.compile(rf"\[{_CITE}(?:\s*,\s*{_CITE})*\](?!\()")      # a "(" right after is a Markdown link, not a citation
 
 
 def resolve_markers(text: str, items: list[dict[str, Any]]) -> str:
     """Turn every [n] / [News n] / [1, 2] marker into per-number markers, linked to the article when it has a real link.
+
+    Only those forms are citations. Other brackets ("[FY 2026]", "[Table 3]", "[Q3 2026]") and a marker already followed
+    by "(" (a Markdown link such as "[1](https://...)") are left as written.
 
     Example: with item 1 linked to https://a.example, "see [1][3]" becomes "see [[1]](https://a.example)\\[3\\]": the
     first is a link, the missing item 3 is plain text (never an error). Nothing is renumbered or merged.

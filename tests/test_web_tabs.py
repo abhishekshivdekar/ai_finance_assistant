@@ -115,6 +115,23 @@ def test_a_price_that_is_not_live_is_shown_with_its_source_time_and_sentence_fro
     assert plain_text(details[0]) in captions(at) and line not in [s.value for s in at.main.success]
 
 
+def test_the_colour_follows_the_payload_source_even_when_there_are_no_price_sentences(fake):
+    fake.reply = market_reply(data=market_data(source="cache"))
+    at = start()
+    submit_market(at)
+    line = ui("freshness.with_time", source="cache", as_of="2026-10-30 08:32 UTC")
+    assert line in [i.value for i in at.main.info] and line not in [s.value for s in at.main.success]
+
+
+def test_a_price_sentence_the_answer_already_carries_is_not_repeated_as_a_caption(fake):
+    sentence = "AAPL last price USD 120.25 (cache, as of 2026-10-30 08:30 UTC)"
+    fake.reply = market_reply(f"{sentence}. It rose.", data=market_data(source="cache", freshness_texts=[sentence]))
+    at = start()
+    submit_market(at)
+    assert sentence not in captions(at) and any(sentence in t for t in shown(at))           # still in the answer
+    assert ui("freshness.with_time", source="cache", as_of="2026-10-30 08:32 UTC") in [i.value for i in at.main.info]
+
+
 def test_freshness_without_a_time_and_without_a_source(fake):
     fake.reply = market_reply(data=market_data(as_of=""))
     at = start()
@@ -199,6 +216,28 @@ def test_every_submit_is_disabled_while_a_call_runs_and_the_page_reopens_on_the_
     assert [s for s in seen if s[0] == market] == [(market, False), (market, True), (market, False)]
     assert [s for s in seen if s[0] == news] == [(news, True), (news, False)]      # one request at a time: News is drawn disabled while Market's call runs
     assert tab_defaults == [None, ui("tabs.market"), ui("tabs.market")]
+
+
+def test_the_tab_default_is_passed_only_for_the_renders_after_a_submit(fake, monkeypatch):
+    tab_defaults, real_tabs = [], st.tabs
+    monkeypatch.setattr(st, "tabs", lambda labels, **kw: tab_defaults.append(kw.get("default")) or real_tabs(labels, **kw))
+    fake.reply = market_reply()
+    at = start()
+    submit_market(at)
+    assert tab_defaults[-1] == ui("tabs.market") and at.session_state["active_tab"] is None      # the answer is drawn: the hint is spent
+    tab_defaults.clear()
+    at.run()
+    at.sidebar.button[0].click().run()
+    assert tab_defaults == [None, None]
+    assert len(fake.asks) == 1
+
+
+def test_an_invalid_submit_does_not_set_a_tab_default(fake, monkeypatch):
+    tab_defaults, real_tabs = [], st.tabs
+    monkeypatch.setattr(st, "tabs", lambda labels, **kw: tab_defaults.append(kw.get("default")) or real_tabs(labels, **kw))
+    at = start()
+    submit_market(at, " , ")
+    assert set(tab_defaults) == {None} and not fake.asks
 
 
 # ============================== News ==============================
@@ -295,6 +334,46 @@ def test_a_marker_without_a_matching_or_linkable_item_is_plain_text_not_an_error
     assert "Missing \\[9\\] unlinked \\[3\\] fine [\\[1\\]](https://news.example.com/1)." in answer
 
 
+@pytest.mark.parametrize("text", [
+    "Results for [FY 2026] and [Q3 2026] and [Table 3] stay.",
+    "A [news 1] and [NEWS 1] and [Market 1] and [News1] and [ 1 ] stay.",
+    "See [1](https://news.example.com/1) for details.",
+])
+def test_only_numbered_markers_are_citations_everything_else_in_brackets_is_left_as_written(text):
+    from src.web_app.tab_news import resolve_markers
+
+    assert resolve_markers(text, ITEMS) == text
+
+
+def test_resolve_markers_links_the_three_citation_forms_and_leaves_a_missing_item_plain():
+    from src.web_app.tab_news import resolve_markers
+
+    link1, link2 = "https://news.example.com/1", "https://news.example.com/a%28b%29"
+    assert resolve_markers("[1] [News 2] [1, 2] [News 1, News 2]", ITEMS) == (
+        f"[\\[1\\]]({link1}) [\\[2\\]]({link2}) [\\[1\\]]({link1})[\\[2\\]]({link2}) [\\[1\\]]({link1})[\\[2\\]]({link2})"
+    )
+    assert resolve_markers("[9] and [FY 2026] and [1, 9]", ITEMS) == f"\\[9\\] and [FY 2026] and [\\[1\\]]({link1})\\[9\\]"
+
+
+def test_brackets_that_are_not_citations_and_a_ready_made_link_survive_on_the_page(fake):
+    fake.reply = news_reply("- see [FY 2026] and [Table 3] and [1](https://news.example.com/1) then [2] and [9].")
+    at = start()
+    submit_news(at)
+    answer = [t for t in shown(at) if t.startswith("- see")][0]
+    assert "[FY 2026] and [Table 3] and [1](https://news.example.com/1) then [\\[2\\]](https://news.example.com/a%28b%29) and \\[9\\]." in answer
+    assert "((" not in answer and "](https://news.example.com/1)(" not in answer
+
+
+@pytest.mark.parametrize("source, stale, box", [("live", False, "success"), ("cache", False, "info"), ("stale cache", True, "warning")])
+def test_news_freshness_colour_follows_the_payload(fake, source, stale, box):
+    fake.reply = news_reply(data=news_data(source=source, is_stale=stale))
+    at = start()
+    submit_news(at)
+    line = ui("freshness.with_time", source=source, as_of="2026-10-30 08:32 UTC")
+    for kind in ("success", "info", "warning"):
+        assert (line in [e.value for e in getattr(at.main, kind)]) is (kind == box)
+
+
 def test_hostile_feed_text_is_plain_text_and_its_javascript_link_is_dropped(fake):
     items = [
         {"number": 1, "title": HOSTILE, "publisher": HOSTILE, "published": "2026-10-30T06:15:00+00:00", "link": "javascript:alert(1)"},
@@ -306,8 +385,11 @@ def test_hostile_feed_text_is_plain_text_and_its_javascript_link_is_dropped(fake
     text = "\n".join(shown(at))
     assert "<script" not in text and "javascript:" not in text and "](javascript" not in text
     assert "&lt;script&gt;alert\\(1\\)&lt;/script&gt; x" in text                              # shown literally
-    answer = [t for t in shown(at) if t.startswith("- Headline")][0]
-    assert answer == "- Headline \\[1\\] and [\\[2\\]](https://news.example.com/2)" + answer[len("- Headline \\[1\\] and [\\[2\\]](https://news.example.com/2)"):]
+    answer = [t for t in shown(at) if t.startswith("- Headline")]
+    expected = "- Headline \\[1\\] and [\\[2\\]](https://news.example.com/2)\n\n" + disclaimer().replace("<", "&lt;").replace("$", "\\$")
+    assert answer == [expected]                                                      # exact text: item 1 (javascript: link) is plain
+    assert "javascript" not in "".join(t for t in shown(at) if "](" in t)             # no link target at all for the hostile URL
+    assert not [t for t in shown(at) if t.startswith(f"[{ui('news.open_article')}](javascript")]
     links = [t for t in shown(at) if t.startswith(f"[{ui('news.open_article')}]")]
     assert links == [f"[{ui('news.open_article')}](https://news.example.com/2)"]
 

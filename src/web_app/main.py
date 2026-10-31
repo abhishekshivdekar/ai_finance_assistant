@@ -70,3 +70,5 @@ def render() -> None:
     for action in deferred:                                   # the one waiting call (if any), after every tab is drawn disabled
         if action is not None:
             action()
+    if not any(action is not None for action in deferred):    # the answer is on screen: later reruns must not pull the user back to this tab
+        session.clear_active_tab()
