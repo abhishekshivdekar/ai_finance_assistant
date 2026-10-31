@@ -1,0 +1,97 @@
+RAW candidates from Yahoo Search. No accept/ask rule is applied. No language model is used (cost $0).
+Search timeout 5s, up to 8 results, price check = 5d history.
+
+=== 'taiwan semiconductors' (sent as 'taiwan semiconductors') ===
+search took 1.47s; 3 candidates
+  TSMY.DE        | IncomeShares Taiwan Semiconductors (TSM) Opt | exchange=GER   | display=XETRA      | type=EQUITY    | prices=NOT AVAILABLE
+  TSMY.L         | IncomeShares Taiwan Semiconductors (TSM) Opt | exchange=LSE   | display=London     | type=ETF       | prices=OK USD
+  YTSM.L         | IncomeShares Taiwan Semiconductors (TSM) Opt | exchange=LSE   | display=London     | type=ETF       | prices=OK GBp
+
+=== 'Taiwan Semiconductor Manufacturing' (sent as 'Taiwan Semiconductor Manufacturing') ===
+search took 0.39s; 7 candidates
+  TSM            | Taiwan Semiconductor Manufacturing Company L | exchange=NYQ   | display=NYSE       | type=EQUITY    | prices=OK USD
+  2330.TW        | Taiwan Semiconductor Manufacturing Company L | exchange=TAI   | display=Taiwan     | type=EQUITY    | prices=NOT AVAILABLE
+  TSMC34.SA      | Taiwan Semiconductor Manufacturing Company L | exchange=SAO   | display=São Paulo  | type=EQUITY    | prices=NOT AVAILABLE
+  UTSD.SI        | Taiwan Semiconductor Manufacturing Company L | exchange=SES   | display=Singapore  | type=EQUITY    | prices=NOT AVAILABLE
+  TSMN.MX        | Taiwan Semiconductor Manufacturing Company L | exchange=MEX   | display=Mexico     | type=EQUITY    | prices=NOT AVAILABLE
+  TSFA.F         | Taiwan Semiconductor Manufacturing Company L | exchange=FRA   | display=Frankfurt  | type=EQUITY    | prices=OK EUR
+  TSM.BA         | Taiwan Semiconductor Manufacturing Company L | exchange=BUE   | display=Buenos Aires | type=EQUITY    | prices=NOT AVAILABLE
+
+=== 'Suzlon' (sent as 'Suzlon') ===
+search took 0.39s; 2 candidates
+  SUZLON.NS      | Suzlon Energy Limited                        | exchange=NSI   | display=NSE        | type=EQUITY    | prices=OK INR
+  SUZLON.BO      | Suzlon Energy Limited                        | exchange=BSE   | display=Bombay     | type=EQUITY    | prices=NOT AVAILABLE
+
+=== 'Tata Consultancy Services' (sent as 'Tata Consultancy Services') ===
+search took 0.48s; 2 candidates
+  TCS.NS         | Tata Consultancy Services Limited            | exchange=NSI   | display=NSE        | type=EQUITY    | prices=OK INR
+  TCS.BO         | Tata Consultancy Services Limited            | exchange=BSE   | display=Bombay     | type=EQUITY    | prices=NOT AVAILABLE
+
+=== 'Infosys' (sent as 'Infosys') ===
+search took 0.39s; 5 candidates
+  INFY           | Infosys Limited                              | exchange=NYQ   | display=NYSE       | type=EQUITY    | prices=OK USD
+  INFY.NS        | Infosys Limited                              | exchange=NSI   | display=NSE        | type=EQUITY    | prices=OK INR
+  INFY.BO        | Infosys Limited                              | exchange=BSE   | display=Bombay     | type=EQUITY    | prices=NOT AVAILABLE
+  HCL-INSYS.BO   | HCL Infosystems Limited                      | exchange=BSE   | display=Bombay     | type=EQUITY    | prices=NOT AVAILABLE
+  IOY.HA         | Infosys Ltd                                  | exchange=HAN   | display=Hanover    | type=EQUITY    | prices=NOT AVAILABLE
+
+=== 'Reliance Industries' (sent as 'Reliance Industries') ===
+search took 0.36s; 7 candidates
+  RELIANCE.NS    | Reliance Industries Limited                  | exchange=NSI   | display=NSE        | type=EQUITY    | prices=OK INR
+  RIGD.IL        | Reliance Industries Limited                  | exchange=IOB   | display=International Orderbook - London | type=EQUITY    | prices=NOT AVAILABLE
+  RELIANCE.BO    | Reliance Industries Limited                  | exchange=BSE   | display=Bombay     | type=EQUITY    | prices=NOT AVAILABLE
+  RLI.SG         | Reliance Industries Ltd                      | exchange=STU   | display=Stuttgart  | type=EQUITY    | prices=NOT AVAILABLE
+  RIGDL.XC       | Reliance Industries Limited                  | exchange=CXE   | display=CXE        | type=EQUITY    | prices=NOT AVAILABLE
+  RLI.F          | Reliance Industries Limited                  | exchange=FRA   | display=Frankfurt  | type=EQUITY    | prices=OK EUR
+  RLI.MU         | Reliance Industries Ltd                      | exchange=MUN   | display=Munich     | type=EQUITY    | prices=NOT AVAILABLE
+
+=== 'HDFC Bank' (sent as 'HDFC Bank') ===
+search took 0.86s; 7 candidates
+  HDB            | HDFC Bank Limited                            | exchange=NYQ   | display=NYSE       | type=EQUITY    | prices=OK USD
+  HDFCBANK.NS    | HDFC Bank Limited                            | exchange=NSI   | display=NSE        | type=EQUITY    | prices=OK INR
+  HDFCBANK.BO    | HDFC Bank Limited                            | exchange=BSE   | display=Bombay     | type=EQUITY    | prices=NOT AVAILABLE
+  0P00012KBL.BO  | HDFC Banking & PSU Debt Dir IDCW-P           | exchange=BSE   | display=Bombay     | type=MUTUALFUND | prices=NOT AVAILABLE
+  H1DB34.SA      | HDFC Bank Limited                            | exchange=SAO   | display=São Paulo  | type=EQUITY    | prices=NOT AVAILABLE
+  HDFA.SG        | HDFC Bank Ltd                                | exchange=STU   | display=Stuttgart  | type=EQUITY    | prices=NOT AVAILABLE
+  0P0001MMYY.BO  | HDFC Banking & Financial Svcs Reg IDCW-R     | exchange=BSE   | display=Bombay     | type=MUTUALFUND | prices=NOT AVAILABLE
+
+=== 'State Bank of India' (sent as 'State Bank of India') ===
+search took 0.39s; 7 candidates
+  SBIN.NS        | State Bank of India                          | exchange=NSI   | display=NSE        | type=EQUITY    | prices=OK INR
+  SBIN.BO        | State Bank of India                          | exchange=BSE   | display=Bombay     | type=EQUITY    | prices=NOT AVAILABLE
+  SBKFF          | State Bank of India                          | exchange=PNK   | display=OTC Markets | type=EQUITY    | prices=OK USD
+  SID.DU         | State Bank of India                          | exchange=DUS   | display=Dusseldorf Stock Exchange | type=EQUITY    | prices=NOT AVAILABLE
+  SBID.IL        | State Bank of India                          | exchange=IOB   | display=International Orderbook - London | type=EQUITY    | prices=NOT AVAILABLE
+  SBIDL.XC       | State Bank of India                          | exchange=CXE   | display=CXE        | type=EQUITY    | prices=NOT AVAILABLE
+  SID.HM         | STATE BANK OF INDIA R                        | exchange=HAM   | display=Hamburg    | type=EQUITY    | prices=NOT AVAILABLE
+
+=== 'Alphabet' (sent as 'Alphabet') ===
+search took 0.69s; 5 candidates
+  GOOG           | Alphabet Inc.                                | exchange=NMS   | display=NASDAQ     | type=EQUITY    | prices=OK USD
+  GOOGL          | Alphabet Inc.                                | exchange=NMS   | display=NASDAQ     | type=EQUITY    | prices=OK USD
+  SGOOG=F        | Alphabet Inc Single Stock futures            | exchange=CME   | display=Chicago Mercantile Exchange | type=FUTURE    | prices=NOT AVAILABLE
+  XGOOG=F        | Micro Alphabet Inc Stock Future              | exchange=CME   | display=Chicago Mercantile Exchange | type=FUTURE    | prices=NOT AVAILABLE
+  GOOG.TO        | Alphabet Inc.                                | exchange=TOR   | display=Toronto    | type=EQUITY    | prices=NOT AVAILABLE
+
+=== 'Meta Platforms' (sent as 'Meta Platforms') ===
+search took 0.34s; 7 candidates
+  META           | Meta Platforms, Inc.                         | exchange=NMS   | display=NASDAQ     | type=EQUITY    | prices=OK USD
+  SMETA=F        | Meta Platforms, Inc Single Stock futures     | exchange=CME   | display=Chicago Mercantile Exchange | type=FUTURE    | prices=NOT AVAILABLE
+  XMETA=F        | Micro Meta Platforms Inc Stock               | exchange=CME   | display=Chicago Mercantile Exchange | type=FUTURE    | prices=NOT AVAILABLE
+  META.TO        | Meta Platforms, Inc.                         | exchange=TOR   | display=Toronto    | type=EQUITY    | prices=NOT AVAILABLE
+  METAM          | Meta Platforms, Inc. Depositary Shares repre | exchange=NGM   | display=NASDAQ     | type=EQUITY    | prices=OK USD
+  FB2A.DE        | Meta Platforms, Inc.                         | exchange=GER   | display=XETRA      | type=EQUITY    | prices=NOT AVAILABLE
+  META.NE        | Meta Platforms, Inc.                         | exchange=NEO   | display=NEO        | type=EQUITY    | prices=NOT AVAILABLE
+
+=== 'Nifty 50' (sent as 'Nifty 50') ===
+search took 0.39s; 7 candidates
+  ^NSEI          | NIFTY 50                                     | exchange=NSI   | display=NSE        | type=INDEX     | prices=OK INR
+  NIFTYBEES.NS   | Nippon India ETF Nifty 50 BeES               | exchange=NSI   | display=NSE        | type=EQUITY    | prices=OK INR
+  ^CRSLDX        | NIFTY 500                                    | exchange=NSI   | display=NSE        | type=INDEX     | prices=OK INR
+  SETFNIF50.NS   | SBI Nifty 50 ETF                             | exchange=NSI   | display=NSE        | type=EQUITY    | prices=OK INR
+  IND            | Xtrackers Nifty 500 India ETF                | exchange=NGM   | display=NASDAQ     | type=ETF       | prices=OK USD
+  NFTY           | First Trust India NIFTY 50 Equal Weight ETF  | exchange=NGM   | display=NASDAQ     | type=ETF       | prices=OK USD
+  NIFTYCASE.BO   | Zerodha Nifty 50 ETF                         | exchange=BSE   | display=Bombay     | type=EQUITY    | prices=NOT AVAILABLE
+
+=== 'qzxv wplk jjrt zzqy' (sent as 'qzxv wplk jjrt zzqy') ===
+search took 0.38s; 0 candidates
