@@ -12,12 +12,16 @@ from typing import Any, Literal, TypedDict
 
 
 class Source(TypedDict):
-    """A cited RAG chunk, shown in the UI "Sources" expander."""
+    """A cited RAG chunk, shown in the UI "Sources" expander.
+
+    `snippet` is clean display text cut from the chunk in code (src/rag/snippet.py), never written by a model.
+    """
 
     title: str
     url: str | None
     chunk_id: str
     score: float
+    snippet: str
 
 
 class MarketPayload(TypedDict, total=False):

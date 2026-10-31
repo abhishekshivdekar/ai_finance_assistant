@@ -57,6 +57,7 @@ rag:
   topic_chunking:             # per-topic overrides of chunk_size/chunk_overlap (starting values, tunable)
     glossary: {chunk_size: 250, chunk_overlap: 0}
   top_k: 6
+  snippet_max_chars: 240      # length of the display snippet cut from a chunk for the Sources list (src/rag/snippet.py)
   score_threshold: 0.30
   query_expansions:           # acronym -> plain words; merge_retrieval also searches the expanded query (whole words, any case)
     LTCG: long-term capital gains tax
@@ -213,7 +214,7 @@ workflow:                     # LangGraph router and nodes (architecture section
     advice_opening: "I can't recommend a specific investment or predict prices."
     fallback: "Sorry, I couldn't prepare an answer this time. Please try again in a moment."
     partial_note: "Note: your question had more parts than I can answer at once, so I only answered part of it. Please ask the rest as a separate question."
-    budget_exceeded: "The usage limit for this session has been reached, so I can't answer more questions right now. Please start a new session later."
+    budget_exceeded: "The usage limit for this run of the app has been reached, so I can't answer more questions right now. Please try again after the app has been restarted."
     needs_input_note: "Note: {label} needs more information. {message}"
     error_note: "Note: the {label} part of your question could not be answered right now. Please try again later."
     no_answer_note: "Note: the {label} part of your question had no answer. {message}"

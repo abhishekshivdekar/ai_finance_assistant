@@ -2,8 +2,9 @@
 
 Design pattern: FACADE. The UI knows one function and one result object; the graph, router, agents and
 checkpointer stay behind it. Example: the Chat tab calls run_query("What is a P/E ratio?", "session-1") and
-shows result.answer and result.sources; the Market tab calls run_query("", "session-1", intent_hint="market",
-market_params={"tickers": ["AAPL"]}) and draws result.results[0]["data"]. A second pattern, SINGLETON
+shows result.answer and result.sources; the Market tab calls run_query("Market analysis for AAPL.", "session-1",
+intent_hint="market", market_params={"tickers": ["AAPL"]}) and draws result.results[0]["data"]. (Give a hinted turn a
+short real sentence, not "": the query is kept in the thread history that the router reads on later chat turns.) A second pattern, SINGLETON
 (lru_cache), makes get_graph() build the compiled graph once per process.
 
 Whatever goes wrong inside the graph (recursion backstop, an unexpected exception, an empty answer, the session token
@@ -13,6 +14,7 @@ thread_id run one after the other (a lock per thread), so a double click cannot 
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
@@ -20,7 +22,10 @@ from typing import Any
 from langgraph.errors import GraphRecursionError
 
 from src.core.models import AgentResult, Source
-from src.core.usage_tracker import is_budget_exceeded
+from src.core.usage_tracker import get_usage_registry, is_budget_exceeded
+from src.rag.embeddings import get_embedder
+from src.rag.vector_store import get_vector_store
+from src.utils.config import get_config
 from src.utils.logger import get_logger
 from src.workflow.answers import add_disclaimer
 from src.workflow.graph import build_graph
@@ -54,6 +59,30 @@ class QueryResult:
     stopped: str | None = None
 
 
+@dataclass(frozen=True)
+class WarmUp:
+    """How the start-up warm-up went. `message` is "" on success, else the error type only (details are in the log)."""
+
+    ok: bool
+    seconds: float
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class UsageSummary:
+    """LLM usage since the PROCESS started (all conversations and visitors share it; a new thread does not reset it).
+
+    `cost` is USD, or None when any call used a model with no price in config.yaml. `limit` is llm.max_session_tokens
+    (None = no limit); `exceeded` is True when run_query will refuse new turns.
+    """
+
+    tokens: int
+    cost: float | None
+    limit: int | None
+    exceeded: bool
+
+
+_WARM_UP_TEXT = "warm up"
 _thread_locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
@@ -68,6 +97,35 @@ def _thread_lock(thread_id: str) -> threading.Lock:
 def get_graph() -> Any:
     """The compiled graph with the real router and agents and an in-memory checkpointer (Singleton)."""
     return build_graph(Router())
+
+
+def warm_up() -> WarmUp:
+    """Load the embedding model, the vector store and the graph now, so the first question does not wait for them.
+
+    Never raises: a failure is logged and returned as WarmUp(ok=False), and the app still works (the first question
+    then pays the loading time). Makes no LLM call (the embedding model may be downloaded the very first time it is used).
+    """
+    started = time.perf_counter()
+    try:
+        get_embedder().embed_query(_WARM_UP_TEXT)
+        get_vector_store()
+        get_graph()
+    except Exception as exc:
+        log.exception("Warm-up failed")
+        return WarmUp(ok=False, seconds=time.perf_counter() - started, message=type(exc).__name__)
+    return WarmUp(ok=True, seconds=time.perf_counter() - started)
+
+
+def usage_summary() -> UsageSummary:
+    """Tokens, cost and budget state of this process, read from the usage registry and llm.max_session_tokens."""
+    registry = get_usage_registry()
+    costs = [entry["cost"] for entry in registry.totals().values()]
+    return UsageSummary(
+        tokens=registry.session_tokens(),
+        cost=None if any(c is None for c in costs) else float(sum(costs)),
+        limit=get_config().get("llm", {}).get("max_session_tokens"),
+        exceeded=is_budget_exceeded(),
+    )
 
 
 def _stopped(answer: str, why: str, nodes: list[str]) -> QueryResult:

@@ -143,7 +143,7 @@ def test_format_context_numbers_blocks():
 def test_to_sources_reuses_source_model():
     sources = to_sources([_chunk(), _chunk("t/b#1", refs=[])])
     assert sources[0] == Source(
-        title="Title", url="https://www.sebi.gov.in", chunk_id="t/a#0", score=0.5
+        title="Title", url="https://www.sebi.gov.in", chunk_id="t/a#0", score=0.5, snippet=_chunk().text
     )
     assert sources[1]["url"] is None and sources[1]["chunk_id"] == "t/b#1"
 

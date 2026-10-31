@@ -347,3 +347,87 @@ def test_get_graph_builds_the_real_router_graph_once(monkeypatch):
         assert get_graph() is get_graph() and built == ["router"]
     finally:
         get_graph.cache_clear()
+
+
+# ---- warm_up and usage_summary ----
+
+def test_warm_up_loads_the_embedder_the_store_and_the_graph_and_reports_success(monkeypatch):
+    calls = []
+
+    class Embedder:
+        def embed_query(self, text):
+            calls.append(("embed", text))
+
+    monkeypatch.setattr(facade, "get_embedder", lambda: Embedder())
+    monkeypatch.setattr(facade, "get_vector_store", lambda: calls.append("store"))
+    monkeypatch.setattr(facade, "get_graph", lambda: calls.append("graph"))
+    result = facade.warm_up()
+    assert result.ok and result.message == "" and result.seconds >= 0
+    assert calls == [("embed", "warm up"), "store", "graph"]
+
+
+@pytest.mark.parametrize("failing", ["get_embedder", "get_vector_store", "get_graph"])
+def test_a_failed_warm_up_never_raises_and_reports_only_the_error_type(monkeypatch, caplog, failing):
+    class Embedder:
+        def embed_query(self, text):
+            return None
+
+    for name, value in {"get_embedder": lambda: Embedder(), "get_vector_store": lambda: None, "get_graph": lambda: None}.items():
+        monkeypatch.setattr(facade, name, value)
+
+    def boom():
+        raise RuntimeError("secret detail sk-should-not-show")
+
+    monkeypatch.setattr(facade, failing, boom)
+    result = facade.warm_up()
+    assert not result.ok and result.message == "RuntimeError" and "sk-" not in result.message
+    assert "Warm-up failed" in caplog.text
+
+
+def test_warm_up_makes_no_llm_call(monkeypatch):
+    monkeypatch.setattr("src.core.llm_factory.get_llm", lambda *a, **k: pytest.fail("no LLM call in warm_up"))
+    monkeypatch.setattr(facade, "get_embedder", lambda: type("E", (), {"embed_query": lambda self, text: None})())
+    monkeypatch.setattr(facade, "get_vector_store", lambda: None)
+    monkeypatch.setattr(facade, "get_graph", lambda: None)
+    assert facade.warm_up().ok
+
+
+@pytest.fixture
+def clean_registry():
+    from src.core.usage_tracker import get_usage_registry
+
+    registry = get_usage_registry()
+    registry.reset()
+    yield registry
+    registry.reset()
+
+
+def test_usage_summary_reads_the_registry_and_has_no_limit_by_default(clean_registry):
+    assert facade.usage_summary() == facade.UsageSummary(tokens=0, cost=0.0, limit=None, exceeded=False)
+    clean_registry.record("router", get_config()["llm"]["model"], 1000, 500)
+    clean_registry.record("synthesizer", get_config()["llm"]["model"], 100, 50)
+    summary = facade.usage_summary()
+    price = get_config()["pricing"][get_config()["llm"]["model"]]
+    assert summary.tokens == 1650 and summary.limit is None and not summary.exceeded
+    assert summary.cost == pytest.approx((1100 * price["input"] + 550 * price["output"]) / 1_000_000)
+
+
+def test_usage_summary_cost_is_unknown_when_a_model_has_no_price(clean_registry):
+    clean_registry.record("router", "no-such-model", 10, 10)
+    assert facade.usage_summary().cost is None and facade.usage_summary().tokens == 20
+
+
+def test_usage_summary_shows_the_limit_and_whether_it_is_reached(clean_registry, monkeypatch):
+    cfg = copy.deepcopy(CFG)
+    cfg["llm"]["max_session_tokens"] = 100
+    monkeypatch.setattr("src.core.usage_tracker.get_config", lambda: cfg)
+    monkeypatch.setattr(facade, "get_config", lambda: cfg)
+    clean_registry.record("router", "m", 40, 20)
+    assert facade.usage_summary() == facade.UsageSummary(tokens=60, cost=None, limit=100, exceeded=False)
+    clean_registry.record("router", "m", 30, 10)
+    assert facade.usage_summary().exceeded is True
+
+
+def test_the_budget_message_does_not_promise_that_a_new_session_helps():
+    text = " ".join(MSG["budget_exceeded"].split()).lower()
+    assert "new session" not in text and "restart" in text and "run of the app" in text

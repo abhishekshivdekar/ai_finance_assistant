@@ -57,7 +57,7 @@ def test_missing_sma_windows_fails_clearly(tmp_path):
 
 def _rag_file(tmp_path, body):
     path = tmp_path / "config.yaml"
-    path.write_text("rag:\n  top_k: 6\n" + body, encoding="utf-8")
+    path.write_text("rag:\n  top_k: 6\n  snippet_max_chars: 240\n" + body, encoding="utf-8")
     return str(path)
 
 
@@ -77,3 +77,18 @@ def test_query_expansions_are_optional(tmp_path):
 def test_bad_query_expansions_fail_clearly(tmp_path, body):
     with pytest.raises(ConfigError, match="query_expansions"):
         get_config(_rag_file(tmp_path, body))
+
+
+@pytest.mark.parametrize("value", ["0", "-5", "'240'", "2.5", "true", "null"])
+def test_a_bad_snippet_length_fails_clearly(tmp_path, value):
+    path = tmp_path / "config.yaml"
+    path.write_text(f"rag:\n  top_k: 6\n  snippet_max_chars: {value}\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="snippet_max_chars"):
+        get_config(str(path))
+
+
+def test_the_snippet_length_is_required_when_the_rag_block_is_present(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text("rag:\n  top_k: 6\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="snippet_max_chars"):
+        get_config(str(path))

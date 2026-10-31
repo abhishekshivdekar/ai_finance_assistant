@@ -74,7 +74,10 @@ TAX_FIGURE_KEYS = (
 
 
 def _validate_rag(rag: dict[str, Any]) -> None:
-    """rag.query_expansions (optional): a mapping of non-empty acronym -> non-empty text."""
+    """rag.snippet_max_chars: a positive int; rag.query_expansions (optional): a mapping of non-empty acronym -> non-empty text."""
+    limit = rag.get("snippet_max_chars")
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ConfigError("rag.snippet_max_chars must be a positive whole number.")
     expansions = rag.get("query_expansions")
     if expansions is None:
         return

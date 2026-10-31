@@ -17,7 +17,7 @@ def test_status_literals():
 
 
 def test_source_keys():
-    assert set(Source.__annotations__) == {"title", "url", "chunk_id", "score"}
+    assert set(Source.__annotations__) == {"title", "url", "chunk_id", "score", "snippet"}
 
 
 def test_market_result_defaults():

@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from src.core.models import Source
 from src.rag.embeddings import get_embedder
+from src.rag.snippet import make_snippet
 from src.rag.vector_store import get_vector_store
 from src.utils.config import get_config
 from src.utils.logger import get_logger
@@ -199,14 +200,20 @@ def format_context(chunks: list[RetrievedChunk]) -> str:
     return "\n\n".join(f"[{i}] {c.title}\n{c.text}" for i, c in enumerate(chunks, start=1))
 
 
-def to_sources(chunks: list[RetrievedChunk]) -> list[Source]:
-    """Convert chunks to Source entries (url = the first reference's root site)."""
+def to_sources(chunks: list[RetrievedChunk], snippet_chars: int | None = None) -> list[Source]:
+    """Convert chunks to Source entries (url = the first reference's root site; snippet = cleaned start of the chunk).
+
+    `snippet_chars` defaults to rag.snippet_max_chars. The snippet is display text only: prompts are built from the
+    chunks (format_context), never from Source.
+    """
+    limit = get_config()["rag"]["snippet_max_chars"] if snippet_chars is None else snippet_chars
     return [
         Source(
             title=c.title,
             url=c.references[0]["url"] if c.references else None,
             chunk_id=c.chunk_id,
             score=c.score,
+            snippet=make_snippet(c.text, limit),
         )
         for c in chunks
     ]
