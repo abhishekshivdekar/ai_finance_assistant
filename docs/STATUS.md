@@ -31,7 +31,10 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 
 - **UI step 2b (fixes from the review of 5c370c2):** `render_freshness` colour follows `source`/`is_stale` for all tabs (a fresh News cache was green); `resolve_markers` accepts only `[n]`, `[News n]` and lists of those, and leaves `[FY 2026]` and `[1](https://...)` as written; `st.tabs(default=)` only until the answer is drawn (`session.clear_active_tab`, called in `main.render`); the hostile-title test now compares exact text; the Market grey caption is dropped when the answer already contains the same sentence (it still shows for a sentence the answer lacks, because the payload, not the merged text, is the source of truth). Backend untouched. Not viewed in a browser: whether the tab selection survives the rerun in which `default` changes from Market to None (not verified).
 
+- **Workflow commit 10a (company-name resolution, part 1 of 3: 10a resolver, 10b router + Market agent, 10c live check and docs):** `src/data/tickers/` (resolver, strategies, names, models, fake), block `ticker_lookup:` in `config.yaml` with validation, 13 new `workflow.ticker_aliases` entries (whole-name matching), `tests/test_ticker_resolver.py` (no network), `live_check_resolver.py` (RAW Yahoo candidates, no accept/ask rule, no LLM, $0; **not run**). Router and Market agent untouched. The Yahoo exchange codes in `same_market_groups` and the quote types are **not verified** against live results. See architecture "Ticker resolver".
+
 ## Next
+- Commit 10b (wire the resolver into the router and the Market agent; widen `validate_symbol` so `.BO` / `.TW` symbols can be price-checked) and 10c (live check, docs).
 - Streamlit UI, remaining steps: 3 Portfolio (needs `portfolio.asset_classes` in config), 4 Goals + error states, 5 polish + README, optional 6 Tax tab. Rules for the UI: no `unsafe_allow_html`; news titles, publishers, links, snippets and answers are plain text or escaped Markdown (1b adds a test with a `<script>` news title and a `javascript:` link); hinted turns send a short fixed sentence from `config.ui`, not `""`.
 - Persistence (SQLite checkpointer).
 - README completion, benchmarks, demo video.
@@ -86,6 +89,7 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Resolve the `<!-- VERIFY -->` markers in the knowledge base against official sites: **23 markers in 15 files** (counted with grep; two are the new STT/LTCG/STCG sections in `capital-gains-basics.md`).
 - Portfolio tab needs a per-holding asset-class dropdown (UI not built yet).
 - UI shows sources per chunk with article title and snippet.
+- Run `live_check_resolver.py` once (network only, $0) and paste back the transcript; it decides the exchange codes in `ticker_lookup.same_market_groups`.
 - Run `live_check_news.py` once (spends API money and uses the network; only when asked).
 - Run `live_check_market_agent.py` once (spends API money; only when asked).
 - Review `smoke_test.py` (exists at the repo root).
@@ -108,4 +112,4 @@ Spec: docs/architecture.md. Rules: CLAUDE.md.
 - Known issue, filler chunks: with no topic filter (Finance Q&A), `goals_and_retirement/compound-interest-explained#14` ("costs and charges ... transaction charges") fills a free slot for "What is STT?" (0.53) and "What is LTCG?" (0.51) because the acronym expansion fills up to `top_k` (`retrieval_check.py`). It is not a Tax agent issue (topic locked). Not fixed; the grounded prompt is the only defence.
 
 ## Last updated
-UI step 2b (review fixes; see `git log -1`). Before it: UI step 2 (Market and News tabs), UI step 1b, UI step 1a, Workflow commit 9 (tidy-up after the review of d8fd94c), commit 8 (follow-ups from the review of d2ae604), commit 7 (fixes from the second live check), commit 5 (fixes from the first live check; there is no commit 6), facade follow-ups, commit 4 (facade), commit 3 (LLM merge and safe_response), commit 2 (router), commit 1 (graph skeleton), commit 0 (number guard moved to `src/core/number_guard.py`). Earlier: Tax follow-ups 4, 3, 2, Tax Education agent, News agent review follow-ups.
+Workflow commit 10a (ticker resolver; see `git log -1`). Before it: UI step 2b (review fixes; see `git log -1`). Before it: UI step 2 (Market and News tabs), UI step 1b, UI step 1a, Workflow commit 9 (tidy-up after the review of d8fd94c), commit 8 (follow-ups from the review of d2ae604), commit 7 (fixes from the second live check), commit 5 (fixes from the first live check; there is no commit 6), facade follow-ups, commit 4 (facade), commit 3 (LLM merge and safe_response), commit 2 (router), commit 1 (graph skeleton), commit 0 (number guard moved to `src/core/number_guard.py`). Earlier: Tax follow-ups 4, 3, 2, Tax Education agent, News agent review follow-ups.

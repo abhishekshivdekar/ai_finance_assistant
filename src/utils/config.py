@@ -67,6 +67,30 @@ def _validate_news(news: dict[str, Any]) -> None:
         raise ConfigError("news.query_templates needs us, nse and index.")
 
 
+TICKER_LOOKUP_MESSAGES = ("ambiguous", "option", "not_found", "unavailable", "invalid")
+
+
+def _validate_ticker_lookup(lookup: dict[str, Any], periods: list[str]) -> None:
+    """ticker_lookup: positive limits, a known validation period, string lists, market groups and every message."""
+    for key in ("timeout_seconds", "max_query_chars", "max_results", "max_validated", "max_candidates_shown",
+                "cache_ttl_minutes", "cache_max_entries"):
+        value = lookup[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0:
+            raise ConfigError(f"ticker_lookup.{key} must be a number greater than zero.")
+    if lookup["validation_period"] not in periods:
+        raise ConfigError("ticker_lookup.validation_period must be one of market_data.history_periods.")
+    for key in ("allowed_quote_types", "legal_suffixes"):
+        values = lookup[key]
+        if not isinstance(values, list) or (key == "allowed_quote_types" and not values) or not all(isinstance(v, str) and v.strip() for v in values):
+            raise ConfigError(f"ticker_lookup.{key} must be a list of non-empty text (allowed_quote_types not empty).")
+    for group in lookup["same_market_groups"]:
+        if not isinstance(group, list) or len(group) < 2 or not all(isinstance(v, str) and v.strip() for v in group):
+            raise ConfigError("ticker_lookup.same_market_groups needs lists of at least two exchange codes.")
+    for key in TICKER_LOOKUP_MESSAGES:
+        if not str(lookup["messages"].get(key) or "").strip():
+            raise ConfigError(f"ticker_lookup.messages.{key} must not be empty.")
+
+
 TAX_FIGURE_KEYS = (
     "equity_stcg_pct", "equity_ltcg_pct", "equity_ltcg_exemption", "holding_months_equity",
     "holding_months_other", "other_ltcg_pct", "cess_pct", "ppf_pct", "nsc_pct", "ssy_pct",
@@ -269,6 +293,9 @@ def _validate(cfg: dict[str, Any]) -> None:
     news = cfg.get("news")
     if news is not None:
         _validate_news(news)
+    lookup = cfg.get("ticker_lookup")
+    if lookup is not None:
+        _validate_ticker_lookup(lookup, cfg["market_data"]["history_periods"])
     rag = cfg.get("rag")
     if rag is not None:
         _validate_rag(rag)

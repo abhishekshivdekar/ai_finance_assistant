@@ -98,6 +98,26 @@ market_data:
   history_periods: [1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max]
   snapshot_path: src/data/market_snapshot.json
 
+ticker_lookup:                # company name -> ticker (commit 10a; architecture "Ticker resolver"). The LLM never supplies a symbol.
+  timeout_seconds: 5          # hard limit for one Yahoo search
+  max_query_chars: 80         # a longer name is rejected, not cut
+  max_results: 8              # asked of Yahoo
+  max_validated: 5            # at most this many candidates get a price check
+  max_candidates_shown: 5     # at most this many are listed when the user must choose
+  cache_ttl_minutes: 1440     # successful lookups only
+  cache_max_entries: 200
+  validation_period: 5d       # the history that proves a symbol has prices (must be in market_data.history_periods)
+  allowed_quote_types: [EQUITY, ETF, INDEX]
+  legal_suffixes: [inc, incorporated, ltd, limited, corp, corporation, co, company, plc, ag, sa, nv, llc]   # ignored when two names are compared
+  same_market_groups:         # Yahoo exchange codes of ONE market, most preferred first (NOT verified against live results: see live_check_resolver.py)
+    - [NSI, BSE]
+  messages:
+    ambiguous: "I found more than one match for \"{name}\": {options}. Please type the ticker symbol you mean, for example {example}."
+    option: "{symbol} ({details})"
+    not_found: "I couldn't find a listed company called \"{name}\". Please type its ticker symbol, for example AAPL, or RELIANCE.NS for a company on the NSE."
+    unavailable: "I can't look up company names right now. Please type the ticker symbol instead, for example AAPL, or RELIANCE.NS for a company on the NSE."
+    invalid: "I couldn't read that company name. Please type a short name or the ticker symbol."
+
 workflow:                     # LangGraph router and nodes (architecture sections 3.2, 4)
   max_history_turns: 10
   router_min_confidence: 0.6  # below this the router's answer goes to clarify (architecture 4.3)
@@ -122,6 +142,20 @@ workflow:                     # LangGraph router and nodes (architecture section
     hdfc bank: HDFCBANK.NS
     nifty 50: ^NSEI
     nifty: ^NSEI
+    sensex: ^BSESN
+    s&p 500: ^GSPC
+    nvidia: NVDA
+    alphabet: GOOGL
+    google: GOOGL
+    amazon: AMZN
+    meta platforms: META
+    reliance industries: RELIANCE.NS
+    tata consultancy services: TCS.NS
+    wipro: WIPRO.NS
+    icici bank: ICICIBANK.NS
+    state bank of india: SBIN.NS
+    sbi: SBIN.NS
+    itc: ITC.NS
   merge_banned_phrases:       # regexes (case-insensitive): a merged text may not match one unless an input answer does
     - '\bjson\b'
     - '\bthe answers\b'
