@@ -14,7 +14,7 @@ from src.data.tickers import resolver as r
 from src.data.tickers import strategies as s
 from src.data.tickers.fake import FakeLookup
 from src.data.tickers.models import Candidate, Resolution, Validation
-from src.data.tickers.names import InvalidQueryError, clean_query, is_name_start, tokens
+from src.data.tickers.names import InvalidQueryError, clean_query, exchange_code_pattern, is_name_start, strip_exchange_code, tokens
 from src.utils.config import TICKER_LOOKUP_MESSAGES, ConfigError, get_config
 
 CFG = get_config()["ticker_lookup"]
@@ -67,6 +67,29 @@ def test_tokens_drop_legal_suffixes_and_punctuation():
     assert tokens("Infosys Ltd.", SUFFIXES) == ("infosys",)
     assert tokens("S&P 500", SUFFIXES) == ("s&p", "500")
     assert tokens("Tata Consultancy Services Limited", SUFFIXES) == ("tata", "consultancy", "services")
+
+
+EXCHANGE = exchange_code_pattern(CFG["exchange_words"])
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330", "Taiwan Semiconductor Manufacturing Co Ltd"),
+    ("Infosys NSE: INFY", "Infosys"),
+    ("Apple NASDAQ: AAPL", "Apple"),
+    ("  Reliance Industries   nse :RELIANCE.NS  ", "Reliance Industries"),
+    ("Tata Motors BSE: 500570", "Tata Motors"),
+    ("Infosys", "Infosys"),
+    ("NSE: INFY", "NSE: INFY"),                              # nothing before it: not a trailing code, left for the lookup rules
+    ("Infosys Foo: INFY", "Infosys Foo: INFY"),              # "Foo" is not an exchange word
+    ("Infosys NSE: INFY extra", "Infosys NSE: INFY extra"),  # not at the end
+    ("Infosys NSE: " + "X" * 20, "Infosys NSE: " + "X" * 20),  # a code is at most 15 characters
+])
+def test_a_trailing_exchange_and_code_is_removed_from_a_name(raw, expected):
+    assert strip_exchange_code(raw, EXCHANGE) == expected
+
+
+def test_strip_exchange_code_leaves_non_text_alone():
+    assert strip_exchange_code(None, EXCHANGE) is None and strip_exchange_code(5, EXCHANGE) == 5
 
 
 def test_a_name_start_is_whole_words_only():
@@ -413,6 +436,25 @@ def test_a_name_that_cannot_be_cleaned_is_invalid_and_no_lookup_runs(name):
     assert result.status == "invalid" and "couldn't read that company name" in result.message and lookup.calls == [] and check.asked == []
 
 
+def test_the_exchange_code_is_dropped_before_matching_and_never_becomes_a_ticker_and_messages_keep_the_original_text():
+    res, lookup, check = make({"suzlon": [SUZLON_NSE]}, alias=False)
+    result = res.resolve("Suzlon NSE: SUZLON")
+    assert result.symbols == ("SUZLON.NS",) and lookup.calls == ["Suzlon"] and check.asked == ["SUZLON.NS"]
+    assert result.query == "Suzlon NSE SUZLON" and result.note.endswith('for "Suzlon NSE SUZLON".')
+    res, lookup, _ = make({})
+    missing = res.resolve("Zomato NSE: ZOMATO")
+    assert missing.status == "not_found" and lookup.calls == ["Zomato"] and 'called "Zomato NSE ZOMATO"' in missing.message
+    res, *_ = make({"x": [sample("X1", "X Corp", "NYQ"), sample("X2", "X Corp", "NYQ")]}, alias=False)
+    assert 'more than one match for "X NYSE X1"' in res.resolve("X NYSE: X1").message
+
+
+def test_an_alias_found_through_a_name_with_an_exchange_code_is_still_price_checked():
+    res, lookup, check = make({})
+    for name, symbol in (("Infosys NSE: INFY", "INFY.NS"), ("Apple NASDAQ: AAPL", "AAPL"), ("Tata Consultancy Services NSE: TCS", "TCS.NS")):
+        assert res.resolve(name).symbols == (symbol,)
+    assert check.asked == ["INFY.NS", "AAPL", "TCS.NS"] and lookup.calls == []
+
+
 def test_the_query_sent_to_the_lookup_is_the_cleaned_one():
     res, lookup, _ = make({})
     res.resolve("  Taiwan <b>Semiconductor</b>: 2330 ")
@@ -452,7 +494,7 @@ def quote_of(candidate):
 
 SEARCH_TABLE = {
     "taiwan semiconductor manufacturing": [quote_of(TSMC), quote_of(TSM)],
-    "taiwan semiconductor manufacturing co ltd tpe 2330": [quote_of(TSMC), quote_of(TSM)],
+    "taiwan semiconductor manufacturing co ltd": [quote_of(TSMC), quote_of(TSM)],
     "suzlon": [quote_of(SUZLON_BSE), quote_of(SUZLON_NSE)],
     "infosys": [quote_of(INFY_NYSE), quote_of(INFY_NSE), quote_of(INFY_BSE), quote_of(HCL)],
 }
@@ -472,8 +514,8 @@ def test_the_queries_that_failed_in_the_ui_with_a_fake_search():
     full = resolver.resolve("Taiwan Semiconductor Manufacturing")
     assert full.symbols == ("TSM",) and "also listed as 2330.TW (Taiwan)" in full.note
     assert resolver.resolve("Infosys").symbols == ("INFY.NS",) and resolver.resolve("nonsense qzx").status == "not_found"
-    # Known limit: the full legal name with the exchange code appended is not the company name, so it is not found
-    assert resolver.resolve("Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330").status == "not_found"
+    legal = resolver.resolve("Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330")        # the exchange code is dropped, not read as a ticker
+    assert legal.status == "resolved" and legal.symbols == ("TSM",) and "also listed as 2330.TW (Taiwan)" in legal.note
     assert all(period == CFG["validation_period"] for _, period in provider.calls)
 
 
@@ -517,6 +559,7 @@ def test_a_valid_block_loads(tmp_path):
     (lambda b: b.update(validation_period="10y"), "validation_period"),
     (lambda b: b.update(allowed_quote_types=[]), "allowed_quote_types"),
     (lambda b: b.update(etf_words="etf"), "etf_words"),
+    (lambda b: b.update(exchange_words=[]), "exchange_words"),
     (lambda b: b.update(legal_suffixes=[""]), "legal_suffixes"),
     (lambda b: b.update(preferred_markets=[]), "preferred_markets"),
     (lambda b: b["alias_notes"].update(TSM=" "), "alias_notes.TSM"),

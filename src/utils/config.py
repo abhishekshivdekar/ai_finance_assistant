@@ -81,7 +81,7 @@ def _validate_ticker_lookup(lookup: dict[str, Any], periods: list[str]) -> None:
             raise ConfigError(f"ticker_lookup.{key} must be a number greater than zero.")
     if lookup["validation_period"] not in periods:
         raise ConfigError("ticker_lookup.validation_period must be one of market_data.history_periods.")
-    for key in ("allowed_quote_types", "etf_quote_types", "etf_words", "legal_suffixes", "preferred_markets"):
+    for key in ("allowed_quote_types", "etf_quote_types", "etf_words", "exchange_words", "legal_suffixes", "preferred_markets"):
         values = lookup[key]
         if not isinstance(values, list) or not values or not all(isinstance(v, str) and v.strip() for v in values):
             raise ConfigError(f"ticker_lookup.{key} must be a non-empty list of non-empty text.")

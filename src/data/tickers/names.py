@@ -3,6 +3,10 @@
 `clean_query` is the only door to a lookup: text that reaches Yahoo has had control characters and unusual symbols
 removed and has been length-checked. Example: "Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330" becomes
 "Taiwan Semiconductor Manufacturing Co Ltd TPE 2330"; "<script>x</script>" becomes "script x script".
+
+`strip_exchange_code` removes a trailing "<EXCHANGE>: <code>" before the name is matched. Example: "Infosys NSE: INFY" ->
+"Infosys"; "Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330" -> "Taiwan Semiconductor Manufacturing Co Ltd". The code is
+dropped, never read as a ticker.
 """
 from __future__ import annotations
 
@@ -43,3 +47,14 @@ def is_name_start(query: tuple[str, ...], name: tuple[str, ...]) -> bool:
     "semiconductors") does not start ("taiwan", "semiconductor", "manufacturing") (a spelling difference means ask).
     """
     return bool(query) and name[: len(query)] == query
+
+
+def exchange_code_pattern(exchange_words: list[str]) -> re.Pattern[str]:
+    """The pattern for a trailing "<exchange word>: <code>" (words from ticker_lookup.exchange_words, any case)."""
+    words = "|".join(re.escape(word) for word in sorted(exchange_words, key=len, reverse=True))
+    return re.compile(rf"\s+(?:{words})\s*:\s*[\w.^&-]{{1,15}}\s*$", re.IGNORECASE)
+
+
+def strip_exchange_code(raw: Any, pattern: re.Pattern[str]) -> Any:
+    """The text without a trailing "<EXCHANGE>: <code>" (spaces trimmed); anything that is not text is returned as it is."""
+    return pattern.sub("", raw.strip()) if isinstance(raw, str) else raw

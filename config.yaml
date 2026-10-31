@@ -113,6 +113,7 @@ ticker_lookup:                # company name -> ticker (architecture "Ticker res
   allowed_quote_types: [EQUITY, INDEX]
   etf_quote_types: [ETF]      # allowed only when the name typed contains one of etf_words
   etf_words: [etf, fund, trust]
+  exchange_words: [NSE, BSE, NYSE, NASDAQ, AMEX, TPE, TWSE, LSE, LON, TSE, TYO, HKG, HKEX, SGX, ASX, TSX, FRA, ETR, EPA, SSE, SHA, SHE, BOM]   # "<word>: <code>" at the end of a name is removed before matching ("Infosys NSE: INFY"); the code is never used as a ticker
   legal_suffixes: [inc, incorporated, ltd, limited, corp, corporation, co, company, plc, ag, sa, nv, llc]   # ignored when two names are compared
   preferred_markets: [NSI, BSE, NYQ, NMS, NGM]   # Yahoo exchange codes, best first (seen in live_check_resolver 2026-10-31); a listing on none of them ranks last
   alias_notes:                # shown when an alias gives this symbol; {currency} is the currency reported by the price check

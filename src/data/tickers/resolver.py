@@ -34,7 +34,7 @@ from src.core.portfolio_valuation import NOT_LIVE_SOURCES
 from src.data.errors import PermanentProviderError, TransientProviderError
 from src.data.market.provider import MarketDataProvider
 from src.data.tickers.models import Candidate, Resolution, Status, Validation
-from src.data.tickers.names import InvalidQueryError, clean_query, is_name_start, tokens
+from src.data.tickers.names import InvalidQueryError, clean_query, exchange_code_pattern, is_name_start, strip_exchange_code, tokens
 from src.data.tickers.strategies import AliasStrategy, Search, TickerStrategy, YahooSearchStrategy, yahoo_search
 from src.utils.config import get_config
 from src.utils.logger import get_logger
@@ -88,12 +88,14 @@ class TickerResolver:
                  clock: Callable[[], float] = time.monotonic) -> None:
         self._cfg = cfg if cfg is not None else get_config()["ticker_lookup"]
         self._strategies, self._validate, self._clock = strategies, validator, clock
+        self._exchange_code = exchange_code_pattern(self._cfg["exchange_words"])
         self._cache = ResolutionCache(self._cfg["cache_ttl_minutes"] * 60, self._cfg["cache_max_entries"], clock)
 
     def resolve(self, name: Any) -> Resolution:
         """The decision for one name; never raises."""
         try:
-            query = clean_query(name, self._cfg["max_query_chars"])
+            shown = clean_query(name, self._cfg["max_query_chars"])        # what the user wrote: used in messages
+            query = clean_query(strip_exchange_code(name, self._exchange_code), self._cfg["max_query_chars"])   # what is looked up
         except InvalidQueryError:
             return self._done(Resolution("invalid", message=self._say("invalid")), 0)
         key = " ".join(query.casefold().split())
@@ -103,7 +105,7 @@ class TickerResolver:
         unavailable = False
         for strategy in self._strategies:
             try:
-                decision = self._decide(query, strategy.find(query), strategy)
+                decision = self._decide(query, shown, strategy.find(query), strategy)
             except (TransientProviderError, PermanentProviderError):
                 unavailable = True
                 continue
@@ -111,7 +113,7 @@ class TickerResolver:
                 self._cache.put(key, decision)
                 return self._done(decision, len(query))
         status: Status = "unavailable" if unavailable else "not_found"
-        return self._done(Resolution(status, query, message=self._say(status, name=query)), len(query))
+        return self._done(Resolution(status, shown, message=self._say(status, name=shown)), len(query))
 
     def _say(self, key: str, **values: str) -> str:
         """A message from config with its placeholders filled."""
@@ -202,31 +204,34 @@ class TickerResolver:
         options_text = "; ".join(self._say("option", symbol=c.symbol, details=self._listing_text(c)) for c in shown)
         return Resolution("ambiguous", query, (), tuple(shown), source, self._say("ambiguous", name=query, options=options_text, example=shown[0].symbol))
 
-    def _decide(self, query: str, found: list[Candidate], strategy: TickerStrategy) -> Resolution | None:
-        """resolved or ambiguous, or None when this strategy has nothing usable."""
+    def _decide(self, query: str, shown: str, found: list[Candidate], strategy: TickerStrategy) -> Resolution | None:
+        """resolved or ambiguous, or None when this strategy has nothing usable.
+
+        `query` (exchange code removed) is matched against names; `shown` (as the user wrote it) goes into messages.
+        """
         if strategy.trusted:
             passed = [(c, v) for c, v in self._check(found[:1], first_only=True) if v.ok]
             if not passed:
                 return None
             chosen = replace(passed[0][0], currency=passed[0][1].currency)
             note = self._cfg["alias_notes"].get(chosen.symbol, "")
-            return Resolution("resolved", query, (chosen.symbol,), (chosen,), strategy.name, note=note.format(currency=chosen.currency or "its trading currency"))
+            return Resolution("resolved", shown, (chosen.symbol,), (chosen,), strategy.name, note=note.format(currency=chosen.currency or "its trading currency"))
         companies = self._matching(query, self._filtered(query, found))
         if not companies:
             return None
         if len(companies) > 1:
-            return self._ask(query, [listings[0] for listings in companies], strategy.name)
+            return self._ask(shown, [listings[0] for listings in companies], strategy.name)
         listings = companies[0]
         best = [c for c in listings if self._rank(c) == self._rank(listings[0])]
         if len(listings) > 1 and (len(best) > 1 or self._rank(listings[0]) >= len(self._cfg["preferred_markets"])):
-            return self._ask(query, listings, strategy.name)
+            return self._ask(shown, listings, strategy.name)
         passed = [(c, v) for c, v in self._check(listings, first_only=True) if v.ok]
         if not passed:
             return None
         chosen = replace(passed[0][0], currency=passed[0][1].currency)
         suffixes = self._cfg["legal_suffixes"]
         whole_name = tokens(chosen.name, suffixes) == tokens(query, suffixes)
-        return self._accepted(query, chosen, [c for c in listings if c.symbol != chosen.symbol], strategy.name, whole_name)
+        return self._accepted(shown, chosen, [c for c in listings if c.symbol != chosen.symbol], strategy.name, whole_name)
 
 
 def build_resolver(provider: MarketDataProvider, search: Search = yahoo_search, clock: Callable[[], float] = time.monotonic) -> TickerResolver:
