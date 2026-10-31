@@ -69,13 +69,14 @@ def _validate_news(news: dict[str, Any]) -> None:
 
 TICKER_LOOKUP_MESSAGES = (
     "ambiguous", "option", "not_found", "unavailable", "invalid", "disclosure_with_others", "disclosure_name_only", "other_listing",
+    "not_found_suggestions", "bare_symbol_note",
 )
 
 
 def _validate_ticker_lookup(lookup: dict[str, Any], periods: list[str]) -> None:
     """ticker_lookup: positive limits, a known validation period, string lists, alias notes and every message."""
     for key in ("timeout_seconds", "validation_budget_seconds", "max_query_chars", "min_prefix_chars", "max_results", "max_validated",
-                "max_candidates_shown", "max_others_shown", "cache_ttl_minutes", "cache_max_entries"):
+                "max_candidates_shown", "max_others_shown", "max_suggestions", "cache_ttl_minutes", "cache_max_entries"):
         value = lookup[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0:
             raise ConfigError(f"ticker_lookup.{key} must be a number greater than zero.")
@@ -85,6 +86,9 @@ def _validate_ticker_lookup(lookup: dict[str, Any], periods: list[str]) -> None:
         values = lookup[key]
         if not isinstance(values, list) or not values or not all(isinstance(v, str) and v.strip() for v in values):
             raise ConfigError(f"ticker_lookup.{key} must be a non-empty list of non-empty text.")
+    suffixes, names = lookup["bare_symbol_suffixes"], lookup["suffix_exchange_names"]
+    if not isinstance(suffixes, list) or not all(isinstance(v, str) and v.startswith(".") and names.get(v) for v in suffixes):
+        raise ConfigError("ticker_lookup.bare_symbol_suffixes must be a list of suffixes (like .NS), each named in ticker_lookup.suffix_exchange_names.")
     for symbol, note in lookup["alias_notes"].items():
         if not str(symbol).strip() or not isinstance(note, str) or not note.strip():
             raise ConfigError(f"ticker_lookup.alias_notes.{symbol} needs a non-empty note.")

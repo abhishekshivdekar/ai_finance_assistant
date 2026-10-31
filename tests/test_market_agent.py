@@ -342,7 +342,7 @@ def tickers_of(result):
 def test_a_company_name_becomes_a_checked_symbol_and_the_answer_says_which_company_it_chose():
     agent, result = run(["Suzlon"], INDIA, quotes=QUOTES)
     assert result["status"] == "ok" and tickers_of(result) == ["SUZLON.NS"]
-    note = "Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR). The same company is also listed as SUZLON.BO (Bombay); ask for that symbol if you meant it."
+    note = 'Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR) for "Suzlon".'
     assert result["data"]["lookup_notes"] == [note] and result["answer"] == f"{SUMMARY}\n\n{note}"
     assert "Showing" not in agent.llm.calls[0]                                           # the note is not part of the model's input
     assert "SUZLON.BO" not in [call[0] for call in agent.provider.calls]
@@ -416,3 +416,29 @@ def test_market_params_may_be_a_single_text_and_entries_beyond_the_limit_are_war
     many = agent.run({"turn_id": "t", "market_params": {"tickers": ["AAPL", "INFY", "SUZLON.NS", "GLB", "GLBA", "PINE", "Suzlon"]}})
     assert any("Only the first" in w and "was left out" in w for w in many["data"]["warnings"])
     assert agent.run({"turn_id": "t", "market_params": "not a dict"})["status"] == "needs_input"
+
+
+# ---- 10d: bare Indian symbols and suggestions ----
+
+def test_a_capitals_word_without_prices_gets_the_nse_suffix_when_that_has_prices_and_says_so():
+    histories = {**INDIA, "HINDUNILVR.NS": history(RISING, "INR")}
+    agent, result = run(["HINDUNILVR", "AAPL"], histories, quotes=QUOTES)
+    assert tickers_of(result) == ["HINDUNILVR.NS", "AAPL"]
+    assert result["data"]["lookup_notes"] == ['Showing HINDUNILVR.NS (NSE, INR); "HINDUNILVR" was not usable on its own.']
+    assert result["answer"].endswith('"HINDUNILVR" was not usable on its own.')
+
+
+def test_a_symbol_shaped_word_without_prices_on_its_own_is_retried_with_the_suffix_but_one_with_prices_stays():
+    histories = {**INDIA, "TCSX.NS": history(RISING, "INR"), "TCS": history(FALLING, "USD"), "TCS.NS": history(RISING, "INR")}
+    _, result = run(["TCSX"], histories)
+    assert tickers_of(result) == ["TCSX.NS"]
+    _, result = run(["TCS"], histories)                                                  # valid in the US and has prices: never rewritten
+    assert tickers_of(result) == ["TCS"] and result["data"].get("lookup_notes") is None
+    assert ("TCS.NS", "5d") not in [call for call in run(["TCS"], histories)[0].provider.calls]
+
+
+def test_a_name_that_is_not_found_lists_did_you_mean_suggestions_without_choosing_one():
+    quotes = {"hindustan uniliver": [q("HUL.NS", "Hindustan Unilever Limited", "NSI", "NSE")]}
+    agent, result = run(["Hindustan uniliver"], {"HUL.NS": history(RISING, "INR")}, quotes=quotes)
+    assert result["status"] == "needs_input" and "Did you mean: HUL.NS (Hindustan Unilever Limited, NSE, INR)" in result["answer"]
+    assert "HUL.NS" not in [call[0] for call in agent.provider.calls if call[1] == CFG["fetch_period"]]      # only a price check, nothing analysed

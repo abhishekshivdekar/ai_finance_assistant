@@ -107,6 +107,7 @@ ticker_lookup:                # company name -> ticker (architecture "Ticker res
   max_validated: 3            # at most this many candidates get a price check, best-ranked first
   max_candidates_shown: 5     # at most this many companies / listings are listed when the user must choose
   max_others_shown: 3         # other listings named in a disclosure
+  max_suggestions: 3          # "Did you mean" suggestions when nothing was accepted (price-checked, never auto-chosen)
   cache_ttl_minutes: 1440     # successful lookups only
   cache_max_entries: 200
   validation_period: 5d       # the history that proves a symbol has prices (must be in market_data.history_periods)
@@ -115,6 +116,8 @@ ticker_lookup:                # company name -> ticker (architecture "Ticker res
   etf_words: [etf, fund, trust]
   exchange_words: [NSE, BSE, NYSE, NASDAQ, AMEX, TPE, TWSE, LSE, LON, TSE, TYO, HKG, HKEX, SGX, ASX, TSX, FRA, ETR, EPA, SSE, SHA, SHE, BOM]   # "<word>: <code>" at the end of a name is removed before matching ("Infosys NSE: INFY"); the code is never used as a ticker
   legal_suffixes: [inc, incorporated, ltd, limited, corp, corporation, co, company, plc, ag, sa, nv, llc]   # ignored when two names are compared
+  bare_symbol_suffixes: [".NS"]   # a capitals word with no prices of its own (HINDUNILVR) is tried once with each suffix, price-checked
+  suffix_exchange_names: {".NS": NSE}   # the exchange named in the note for a suffix
   preferred_markets: [NSI, BSE, NYQ, NMS, NGM]   # Yahoo exchange codes, best first (seen in live_check_resolver 2026-10-31); a listing on none of them ranks last
   alias_notes:                # shown when an alias gives this symbol; {currency} is the currency reported by the price check
     TSM: "Showing TSM, the NYSE-listed ADR (American depositary receipt) of Taiwan Semiconductor Manufacturing Company, priced in {currency}."
@@ -127,6 +130,8 @@ ticker_lookup:                # company name -> ticker (architecture "Ticker res
     disclosure_with_others: "Showing {symbol} ({details}). The same company is also listed as {others}; ask for that symbol if you meant it."
     disclosure_name_only: "Showing {symbol} ({details}) for \"{name}\"."
     other_listing: "{symbol} ({details})"
+    not_found_suggestions: "I couldn't find a listed company called \"{name}\". Did you mean: {options}? These are only suggestions: please type the ticker symbol you want."
+    bare_symbol_note: "Showing {symbol} ({details}); \"{typed}\" was not usable on its own."
 
 workflow:                     # LangGraph router and nodes (architecture sections 3.2, 4)
   max_history_turns: 10
@@ -169,6 +174,10 @@ workflow:                     # LangGraph router and nodes (architecture section
     tsmc: TSM
     taiwan semiconductor: TSM
     taiwan semiconductors: TSM
+    taiwan semiconductor manufacturing: TSM
+    taiwan semiconductor manufacturing company: TSM
+    zomato: ETERNAL.NS
+    eternal: ETERNAL.NS
   merge_banned_phrases:       # regexes (case-insensitive): a merged text may not match one unless an input answer does
     - '\bjson\b'
     - '\bthe answers\b'

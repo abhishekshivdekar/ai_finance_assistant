@@ -17,14 +17,20 @@ Rules (all numbers and lists are in config `ticker_lookup`):
    best exchange (GOOG and GOOGL), or several listings with none on a preferred market, are `ambiguous`; several
    companies matching by prefix are `ambiguous` too (up to `max_candidates_shown`, each with its best listing). The user
    then types the symbol, which takes the ordinary literal path. A company with one listing is accepted.
-5. Price check, lazily: only the best-ranked candidates (`max_validated`), in rank order, inside
+5. Every candidate must pass `validate_symbol` (the pure symbol check, no network) before it is ranked, checked, listed
+   or named in a note, so listings that can never be price-checked (.BO, .TW, .HA ...) are never offered.
+6. Price check, lazily: only the best-ranked candidates (`max_validated`), in rank order, inside
    `validation_budget_seconds`; stale or sample data does not count. The first that passes is accepted. A currency is
    named only for a listing that was checked.
-6. A lookup that is down, slow or out of time is `unavailable`, never a guess. Only resolved and ambiguous answers
+   A `resolved` answer always comes from a passing price check, with its currency.
+7. Nothing accepted: a capitals word is tried once with `bare_symbol_suffixes` (HINDUNILVR -> HINDUNILVR.NS), price-checked;
+   otherwise up to `max_suggestions` price-checked "Did you mean" candidates from the search are listed (never chosen).
+8. A lookup that is down, slow or out of time is `unavailable`, never a guess. Only resolved and ambiguous answers
    are cached. Log lines carry the length of the name and the status, never the text.
 """
 from __future__ import annotations
 
+import re
 import threading
 import time
 from dataclasses import replace
@@ -32,7 +38,7 @@ from typing import Any, Callable
 
 from src.core.portfolio_valuation import NOT_LIVE_SOURCES
 from src.data.errors import PermanentProviderError, TransientProviderError
-from src.data.market.provider import MarketDataProvider
+from src.data.market.provider import InvalidSymbolError, MarketDataProvider, validate_symbol
 from src.data.tickers.models import Candidate, Resolution, Status, Validation
 from src.data.tickers.names import InvalidQueryError, clean_query, exchange_code_pattern, is_name_start, strip_exchange_code, tokens
 from src.data.tickers.strategies import AliasStrategy, Search, TickerStrategy, YahooSearchStrategy, yahoo_search
@@ -42,6 +48,7 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 Validator = Callable[[str], Validation]
+_BARE_WORD = re.compile(r"^[A-Z0-9&-]{1,20}$")       # a word typed in capitals that could be an NSE symbol without its suffix
 
 
 def provider_validator(provider: MarketDataProvider, period: str) -> Validator:
@@ -50,7 +57,7 @@ def provider_validator(provider: MarketDataProvider, period: str) -> Validator:
     def check(symbol: str) -> Validation:
         try:
             result = provider.get_history(symbol, period)
-            ok = result.error is None and result.source not in NOT_LIVE_SOURCES and result.data is not None and len(result.data) > 0
+            ok = result.error is None and result.source not in NOT_LIVE_SOURCES and bool(result.currency) and result.data is not None and len(result.data) > 0
         except Exception:                                    # any failure means "no usable prices"
             return Validation(False)
         return Validation(True, result.currency) if ok else Validation(False)
@@ -88,6 +95,7 @@ class TickerResolver:
                  clock: Callable[[], float] = time.monotonic) -> None:
         self._cfg = cfg if cfg is not None else get_config()["ticker_lookup"]
         self._strategies, self._validate, self._clock = strategies, validator, clock
+        self._local = threading.local()                      # the price checks already made by this thread's current resolve()
         self._exchange_code = exchange_code_pattern(self._cfg["exchange_words"])
         self._cache = ResolutionCache(self._cfg["cache_ttl_minutes"] * 60, self._cfg["cache_max_entries"], clock)
 
@@ -102,18 +110,25 @@ class TickerResolver:
         cached = self._cache.get(key)
         if cached is not None:
             return self._done(cached, len(query), cached=True)
-        unavailable = False
+        unavailable, pool = False, []
+        self._local.checks = {}
         for strategy in self._strategies:
             try:
-                decision = self._decide(query, shown, strategy.find(query), strategy)
+                found = strategy.find(query)
+                pool += [] if strategy.trusted else found
+                decision = self._decide(query, shown, found, strategy)
             except (TransientProviderError, PermanentProviderError):
                 unavailable = True
                 continue
             if decision is not None:
                 self._cache.put(key, decision)
                 return self._done(decision, len(query))
+        bare = self._bare(shown)
+        if bare is not None:
+            return self._done(bare, len(query))
         status: Status = "unavailable" if unavailable else "not_found"
-        return self._done(Resolution(status, shown, message=self._say(status, name=shown)), len(query))
+        suggested = self._suggest(query, shown, pool) if status == "not_found" else None
+        return self._done(suggested or Resolution(status, shown, message=self._say(status, name=shown)), len(query))
 
     def _say(self, key: str, **values: str) -> str:
         """A message from config with its placeholders filled."""
@@ -125,20 +140,66 @@ class TickerResolver:
         log.info("Ticker lookup: %d chars, status=%s, source=%s%s", length, resolution.status, resolution.source or "-", " (cached)" if cached else "")
         return resolution
 
+    @staticmethod
+    def _usable(symbol: str) -> bool:
+        """True when the pure symbol check (validate_symbol, no network) accepts the symbol."""
+        try:
+            validate_symbol(symbol)
+        except InvalidSymbolError:
+            return False
+        return True
+
+    def _price_check(self, symbol: str) -> Validation:
+        """The price check, made at most once per symbol during one resolve() (a failed check is slow: it retries)."""
+        checks: dict[str, Validation] = self._local.checks
+        if symbol not in checks:
+            checks[symbol] = self._validate(symbol)
+        return checks[symbol]
+
+    def _bare(self, shown: str) -> Resolution | None:
+        """A word typed in capitals tried once with each bare_symbol_suffixes entry (price-checked), else None.
+
+        Example: "HINDUNILVR" -> HINDUNILVR.NS when that symbol has prices. Nothing is rewritten unless the suffixed symbol passes.
+        """
+        if not _BARE_WORD.match(shown):
+            return None
+        for suffix in self._cfg["bare_symbol_suffixes"]:
+            symbol = shown + suffix
+            check = self._price_check(symbol) if self._usable(symbol) else Validation(False)
+            if check.ok:
+                chosen = Candidate(symbol, exchange_name=self._cfg["suffix_exchange_names"][suffix], currency=check.currency)
+                note = self._say("bare_symbol_note", symbol=symbol, details=self._listing_text(chosen), typed=shown)
+                return Resolution("resolved", shown, (symbol,), (chosen,), "bare symbol", note=note)
+        return None
+
+    def _suggest(self, query: str, shown: str, pool: list[Candidate]) -> Resolution | None:
+        """"Did you mean" candidates from the search when nothing was accepted: price-checked, never chosen, else None."""
+        ranked = sorted(self._filtered(query, pool), key=self._rank)
+        try:
+            checked = self._check(ranked, first_only=False)
+        except TransientProviderError:
+            return None
+        options = [replace(c, currency=v.currency) for c, v in checked if v.ok][: self._cfg["max_suggestions"]]
+        if not options:
+            return None
+        text = "; ".join(self._say("option", symbol=c.symbol, details=self._listing_text(c)) for c in options)
+        return Resolution("not_found", shown, candidates=tuple(options), message=self._say("not_found_suggestions", name=shown, options=text))
+
     def _rank(self, candidate: Candidate) -> int:
         """Position of the candidate's exchange in preferred_markets; unlisted exchanges rank after all of them."""
         markets = self._cfg["preferred_markets"]
         return markets.index(candidate.exchange) if candidate.exchange in markets else len(markets)
 
     def _filtered(self, query: str, found: list[Candidate]) -> list[Candidate]:
-        """Candidates of an allowed quote type (ETFs only when the name typed says etf, fund or trust), one per symbol."""
+        """Candidates of an allowed quote type (ETFs only when the name typed says etf, fund or trust) whose symbol passes
+        validate_symbol, one per symbol."""
         allowed = set(self._cfg["allowed_quote_types"])
         words = {word.casefold() for word in query.replace("-", " ").split()}
         if words & {word.casefold() for word in self._cfg["etf_words"]}:
             allowed |= set(self._cfg["etf_quote_types"])
         unique: dict[str, Candidate] = {}
         for candidate in found:
-            if candidate.quote_type in allowed:
+            if candidate.quote_type in allowed and self._usable(candidate.symbol):
                 unique.setdefault(candidate.symbol, candidate)
         return list(unique.values())
 
@@ -168,7 +229,7 @@ class TickerResolver:
         for candidate in candidates[: self._cfg["max_validated"]]:
             if self._clock() - started > self._cfg["validation_budget_seconds"]:
                 raise TransientProviderError("The price checks ran out of time.")
-            result = self._validate(candidate.symbol)
+            result = self._price_check(candidate.symbol)
             checked.append((candidate, result))
             if first_only and result.ok:
                 break
@@ -196,6 +257,8 @@ class TickerResolver:
         """
         kept = [replace(c, currency=v.currency) for c, v in self._check(options, first_only=False) if v.ok]
         kept += options[self._cfg["max_validated"]:]
+        if len(kept) == 1 and kept[0].currency is None:       # never accept what was not price-checked
+            kept = [replace(c, currency=v.currency) for c, v in self._check(kept, first_only=True) if v.ok]
         if not kept:
             return None
         if len(kept) == 1:

@@ -183,7 +183,7 @@ def test_every_alias_symbol_is_a_valid_symbol_and_the_user_listed_names_exist():
     ("Tesla", "What is the weather?", None),                             # not in the query: invented by the model
     ("aapl", "show aapl please", None),                                  # lower-case literal is not trusted
     ("XYZ1234567890", "price of XYZ1234567890", None),                   # capitals but not a valid symbol
-    ("Zomato", "How is Zomato doing?", None),                            # in the query but no alias and not a symbol
+    ("Paytm", "How is Paytm doing?", None),                              # in the query but no alias and not a symbol
     ("", "anything", None), ("  ", "anything", None), (None, "anything", None), (7, "anything 7", None),
 ])
 def test_a_mention_becomes_a_symbol_only_through_an_alias_or_a_checked_literal(mention, query, expected):
@@ -214,8 +214,8 @@ def test_a_company_name_in_the_query_goes_on_as_a_name_for_the_market_agent_to_r
     market, news = ground_params(entities, "Compare Suzlon, SUZLON, Apple, Taiwan Semiconductors and Globe Corp for 6 months", WF)
     assert market == {"tickers": ["Suzlon", "SUZLON", "AAPL", "TSM", "Globe Corp"], "period": "6mo"}       # aliases become symbols; Tesla is not in the query
     assert news == {"ticker": "AAPL"}                                                                              # only real symbols
-    market, news = ground_params({"tickers": ["Zomato"], "period": None, "news_query": None}, "How is Zomato doing?", WF)
-    assert market == {"tickers": ["Zomato"]} and news is None
+    market, news = ground_params({"tickers": ["Paytm"], "period": None, "news_query": None}, "How is Paytm doing?", WF)
+    assert market == {"tickers": ["Paytm"]} and news is None
 
 
 def test_a_news_phrase_must_occur_in_the_query():

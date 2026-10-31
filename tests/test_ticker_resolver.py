@@ -296,8 +296,8 @@ def test_the_best_ranked_listing_wins_is_the_only_one_checked_and_the_note_names
     result = res.resolve("Infosys")
     assert result.status == "resolved" and result.symbols == ("INFY.NS",) and result.candidates[0].currency == "INR"
     assert check.asked == ["INFY.NS"]                                              # lazy: nothing else is checked
-    assert result.note == "Showing INFY.NS (Infosys Limited, NSE, INR). The same company is also listed as INFY.BO (Bombay); INFY (NYSE); ask for that symbol if you meant it."
-    assert "USD" not in result.note and "HCL" not in result.note
+    assert result.note == "Showing INFY.NS (Infosys Limited, NSE, INR). The same company is also listed as INFY (NYSE); ask for that symbol if you meant it."      # INFY.BO cannot be price-checked, so it is not offered
+    assert "USD" not in result.note and "HCL" not in result.note and ".BO" not in result.note
 
 
 def test_a_plain_exact_match_with_one_listing_has_no_note():
@@ -306,18 +306,21 @@ def test_a_plain_exact_match_with_one_listing_has_no_note():
 
 
 def test_the_next_listing_is_used_when_the_best_one_has_no_prices_and_at_most_max_validated_are_tried():
-    res, _, check = make({"suzlon": [SUZLON_NSE, SUZLON_BSE]}, ok={"SUZLON.BO"}, alias=False)
-    assert res.resolve("Suzlon").symbols == ("SUZLON.BO",) and check.asked == ["SUZLON.NS", "SUZLON.BO"]
-    four = [sample(f"X{i}", "X Corp", "NYQ") for i in range(1)] + [sample("X.NS", "X Corp", "NSI"), sample("X.BO", "X Corp", "BSE"), sample("XN", "X Corp", "NMS")]
+    res, _, check = make({"infosys": [INFY_NSE, INFY_NYSE]}, ok={"INFY"}, alias=False)
+    assert res.resolve("Infosys").symbols == ("INFY",) and check.asked == ["INFY.NS", "INFY"]
+    four = [sample("X.NS", "X Corp", "NSI"), sample("XA", "X Corp", "NYQ"), sample("XB", "X Corp", "NMS"), sample("XC", "X Corp", "NGM")]
     res, _, check = make({"x": four}, ok=set(), alias=False)
-    assert res.resolve("x").status == "not_found" and check.asked == ["X.NS", "X.BO", "X0"]
+    assert res.resolve("x").status == "not_found" and check.asked == ["X.NS", "XA", "XB"]       # each symbol is checked once, three at most
 
 
 def test_a_name_that_is_the_start_of_a_company_name_resolves_and_the_note_shows_the_full_name():
     res, *_ = make({"suzlon": [SUZLON_BSE, SUZLON_NSE]}, currencies={"SUZLON.NS": "INR"}, alias=False)
     result = res.resolve("SUZLON")
     assert result.symbols == ("SUZLON.NS",)
-    assert result.note.startswith("Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR). The same company is also listed as SUZLON.BO (Bombay)")
+    assert result.note == 'Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR) for "SUZLON".'      # SUZLON.BO cannot be price-checked: no "also listed"
+    both = [SUZLON_NSE, sample("SUZ", "Suzlon Energy Limited", "NYQ", "NYSE")]
+    res, *_ = make({"suzlon": both}, currencies={"SUZLON.NS": "INR"}, alias=False)
+    assert res.resolve("suzlon").note == "Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR). The same company is also listed as SUZ (NYSE); ask for that symbol if you meant it."
     res, *_ = make({"tata consultancy": [sample("TCS.NS", "Tata Consultancy Services Limited", "NSI", "NSE")]}, alias=False, currencies={"TCS.NS": "INR"})
     assert res.resolve("tata consultancy").note == 'Showing TCS.NS (Tata Consultancy Services Limited, NSE, INR) for "tata consultancy".'
 
@@ -342,9 +345,9 @@ def test_several_companies_that_start_with_the_name_are_listed_with_their_best_l
                       sample("TATASTEEL.NS", "Tata Steel Limited", "NSI", "NSE"), sample("TTM", "Tata Motors Limited", "NYQ", "NYSE")]}
     res, _, check = make(table, currencies={"TATAMOTORS.NS": "INR", "TATASTEEL.NS": "INR"}, alias=False)
     result = res.resolve("tata")
-    assert result.status == "ambiguous" and result.symbols == () and [c.symbol for c in result.candidates] == ["TATASTEEL.NS", "TATAMOTORS.NS"]     # equal rank: the search's own order
-    assert "TATASTEEL.NS (Tata Steel Limited, NSE, INR); TATAMOTORS.NS (Tata Motors Limited, NSE, INR)" in result.message
-    assert "Please type the ticker symbol you mean, for example TATASTEEL.NS." in result.message and check.asked == ["TATASTEEL.NS", "TATAMOTORS.NS"]
+    assert result.status == "ambiguous" and result.symbols == () and [c.symbol for c in result.candidates] == ["TATAMOTORS.NS", "TATASTEEL.NS"]     # equal rank: the search's own order
+    assert "TATAMOTORS.NS (Tata Motors Limited, NSE, INR); TATASTEEL.NS (Tata Steel Limited, NSE, INR)" in result.message
+    assert "Please type the ticker symbol you mean, for example TATAMOTORS.NS." in result.message and check.asked == ["TATAMOTORS.NS", "TATASTEEL.NS"]
 
 
 def test_two_listings_on_the_same_best_exchange_are_ambiguous_with_exchange_and_currency():
@@ -362,17 +365,18 @@ def test_an_option_that_fails_its_price_check_is_dropped_and_one_left_means_no_c
     assert res.resolve("Alphabet").status == "not_found"
 
 
-def test_options_beyond_max_validated_are_listed_unchecked_without_a_currency():
-    many = [sample(f"A{i}", "Alpha Co", "NYQ", "NYSE") for i in range(5)]
-    res, _, check = make({"alpha": many}, currencies={f"A{i}": "USD" for i in range(5)}, alias=False)
+def test_options_beyond_max_validated_are_listed_unchecked_without_a_currency_when_they_pass_the_symbol_check():
+    names = ["AA", "AB", "AC", "AD", "AE"]
+    many = [sample(n, "Alpha Co", "NYQ", "NYSE") for n in names] + [sample("AF.TW", "Alpha Co", "TAI", "Taiwan")]
+    res, _, check = make({"alpha": many}, currencies={n: "USD" for n in names}, alias=False)
     result = res.resolve("alpha")
-    assert check.asked == ["A0", "A1", "A2"] and len(result.candidates) == 5
+    assert check.asked == ["AA", "AB", "AC"] and len(result.candidates) == 5                 # AF.TW fails the symbol check: dropped, never listed
     assert [c.currency for c in result.candidates] == ["USD", "USD", "USD", None, None]
-    assert "A3 (Alpha Co, NYSE); A4 (Alpha Co, NYSE)" in result.message
+    assert "AD (Alpha Co, NYSE); AE (Alpha Co, NYSE)" in result.message and "AF.TW" not in result.message
 
 
 def test_several_listings_with_none_on_a_preferred_market_are_ambiguous_but_a_single_listing_is_accepted():
-    res, *_ = make({"z": [sample("Z.TW", "Z Corp", "TAI", "Taiwan"), sample("Z.L", "Z Corp", "LSE", "London")]}, alias=False)
+    res, *_ = make({"z": [sample("Z.F", "Z Corp", "FRA", "Frankfurt"), sample("Z.L", "Z Corp", "LSE", "London")]}, alias=False)
     assert res.resolve("z").status == "ambiguous"
     res, *_ = make({"z": [sample("Z.L", "Z Corp", "LSE", "London")]}, alias=False)
     assert res.resolve("z").symbols == ("Z.L",)
@@ -419,7 +423,7 @@ def test_price_checks_that_run_out_of_time_make_the_answer_unavailable_not_a_gue
         return Validation(False)
 
     cfg = {**CFG, "validation_budget_seconds": 10}
-    infosys = r.TickerResolver([FakeLookup({"infosys": [INFY_NSE, INFY_BSE, INFY_NYSE]})], slow, cfg, clock=lambda: now[0])
+    infosys = r.TickerResolver([FakeLookup({"infosys": [INFY_NSE, INFY_NYSE, sample("INFY.L", "Infosys Limited", "LSE")]})], slow, cfg, clock=lambda: now[0])
     assert infosys.resolve("Infosys").status == "unavailable"
     now[0] = 0.0
     tie = r.TickerResolver([FakeLookup({"alphabet": [GOOG, GOOGL, sample("GOOGX", "Alphabet Inc.", "NMS")]})], slow, cfg, clock=lambda: now[0])
@@ -442,10 +446,10 @@ def test_the_exchange_code_is_dropped_before_matching_and_never_becomes_a_ticker
     assert result.symbols == ("SUZLON.NS",) and lookup.calls == ["Suzlon"] and check.asked == ["SUZLON.NS"]
     assert result.query == "Suzlon NSE SUZLON" and result.note.endswith('for "Suzlon NSE SUZLON".')
     res, lookup, _ = make({})
-    missing = res.resolve("Zomato NSE: ZOMATO")
-    assert missing.status == "not_found" and lookup.calls == ["Zomato"] and 'called "Zomato NSE ZOMATO"' in missing.message
-    res, *_ = make({"x": [sample("X1", "X Corp", "NYQ"), sample("X2", "X Corp", "NYQ")]}, alias=False)
-    assert 'more than one match for "X NYSE X1"' in res.resolve("X NYSE: X1").message
+    missing = res.resolve("Qzxv Wplk NSE: QZXV")
+    assert missing.status == "not_found" and lookup.calls == ["Qzxv Wplk"] and 'called "Qzxv Wplk NSE QZXV"' in missing.message
+    res, *_ = make({"x": [sample("XA", "X Corp", "NYQ"), sample("XB", "X Corp", "NYQ")]}, alias=False)
+    assert 'more than one match for "X NYSE XA"' in res.resolve("X NYSE: XA").message
 
 
 def test_an_alias_found_through_a_name_with_an_exchange_code_is_still_price_checked():
@@ -493,8 +497,6 @@ def quote_of(candidate):
 
 
 SEARCH_TABLE = {
-    "taiwan semiconductor manufacturing": [quote_of(TSMC), quote_of(TSM)],
-    "taiwan semiconductor manufacturing co ltd": [quote_of(TSMC), quote_of(TSM)],
     "suzlon": [quote_of(SUZLON_BSE), quote_of(SUZLON_NSE)],
     "infosys": [quote_of(INFY_NYSE), quote_of(INFY_NSE), quote_of(INFY_BSE), quote_of(HCL)],
 }
@@ -509,13 +511,12 @@ def test_the_queries_that_failed_in_the_ui_with_a_fake_search():
     resolver = r.build_resolver(provider, search=fake_search)
     suzlon = resolver.resolve("SUZLON")
     assert suzlon.status == "resolved" and suzlon.symbols == ("SUZLON.NS",)
-    for name in ("taiwan semiconductors", "TSMC"):
-        assert resolver.resolve(name).symbols == ("TSM",)                       # the alias, with its note
-    full = resolver.resolve("Taiwan Semiconductor Manufacturing")
-    assert full.symbols == ("TSM",) and "also listed as 2330.TW (Taiwan)" in full.note
+    for name in ("taiwan semiconductors", "TSMC", "Taiwan Semiconductor Manufacturing", "Taiwan Semiconductor Manufacturing Company Ltd",
+                 "Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330"):
+        result = resolver.resolve(name)
+        assert result.symbols == ("TSM",) and result.source == "alias" and "NYSE-listed ADR" in result.note, name
     assert resolver.resolve("Infosys").symbols == ("INFY.NS",) and resolver.resolve("nonsense qzx").status == "not_found"
-    legal = resolver.resolve("Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330")        # the exchange code is dropped, not read as a ticker
-    assert legal.status == "resolved" and legal.symbols == ("TSM",) and "also listed as 2330.TW (Taiwan)" in legal.note
+    assert resolver.resolve("Zomato").symbols == ("ETERNAL.NS",) and resolver.resolve("Eternal Ltd").symbols == ("ETERNAL.NS",)
     assert all(period == CFG["validation_period"] for _, period in provider.calls)
 
 
@@ -567,5 +568,158 @@ def test_a_valid_block_loads(tmp_path):
     (lambda b: b["messages"].pop("disclosure_with_others"), "messages.disclosure_with_others"),
 ])
 def test_a_bad_block_is_rejected_with_the_key_named(tmp_path, change, text):
+    with pytest.raises(ConfigError, match=text):
+        get_config(_config(tmp_path, change))
+
+
+# ------------------------------------------------------------------ 10d: fixes from the real-Yahoo run
+
+TSMC_LISTINGS = [sample("2330.TW", "Acme Semiconductor Manufacturing Co Ltd", "TAI", "Taiwan"), sample("ACME.HA", "Acme Semiconductor Manufacturing Co Ltd", "HAN", "Hanover"),
+                 sample("ACME.BA", "Acme Semiconductor Manufacturing Co Ltd", "BUE", "Buenos Aires"), sample("ACME.DE", "Acme Semiconductor Manufacturing Co Ltd", "GER", "XETRA")]
+
+
+def test_listings_that_fail_the_symbol_check_can_never_be_accepted_even_if_the_price_check_would_say_yes():
+    """The bug seen live: TSFA.HA was accepted with "currency not checked"."""
+    res, lookup, check = make({"acme semiconductor manufacturing co ltd": TSMC_LISTINGS}, alias=False)
+    result = res.resolve("Acme Semiconductor Manufacturing Co Ltd TPE: 2330")
+    assert result.status == "not_found" and result.symbols == () and result.candidates == () and check.asked == []
+    assert 'called "Acme Semiconductor Manufacturing Co Ltd TPE 2330"' in result.message
+
+
+def test_an_option_that_was_never_price_checked_is_checked_before_it_can_be_accepted():
+    names = ["AA", "AB", "AC", "AD"]
+    cands = [sample(n, "Alpha Co", "NYQ", "NYSE") for n in names]
+    res, _, check = make({"alpha": cands}, ok={"AD"}, currencies={"AD": "USD"}, alias=False)      # AA-AC fail; AD was beyond the first three
+    result = res.resolve("alpha")
+    assert result.status == "resolved" and result.symbols == ("AD",) and result.candidates[0].currency == "USD" and check.asked == ["AA", "AB", "AC", "AD"]
+    res, _, check = make({"alpha": cands}, ok=set(), alias=False)
+    assert res.resolve("alpha").status == "not_found" and check.asked == ["AA", "AB", "AC", "AD"]
+
+
+def currency_validator():
+    asked = []
+
+    def check(symbol):
+        asked.append(symbol)
+        return Validation(True, "USD")
+
+    check.asked = asked
+    return check
+
+
+def test_a_resolved_answer_always_has_a_checked_currency_whatever_the_scenario():
+    table = {
+        "infosys": [INFY_NYSE, INFY_NSE, INFY_BSE], "suzlon": [SUZLON_BSE, SUZLON_NSE], "alphabet": [GOOG, GOOGL], "tata": [
+            sample("TATAMOTORS.NS", "Tata Motors Limited", "NSI"), sample("TATASTEEL.NS", "Tata Steel Limited", "NSI")],
+        "acme semiconductor manufacturing co ltd": TSMC_LISTINGS, "solo": [sample("SOLO.L", "Solo Corp", "LSE")], "gold etf": [sample("GLDE", "Gold ETF", "NYQ", quote_type="ETF")],
+        "many": [sample(n, "Many Co", "NYQ") for n in ("MA", "MB", "MC", "MD", "ME")],
+    }
+    names = ["Infosys", "Suzlon", "Alphabet", "Tata", "Acme Semiconductor Manufacturing Co Ltd", "Solo", "Gold ETF", "Many", "tsmc", "Zomato", "HINDUNILVR"]
+    for validated in (currency_validator(), None):
+        check = validated or (lambda symbol: Validation(symbol.startswith(("M", "H", "ETERNAL")), "USD"))
+        res = r.TickerResolver([s.AliasStrategy(get_config()["workflow"]["ticker_aliases"], SUFFIXES), FakeLookup(table)], check)
+        for name in names:
+            result = res.resolve(name)
+            if result.status == "resolved":
+                assert result.candidates and all(c.currency for c in result.candidates), (name, result)
+                assert result.symbols[0] == result.candidates[0].symbol
+
+
+def test_the_note_names_only_other_listings_that_can_be_price_checked_and_no_sentence_when_none_remain():
+    res, *_ = make({"suzlon": [SUZLON_NSE, SUZLON_BSE, sample("SUZ.HA", "Suzlon Energy Limited", "HAN", "Hanover")]}, alias=False)
+    note = res.resolve("Suzlon").note
+    assert "also listed" not in note and ".BO" not in note and ".HA" not in note
+    res, *_ = make({"infosys": [INFY_NSE, INFY_NYSE, INFY_BSE]}, alias=False)
+    assert "INFY (NYSE)" in res.resolve("Infosys").note and "INFY.BO" not in res.resolve("Infosys").note
+
+
+@pytest.mark.parametrize("name, symbol", [
+    ("taiwan semiconductor manufacturing", "TSM"), ("Taiwan Semiconductor Manufacturing Company", "TSM"), ("Taiwan Semiconductor Manufacturing Co Ltd", "TSM"),
+    ("zomato", "ETERNAL.NS"), ("Eternal", "ETERNAL.NS"), ("Eternal Limited", "ETERNAL.NS"),
+])
+def test_new_aliases(name, symbol):
+    res, lookup, _ = make({}, currencies={"TSM": "USD"})
+    result = res.resolve(name)
+    assert result.symbols == (symbol,) and result.source == "alias" and lookup.calls == []
+    assert ("NYSE-listed ADR" in result.note) is (symbol == "TSM")
+
+
+@pytest.mark.parametrize("name", ["taiwan semiconductor manufacturing corporation of china", "eternal sunshine", "zomato ltd india"])
+def test_the_alias_rule_stays_whole_name(name):
+    assert s.AliasStrategy(get_config()["workflow"]["ticker_aliases"], SUFFIXES).find(name) == []
+
+
+def test_a_capitals_word_with_no_prices_is_tried_once_with_the_nse_suffix_and_the_note_says_so():
+    res, lookup, check = make({}, ok={"HINDUNILVR.NS"}, currencies={"HINDUNILVR.NS": "INR"})
+    result = res.resolve("HINDUNILVR")
+    assert result.status == "resolved" and result.symbols == ("HINDUNILVR.NS",) and result.source == "bare symbol"
+    assert result.note == 'Showing HINDUNILVR.NS (NSE, INR); "HINDUNILVR" was not usable on its own.' and result.candidates[0].currency == "INR"
+    assert lookup.calls == ["HINDUNILVR"] and check.asked == ["HINDUNILVR.NS"]                      # the search was tried first; the suffix once
+
+
+def test_the_suffix_try_needs_capitals_a_passing_price_check_and_works_while_the_lookup_is_down():
+    res, lookup, check = make({}, ok={"HINDUNILVR.NS"})
+    assert res.resolve("hindunilvr").status == "not_found" and check.asked == []                    # not typed in capitals
+    assert res.resolve("HINDUSTAN UNILEVER").status == "not_found" and check.asked == []             # more than one word
+    res, *_ = make({}, ok=set())
+    assert res.resolve("HINDUNILVR").status == "not_found"                                           # the suffixed symbol has no prices either
+    res, *_ = make({"hindunilvr": TransientProviderError("down")}, ok={"HINDUNILVR.NS"})
+    assert res.resolve("HINDUNILVR").symbols == ("HINDUNILVR.NS",)                                  # no search needed for the price check
+    res, *_ = make({}, cfg={**CFG, "bare_symbol_suffixes": [".NS", ".XX"], "suffix_exchange_names": {".NS": "NSE", ".XX": "X"}}, ok={"ABC.NS"}, alias=False)
+    assert res.resolve("ABC").symbols == ("ABC.NS",)                                                 # a suffix that fails the symbol check is skipped
+
+
+def test_a_name_found_by_the_search_is_never_rewritten_by_the_suffix_rule():
+    res, _, check = make({"suzlon": [SUZLON_NSE]}, alias=False)
+    assert res.resolve("SUZLON").source == "fake lookup" and check.asked == ["SUZLON.NS"]
+
+
+def test_nothing_accepted_lists_price_checked_suggestions_that_are_never_chosen():
+    pool = [sample("HUL.NS", "Hindustan Unilever Limited", "NSI", "NSE"), sample("HUL.BO", "Hindustan Unilever Limited", "BSE", "Bombay"),
+            sample("HUNI", "Hindustan Union Corp", "NYQ", "NYSE"), sample("HFUT", "Hindustan Futures", "CMX", quote_type="FUTURE"),
+            sample("HUFUND", "Hindustan Fund", "MF", quote_type="MUTUALFUND"), sample("HNOP", "Hindustan No Prices", "NMS"), sample("HETF", "Hindustan ETF", "NYQ", quote_type="ETF")]
+    res, _, check = make({"hindustan uniliver": pool}, ok={"HUL.NS", "HUNI"}, currencies={"HUL.NS": "INR", "HUNI": "USD"}, alias=False)
+    result = res.resolve("Hindustan uniliver")
+    assert result.status == "not_found" and result.symbols == () and [c.symbol for c in result.candidates] == ["HUL.NS", "HUNI"]
+    assert result.message == ('I couldn\'t find a listed company called "Hindustan uniliver". Did you mean: HUL.NS (Hindustan Unilever Limited, NSE, INR); '
+                              'HUNI (Hindustan Union Corp, NYSE, USD)? These are only suggestions: please type the ticker symbol you want.')
+    assert check.asked == ["HUL.NS", "HUNI", "HNOP"]                                                   # best-ranked first, three checks at most
+
+
+def test_suggestions_are_capped_and_absent_when_nothing_passes_or_nothing_was_found_or_the_lookup_is_down():
+    pool = [sample(n, "Zed Co", "NYQ") for n in ("ZA", "ZB", "ZC")]
+    res, *_ = make({"zedd": pool}, cfg={**CFG, "max_suggestions": 2}, alias=False)
+    assert len(res.resolve("zedd").candidates) == 2
+    res, *_ = make({"zedd": pool}, ok=set(), alias=False)
+    plain = res.resolve("zedd")
+    assert plain.status == "not_found" and plain.candidates == () and "Did you mean" not in plain.message
+    res, *_ = make({}, alias=False)
+    assert "Did you mean" not in res.resolve("zedd").message
+    res, *_ = make({"zedd": TransientProviderError("down")}, alias=False)
+    assert res.resolve("zedd").status == "unavailable"
+    now = [0.0]
+
+    def slow(symbol):
+        now[0] += 20
+        return Validation(False)
+
+    timed = r.TickerResolver([FakeLookup({"zedd": pool})], slow, {**CFG, "validation_budget_seconds": 10}, clock=lambda: now[0])
+    assert timed.resolve("zedd").status == "not_found"                                                  # out of time while suggesting: the plain message
+
+
+def test_a_price_check_without_a_currency_does_not_count():
+    provider = FakeProvider(history(currency=None))
+    assert r.provider_validator(provider, "5d")("ABC.NS") == Validation(False)
+
+
+@pytest.mark.parametrize("change, text", [
+    (lambda b: b.update(max_suggestions=0), "max_suggestions"),
+    (lambda b: b.update(bare_symbol_suffixes="NS"), "bare_symbol_suffixes"),
+    (lambda b: b.update(bare_symbol_suffixes=["NS"]), "bare_symbol_suffixes"),
+    (lambda b: b.update(bare_symbol_suffixes=[".BO"]), "bare_symbol_suffixes"),
+    (lambda b: b["messages"].update(bare_symbol_note=""), "messages.bare_symbol_note"),
+    (lambda b: b["messages"].pop("not_found_suggestions"), "messages.not_found_suggestions"),
+])
+def test_the_new_config_keys_are_validated(tmp_path, change, text):
     with pytest.raises(ConfigError, match=text):
         get_config(_config(tmp_path, change))

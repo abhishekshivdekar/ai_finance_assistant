@@ -1,4 +1,4 @@
-"""Live check for the ticker resolver RULES: the REAL resolver (real Yahoo search + real price check) on 16 names.
+"""Live check for the ticker resolver RULES: the REAL resolver (real Yahoo search + real price check) on 20 names.
 
 Uses the network (Yahoo search and Yahoo price history through yfinance). It uses NO language model, so the cost is $0.
 Run from the project root:  python live_check_resolver_rules.py     (VS Code: open this file, press F5 or "Run Python File")
@@ -31,6 +31,10 @@ NAMES = [
     "tata",
     "zomato",
     "qzxv wplk",
+    "hindustan unilever",
+    "Hindustan uniliver",
+    "HINDUNILVR",
+    "Suzlon NSE: SUZLON",
 ]
 
 
@@ -45,7 +49,7 @@ def main() -> None:
         print(f"status: {result.status}   source: {result.source or '-'}   elapsed: {elapsed:.2f}s")
         print(f"chosen symbol: {', '.join(result.symbols) or '-'}")
         for candidate in result.candidates:
-            print(f"  {'chosen' if result.symbols else 'option'}: {candidate.symbol} | {candidate.name} | exchange={candidate.exchange or '-'} "
+            print(f"  {'chosen' if result.symbols else 'suggestion' if result.status == 'not_found' else 'option'}: {candidate.symbol} | {candidate.name} | exchange={candidate.exchange or '-'} "
                   f"({candidate.exchange_name or '-'}) | type={candidate.quote_type or '-'} | currency={candidate.currency or 'not checked'}")
         print(f"note: {result.note or '-'}")
         print(f"message: {result.message or '-'}")

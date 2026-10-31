@@ -1,0 +1,115 @@
+REAL resolver: real Yahoo search and real price checks. No language model is used (cost $0). Results are printed, not interpreted.
+
+=== 'infosys' ===
+status: resolved   source: alias   elapsed: 1.38s
+chosen symbol: INFY.NS
+  chosen: INFY.NS | infosys | exchange=- (-) | type=- | currency=INR
+note: -
+message: -
+
+=== 'suzlon' ===
+status: resolved   source: yahoo search   elapsed: 0.50s
+chosen symbol: SUZLON.NS
+  chosen: SUZLON.NS | Suzlon Energy Limited | exchange=NSI (NSE) | type=EQUITY | currency=INR
+note: Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR). The same company is also listed as SUZLON.BO (Bombay); ask for that symbol if you meant it.
+message: -
+
+=== 'tata consultancy services' ===
+status: resolved   source: alias   elapsed: 0.14s
+chosen symbol: TCS.NS
+  chosen: TCS.NS | tata consultancy services | exchange=- (-) | type=- | currency=INR
+note: -
+message: -
+
+=== 'reliance industries' ===
+status: resolved   source: alias   elapsed: 0.27s
+chosen symbol: RELIANCE.NS
+  chosen: RELIANCE.NS | reliance industries | exchange=- (-) | type=- | currency=INR
+note: -
+message: -
+
+=== 'hdfc bank' ===
+status: resolved   source: alias   elapsed: 0.12s
+chosen symbol: HDFCBANK.NS
+  chosen: HDFCBANK.NS | hdfc bank | exchange=- (-) | type=- | currency=INR
+note: -
+message: -
+
+=== 'state bank of india' ===
+status: resolved   source: alias   elapsed: 0.14s
+chosen symbol: SBIN.NS
+  chosen: SBIN.NS | state bank of india | exchange=- (-) | type=- | currency=INR
+note: -
+message: -
+
+=== 'tsmc' ===
+status: resolved   source: alias   elapsed: 0.27s
+chosen symbol: TSM
+  chosen: TSM | tsmc | exchange=- (-) | type=- | currency=USD
+note: Showing TSM, the NYSE-listed ADR (American depositary receipt) of Taiwan Semiconductor Manufacturing Company, priced in USD.
+message: -
+
+=== 'taiwan semiconductors' ===
+status: resolved   source: alias   elapsed: 0.00s
+chosen symbol: TSM
+  chosen: TSM | taiwan semiconductors | exchange=- (-) | type=- | currency=USD
+note: Showing TSM, the NYSE-listed ADR (American depositary receipt) of Taiwan Semiconductor Manufacturing Company, priced in USD.
+message: -
+
+=== 'Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330' ===
+status: resolved   source: yahoo search   elapsed: 0.11s
+chosen symbol: TSFA.HA
+  chosen: TSFA.HA | Taiwan Semiconductor Manufacturing Co Ltd | exchange=HAN (Hanover) | type=EQUITY | currency=not checked
+note: Showing TSFA.HA (Taiwan Semiconductor Manufacturing Co Ltd, Hanover) for "Taiwan Semiconductor Manufacturing Co Ltd TPE 2330".
+message: -
+
+=== 'nvidia corp' ===
+status: resolved   source: alias   elapsed: 0.12s
+chosen symbol: NVDA
+  chosen: NVDA | nvidia corp | exchange=- (-) | type=- | currency=USD
+note: -
+message: -
+
+=== 'berkshire hathaway' ===
+status: ambiguous   source: yahoo search   elapsed: 1.02s
+chosen symbol: -
+  option: BRK-B | Berkshire Hathaway Inc. | exchange=NYQ (NYSE) | type=EQUITY | currency=USD
+  option: BRK-A | Berkshire Hathaway Inc. | exchange=NYQ (NYSE) | type=EQUITY | currency=USD
+note: -
+message: I found more than one match for "berkshire hathaway": BRK-B (Berkshire Hathaway Inc., NYSE, USD); BRK-A (Berkshire Hathaway Inc., NYSE, USD). Please type the ticker symbol you mean, for example BRK-B.
+
+=== 'alphabet inc' ===
+status: resolved   source: alias   elapsed: 0.11s
+chosen symbol: GOOGL
+  chosen: GOOGL | alphabet inc | exchange=- (-) | type=- | currency=USD
+note: -
+message: -
+
+=== 'meta platforms' ===
+status: resolved   source: alias   elapsed: 0.12s
+chosen symbol: META
+  chosen: META | meta platforms | exchange=- (-) | type=- | currency=USD
+note: -
+message: -
+
+=== 'tata' ===
+status: ambiguous   source: yahoo search   elapsed: 1.03s
+chosen symbol: -
+  option: TCS.NS | Tata Consultancy Services Limited | exchange=NSI (NSE) | type=EQUITY | currency=INR
+  option: TATASTEEL.NS | Tata Steel Limited | exchange=NSI (NSE) | type=EQUITY | currency=INR
+  option: TMPV.NS | Tata Motors Passenger Vehicles Limited | exchange=NSI (NSE) | type=EQUITY | currency=INR
+  option: TMCV.NS | Tata Motors Limited | exchange=NSI (NSE) | type=EQUITY | currency=not checked
+note: -
+message: I found more than one match for "tata": TCS.NS (Tata Consultancy Services Limited, NSE, INR); TATASTEEL.NS (Tata Steel Limited, NSE, INR); TMPV.NS (Tata Motors Passenger Vehicles Limited, NSE, INR); TMCV.NS (Tata Motors Limited, NSE). Please type the ticker symbol you mean, for example TCS.NS.
+
+=== 'zomato' ===
+status: not_found   source: -   elapsed: 0.36s
+chosen symbol: -
+note: -
+message: I couldn't find a listed company called "zomato". Please type its ticker symbol, for example AAPL, or RELIANCE.NS for a company on the NSE.
+
+=== 'qzxv wplk' ===
+status: not_found   source: -   elapsed: 0.38s
+chosen symbol: -
+note: -
+message: I couldn't find a listed company called "qzxv wplk". Please type its ticker symbol, for example AAPL, or RELIANCE.NS for a company on the NSE.
