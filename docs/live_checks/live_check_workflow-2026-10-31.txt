@@ -10,7 +10,7 @@
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     [('Finance Glossary Essentials', 'https://www.investor.gov')]
   payloads:    []
-  tokens:      in=1522 out=122 cost=$0.000213
+  tokens:      in=1522 out=118 cost=$0.000211
 
 [two agents] What is Apple trading at, and what is a P/E ratio?
   intents:     ['market', 'finance_qa']
@@ -18,16 +18,16 @@ This assistant provides financial education only. It is not financial, investmen
   nodes:       ['router', 'market', 'finance_qa', 'synthesizer']
   merge:       llm
   stopped:     None
-  answer:      AAPL last price USD 344.63 (live). Over the period, the return was +23.2%; the price is above its 20-day and 50-day averages (0.7% above the 20-day average) and 1.2% below its 52-week high.
+  answer:      AAPL last price USD 344.63 (live). Over the 6 months, it returned +23.2%; the price is 0.7% above its 20-day average and above its 50-day average, and is 1.2% below the 52-week high.
 
-A moving average is an average price over a set number of days, while a drawdown is a fall from a previous peak.
+A moving average is the average price over a set number of days, and a drawdown is a fall from a previous peak.
 
-A P/E ratio is a share’s price divided by the company’s earnings per share. For example, a share price of 100 and earnings per share of 5 give a P/E of 20. [1]
+A P/E ratio is a share’s price divided by the company’s earnings per share. For example, if a share costs 100 and earns 5 per share, its P/E is 20. [1]
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     [('Stock Terms', 'https://www.investor.gov')]
   payloads:    ['market source: live']
-  tokens:      in=2654 out=833 cost=$0.000682
+  tokens:      in=2652 out=864 cost=$0.000697
 
 [ambiguous] How is it doing?
   intents:     ['clarify']
@@ -38,7 +38,7 @@ This assistant provides financial education only. It is not financial, investmen
   answer:      I'm not sure what you would like to know. Could you say a little more, for example which stock, topic or goal you mean?
   sources:     []
   payloads:    []
-  tokens:      in=836 out=61 cost=$0.000114
+  tokens:      in=836 out=59 cost=$0.000113
 
 [advice] Should I buy Tesla?
   intents:     ['specific_advice']
@@ -46,12 +46,12 @@ This assistant provides financial education only. It is not financial, investmen
   nodes:       ['router', 'safe_response']
   merge:       none
   stopped:     None
-  answer:      I can't recommend a specific investment or predict prices. Inflation can erode purchasing power, so real returns help show whether money is keeping up with prices. [1] Investment values can fluctuate, and money needed soon has less time to recover from a downturn than money intended for decades. [2]
+  answer:      I can't recommend a specific investment or predict prices. Inflation can reduce purchasing power, so real returns help show whether money is keeping up [1]. Investment values can fluctuate; money needed soon has less time to recover from a decline than money invested over decades [2].
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     [('Inflation Risk Explained', 'https://www.investor.gov'), ('Time Horizon Explained', 'https://www.investor.gov')]
   payloads:    []
-  tokens:      in=1228 out=291 cost=$0.000268
+  tokens:      in=1228 out=227 cost=$0.000236
 
 [advice, Indian stock] Is Reliance a good buy right now?
   intents:     ['specific_advice']
@@ -59,25 +59,25 @@ This assistant provides financial education only. It is not financial, investmen
   nodes:       ['router', 'safe_response']
   merge:       none
   stopped:     None
-  answer:      I can't recommend a specific investment or predict prices. People often consider their time horizon: shorter horizons may favor predictability, while longer horizons may allow time to wait out downturns [1]. Broad index funds hold companies in index proportions rather than trying to guess which will perform best, and have a small running cost [2]. Individual shares can swing sharply or fall to zero; potential growth comes with the possibility of loss [3].
+  answer:      I can't recommend a specific investment or predict prices. Your time horizon matters: with a longer horizon, people may be more willing to accept larger price swings because there is time to wait out downturns. [1] Diversification can involve spreading exposure across companies through an index fund, which follows the index rather than trying to pick the best-performing company; fund running costs are also worth considering. [2] Shares can swing sharply or fall to zero, and the possibility of higher returns comes with the possibility of loss. [3]
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     [('Time Horizon Explained', 'https://www.investor.gov'), ('Index Funds Explained', 'https://www.investor.gov'), ('Risk and Diversification Basics', 'https://www.investor.gov')]
   payloads:    []
-  tokens:      in=1404 out=576 cost=$0.000428
+  tokens:      in=1404 out=602 cost=$0.000441
 
 [advice, prediction] Will TCS go up?
-  intents:     ['specific_advice', 'market']
-  confidence:  0.99
+  intents:     ['specific_advice']
+  confidence:  0.96
   nodes:       ['router', 'safe_response']
   merge:       none
   stopped:     None
-  answer:      I can't recommend a specific investment or predict prices. Volatility describes how much prices move, but neither calm nor sharp swings tell you where a price will go next [1]. Charts and trends describe past price action and cannot promise what happens next [2]. Market capitalization can reflect sentiment and changes in share count; it does not by itself show profitability, debt levels, or management quality [3].
+  answer:      I can't recommend a specific investment or predict prices. Volatility describes how much prices move, but it does not indicate where they will go next [1]. Market capitalization can reflect sentiment and does not by itself show profitability, debt levels, or management quality [2]. Charts summarize past movements and cannot promise what happens next [3].
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
-  sources:     [('Volatility Explained', 'https://www.investor.gov'), ('Reading a Price Chart', 'https://www.investor.gov'), ('Market Capitalisation', 'https://www.investor.gov')]
+  sources:     [('Volatility Explained', 'https://www.investor.gov'), ('Market Capitalisation', 'https://www.investor.gov'), ('Reading a Price Chart', 'https://www.investor.gov')]
   payloads:    []
-  tokens:      in=1430 out=449 cost=$0.000367
+  tokens:      in=1430 out=626 cost=$0.000456
 
 [advice, fund] Which mutual fund should I invest in?
   intents:     ['specific_advice']
@@ -85,12 +85,12 @@ This assistant provides financial education only. It is not financial, investmen
   nodes:       ['router', 'safe_response']
   merge:       none
   stopped:     None
-  answer:      I can't recommend a specific investment or predict prices. Compare fund costs, since operating expenses can add up over time [1][2]. Funds can provide a diversified basket through one product, though a broad index fund remains exposed to the market as a whole [2][3]. Consider your time horizon—the length of time before you need the money—and the kinds of assets the fund holds, such as shares, bonds, or a mix [4][5].
+  answer:      I can't recommend a specific investment or predict prices. An index fund generally tracks an index rather than trying to pick the best-performing companies, and its operation carries a cost [1]. Funds may hold shares, bonds, a mix of both, or very short-term instruments; broad index funds are still exposed to the market as a whole [2][3]. A fund can provide a diversified basket through one product, and costs matter over time [4]. Consider your time horizon—the length of time before you’ll need the money [5].
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     [('Index Funds Explained', 'https://www.investor.gov'), ('ETFs and Mutual Funds Basics', 'https://www.investor.gov'), ('Diversification Explained', 'https://www.investor.gov'), ('ETFs and Mutual Funds Basics', 'https://www.investor.gov'), ('Finance Glossary Essentials', 'https://www.investor.gov')]
   payloads:    []
-  tokens:      in=1478 out=610 cost=$0.000453
+  tokens:      in=1478 out=844 cost=$0.000570
 
 [off-topic] Best pasta recipe?
   intents:     ['out_of_scope']
@@ -103,7 +103,7 @@ This assistant provides financial education only. It is not financial, investmen
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     []
   payloads:    []
-  tokens:      in=835 out=54 cost=$0.000110
+  tokens:      in=835 out=57 cost=$0.000112
 
 [tax question] What is LTCG?
   intents:     ['tax_education']
@@ -111,12 +111,12 @@ This assistant provides financial education only. It is not financial, investmen
   nodes:       ['router', 'tax_education', 'synthesizer']
   merge:       none
   stopped:     None
-  answer:      LTCG means long-term capital gains: a gain from selling an asset after holding it longer than the holding period set for that type of asset. [1] For your own situation, consult a chartered accountant.
+  answer:      LTCG means long-term capital gains. A gain is long term when the asset was held longer than the holding period set for that type of asset. [1]
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     [('Capital Gains Basics', 'https://www.incometax.gov.in')]
   payloads:    []
-  tokens:      in=2123 out=216 cost=$0.000320
+  tokens:      in=2123 out=190 cost=$0.000307
 
 [news] Latest news on Nifty 50
   intents:     ['news']
@@ -124,13 +124,15 @@ This assistant provides financial education only. It is not financial, investmen
   nodes:       ['router', 'news', 'synthesizer']
   merge:       none
   stopped:     None
-  answer:      - Headlines report the Nifty reclaiming 23,000 and markets rebounding, with foreign buying and IT and pharma shares cited among the drivers. One also reports a six-month market high in October amid an IT rally and Jio Platforms IPO interest. [1][4][5][6][8]
-- The gains were uneven: one headline says most sectors fell despite the Nifty’s rise, while BFSI stocks ranged from Kotak gaining nearly 7% to Equitas falling 28%. [3][10]
+  answer:      - Headlines report mixed Nifty and Sensex moves, including rises, a lower open, flat trading and attention to the 23,000 level. [1][2][5][6][8]
+- Some headlines name stocks among market leaders or laggards and report share gains after earnings. [2][4][6]
+- One headline discusses possible passive-fund buying if Jio Platforms enters the Nifty and Sensex. [3]
+- Other headlines focus on market outlook, trading levels and factors such as crude oil prices and FPI inflows. [7][9][10]
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     []
   payloads:    ['news source: live']
-  tokens:      in=1518 out=788 cost=$0.000546
+  tokens:      in=1573 out=723 cost=$0.000519
 
 [three parts] What is Apple trading at, what is a P/E ratio, and what is the latest news on Apple?
   intents:     ['market', 'finance_qa', 'news']
@@ -138,67 +140,70 @@ This assistant provides financial education only. It is not financial, investmen
   nodes:       ['router', 'market', 'finance_qa', 'news', 'synthesizer']
   merge:       llm
   stopped:     None
-  answer:      AAPL last price USD 344.63 (cache, as of 2026-10-31 04:46 UTC). Over the 6 months, the return was +23.2%; the price is 0.7% above its 20-day average and above its 50-day average, and 1.2% below its 52-week high.
+  answer:      AAPL last price USD 344.63 (cache, as of 2026-10-31 05:34 UTC). Over the 6 months, the return was +23.2%. The price is 0.7% above its 20-day average and is also above its 50-day average; it is 1.2% below its 52-week high.
 
-A moving average smooths prices over a period, while a drawdown describes a fall from a previous peak.
+A moving average smooths prices over a set period, while a drawdown is a fall from a peak.
 
-A P/E ratio is a share’s price divided by the company’s earnings per share. For example, a share price of 100 and earnings per share of 5 give a P/E ratio of 20. [1]
+A P/E ratio is a share’s price divided by the company’s earnings per share. For example, if a share costs 100 and earnings per share are 5, the P/E ratio is 20. [1]
 
-- Apple overtook Nvidia to become the world’s most valuable company, according to one headline. [News 1]
-- Several headlines cover Apple product launches, including early complaints and pre-order stock concerns around the iPhone Duo, product availability, and competing advertising. [News 4][News 5][News 6][News 7][News 8][News 10]
+It’s a starting point for thinking about how a stock is valued, not an answer by itself. [2]
+
+- Headlines cover Apple product launches and availability, including a touchscreen MacBook Pro and new Macs, iMacs, and iPad mini. [News 1][News 8]
+- One headline says Apple overtook Nvidia to become the world’s most valuable company. [News 2]
+- Coverage of the foldable iPhone Duo includes early complaints, reported limits on pre-order stock, and a Samsung ad comparing its phone with Apple’s. [News 5][News 6][News 7]
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
-  sources:     [('Stock Terms', 'https://www.investor.gov')]
+  sources:     [('Stock Terms', 'https://www.investor.gov'), ('Price-to-Earnings Ratio', 'https://www.investor.gov')]
   payloads:    ['market source: cache', 'news source: live']
-  tokens:      in=3431 out=1982 cost=$0.001334
+  tokens:      in=3475 out=1636 cost=$0.001165
 
 [portfolio chat ask] Can you analyse my portfolio?
   intents:     ['portfolio']
-  confidence:  0.98
+  confidence:  0.99
   nodes:       ['router', 'portfolio', 'clarify']
   merge:       none
   stopped:     None
   answer:      Add at least one holding (ticker, quantity) to analyse your portfolio.
   sources:     []
   payloads:    []
-  tokens:      in=837 out=63 cost=$0.000115
+  tokens:      in=837 out=56 cost=$0.000112
 
 [thread:follow-up 1] How has Microsoft done over the last 6 months?
   intents:     ['market']
-  confidence:  0.99
+  confidence:  0.98
   nodes:       ['router', 'market', 'synthesizer']
   merge:       none
   stopped:     None
-  answer:      MSFT last price USD 521.91 (live). Over the 6 months, the return was +26.4%; the price is 1.7% below its 20-day average and above its 50-day average, and 4.0% below the 52-week high.
+  answer:      MSFT last price USD 521.91 (live). Over the analysis period, the price rose +26.4%; it is 1.7% below its 20-day average and above its 50-day average, and 4.0% below its 52-week high.
 
-A moving average smooths prices over a set number of days, while a drawdown is a fall from a previous peak.
+A moving average smooths recent prices into a reference level, while a drawdown is a fall from a previous peak.
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     []
   payloads:    ['market source: live']
-  tokens:      in=1580 out=778 cost=$0.000547
+  tokens:      in=1580 out=726 cost=$0.000521
 
 [thread:follow-up 2] And what about Apple?
   intents:     ['market']
-  confidence:  0.97
+  confidence:  0.98
   nodes:       ['router', 'market', 'synthesizer']
   merge:       none
   stopped:     None
-  answer:      AAPL last price USD 344.63 (cache, as of 2026-10-31 04:46 UTC). It rose +23.2% over the period and is above its 20-day and 50-day averages, 0.7% above its 20-day average. The price is 1.2% below its 52-week high.
+  answer:      AAPL last price USD 344.63 (cache, as of 2026-10-31 05:34 UTC). Over the 6-month period, the price rose +23.2%; it is 0.7% above its 20-day average and also above its 50-day average, and is 1.2% below its 52-week high.
 
-A moving average smooths recent prices over time, while a drawdown describes a fall from a peak.
+A moving average is an average price over a set period, and a drawdown is a fall in price from a previous peak.
 
 This assistant provides financial education only. It is not financial, investment, or tax advice. Consult a licensed professional before making financial decisions.
   sources:     []
   payloads:    ['market source: cache']
-  tokens:      in=1738 out=751 cost=$0.000549
+  tokens:      in=1735 out=669 cost=$0.000508
 
 Totals by role:
-  router: in=11896 out=1308 cost=0.0018436
-  finance_qa_rewrite: in=317 out=118 cost=9.070000000000001e-05
-  finance_qa: in=1674 out=126 cost=0.0002304
-  market_summary: in=2982 out=2874 cost=0.0017352
-  synthesizer: in=936 out=442 cost=0.0003146
-  safe_response: in=2188 out=1479 cost=0.0009582999999999999
-  tax_summary: in=1287 out=140 cost=0.0001987
-  news_summary: in=1334 out=1087 cost=0.0006769
+  router: in=11893 out=1464 cost=0.0019213
+  finance_qa_rewrite: in=317 out=106 cost=8.47e-05
+  finance_qa: in=1674 out=148 cost=0.0002414
+  market_summary: in=2982 out=2356 cost=0.0014762
+  synthesizer: in=988 out=468 cost=0.00033279999999999996
+  safe_response: in=2188 out=1742 cost=0.0010898
+  tax_summary: in=1287 out=110 cost=0.00018370000000000002
+  news_summary: in=1379 out=1003 cost=0.0006394
