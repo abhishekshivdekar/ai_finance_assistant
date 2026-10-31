@@ -220,8 +220,17 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
 
 
 UI_TEXT_KEYS = (
-    "page_title", "app_title", "app_tagline", "tabs.chat",
-    "sidebar.usage_title", "sidebar.usage_tokens", "sidebar.usage_limit", "sidebar.usage_no_limit", "sidebar.usage_cost",
+    "page_title", "app_title", "app_tagline", "tabs.chat", "tabs.market", "tabs.news",
+    "freshness.with_time", "freshness.no_time",
+    "market.intro", "market.tickers_label", "market.tickers_placeholder", "market.tickers_help", "market.period_label",
+    "market.submit", "market.working", "market.tickers_required", "market.query_template", "market.chart_heading",
+    "market.chart_title", "market.chart_y", "market.chart_y_plain", "market.table_heading", "market.not_available",
+    "market.columns.ticker", "market.columns.currency", "market.columns.period_return_pct", "market.columns.volatility_pct",
+    "market.columns.max_drawdown_pct", "market.columns.trend",
+    "news.intro", "news.mode_label", "news.mode_query", "news.mode_ticker", "news.text_label", "news.text_placeholder",
+    "news.text_help", "news.submit", "news.working", "news.text_required", "news.query_template_query",
+    "news.query_template_ticker", "news.headlines_heading", "news.published", "news.open_article",
+    "sidebar.usage_title", "sidebar.usage_tokens", "sidebar.usage_tokens_help", "sidebar.usage_limit", "sidebar.usage_no_limit", "sidebar.usage_cost",
     "sidebar.usage_cost_unknown", "sidebar.new_conversation", "sidebar.new_conversation_help", "sidebar.status_title",
     "sidebar.warmup_running", "sidebar.warmup_ok", "sidebar.warmup_failed",
     "chat.placeholder", "chat.placeholder_busy", "chat.placeholder_stopped", "chat.empty_state", "chat.thinking",

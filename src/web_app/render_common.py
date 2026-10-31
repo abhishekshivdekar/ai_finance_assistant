@@ -9,13 +9,14 @@ no link.
 from __future__ import annotations
 
 import re
+from typing import Any, Callable
 from urllib.parse import quote, urlsplit
 
 import streamlit as st
 
 from src.core.models import Source
 from src.web_app.backend import QueryResult
-from src.web_app.format import display_snippet
+from src.web_app.format import display_snippet, format_timestamp
 from src.web_app.text import ui_text
 
 STOPPED_BUDGET = "budget"
@@ -90,12 +91,13 @@ def _status_hint(result: QueryResult) -> str | None:
     return None
 
 
-def render_result(result: QueryResult) -> None:
+def render_result(result: QueryResult, resolve: Callable[[str], str] | None = None) -> None:
     """One answer: the text, a hint when nothing was found or input is missing, then the sources.
 
     The backend already put the disclaimer into `result.answer`; this function never adds one. A "budget" stop shows the
     UI's own message (the budget is per running app, see ui.messages.budget_stopped); any other stop shows the
-    backend's friendly text in a warning box.
+    backend's friendly text in a warning box. `resolve` post-processes the safe answer text (the News tab turns its
+    [n] markers into links with it).
     """
     if result.stopped == STOPPED_BUDGET:
         st.warning(ui_text("messages.budget_stopped"))
@@ -103,11 +105,42 @@ def render_result(result: QueryResult) -> None:
     if not result.answer.strip():
         st.warning(ui_text("messages.empty_answer"))
         return
+    text = safe_markdown(result.answer)
     if result.stopped:
-        st.warning(safe_markdown(result.answer))
+        st.warning(text)
     else:
-        st.markdown(safe_markdown(result.answer))
+        st.markdown(resolve(text) if resolve else text)
     hint = None if result.stopped else _status_hint(result)
     if hint:
         st.caption(hint)
     render_sources(result.sources)
+
+
+def payload_of(result: QueryResult, agent: str) -> dict[str, Any] | None:
+    """The data payload of this turn's result for one agent (any status), or None. Payload text is untrusted too."""
+    for item in result.results:
+        data = item.get("data")
+        if item["agent"] == agent and isinstance(data, dict):
+            return data
+    return None
+
+
+def render_warnings(data: dict[str, Any]) -> None:
+    """Every warning of a payload as a warning box, in plain text (the payload is the source of truth, not the answer)."""
+    for warning in data.get("warnings") or []:
+        st.warning(plain_text(str(warning)))
+
+
+def render_freshness(source: str, as_of: str, stale: bool, details: list[str]) -> None:
+    """Where the data came from and when, from the payload: green when live, blue for a cache, orange when stale or sample.
+
+    `details` are the payload's own sentences for prices that are not live (Market `freshness_texts`); `stale` is its flag.
+    """
+    if not source:
+        return
+    when = format_timestamp(as_of) if as_of else ""
+    line = ui_text("freshness.with_time", source=plain_text(source), as_of=when) if when else ui_text("freshness.no_time", source=plain_text(source))
+    show = st.warning if stale else st.info if details else st.success
+    show(line)
+    for detail in details:
+        st.caption(plain_text(detail))

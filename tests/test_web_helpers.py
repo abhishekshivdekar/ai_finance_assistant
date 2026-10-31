@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from src.utils.config import UI_TEXT_KEYS, ConfigError, get_config
+from src.web_app import session
 from src.web_app.format import display_snippet, format_count, format_usd
 from src.web_app.render_common import plain_text, safe_http_url, safe_markdown
 from src.web_app.text import ui_text
@@ -166,7 +167,7 @@ def test_no_known_label_is_written_in_the_code():
     """Spot-check: labels and messages come from ui_text(), so no string literal in the UI code is a known UI text."""
     texts = [t for t in _flatten(get_config()["ui"]) if len(t) > 8]
     for path in _sources():
-        literals = _code_strings(path)
+        literals = [lit for lit in _code_strings(path) if " " in lit]                 # identifiers and keys have no spaces
         for text in texts:
             assert not any(text in literal or literal in text and len(literal) > 8 for literal in literals), (path.name, text)
 
@@ -189,3 +190,47 @@ def test_backend_passes_calls_through_to_the_facade(monkeypatch):
     assert backend.ask("q", "t1") == "result" and backend.ask("q", "t1", "market", market_params={"tickers": ["AAPL"]}) == "result"
     assert calls == [(("q", "t1", None), {}), (("q", "t1", "market"), {"market_params": {"tickers": ["AAPL"]}})]
     assert backend.start_up() == "warm" and backend.usage() == "usage"
+
+
+# ---- times, and the request hand-over ----
+
+@pytest.mark.parametrize("iso, expected", [
+    ("2026-10-30T08:32:00+00:00", "2026-10-30 08:32 UTC"),
+    ("2026-10-30T14:02:00+05:30", "2026-10-30 08:32 UTC"),           # an aware time is shown in UTC
+    ("2026-10-30T08:32:00", "2026-10-30 08:32 UTC"),                  # a naive time is taken as UTC (as the backend does)
+    ("last Tuesday", "last Tuesday"),                                 # not a time: shown as it is
+    ("", ""),
+])
+def test_format_timestamp(iso, expected):
+    from src.web_app.format import format_timestamp
+
+    assert format_timestamp(iso) == expected
+
+
+def test_format_percent():
+    from src.web_app.format import format_percent
+
+    assert format_percent(12.34, "n/a") == "+12.3%" and format_percent(-4.56, "n/a") == "-4.6%" and format_percent(0.0, "n/a") == "+0.0%"
+    assert format_percent(None, "n/a") == "n/a"
+
+
+def test_a_waiting_request_is_handed_out_once_and_only_to_its_own_tab():
+    from streamlit.testing.v1 import AppTest
+
+    def script():
+        import streamlit as st
+
+        from src.web_app import session
+
+        session.init()
+        session.submit("market", "q", "market", market_params={"tickers": ["A"]})
+        st.session_state["seen"] = [
+            session.has_pending("news"), session.take_pending("news"), session.is_busy(), session.has_pending("market"),
+            session.take_pending("market"), session.take_pending("market"), session.is_busy(), session.active_tab(),
+        ]
+
+    at = AppTest.from_function(script).run()
+    assert not at.exception
+    request = session.Request("market", "q", "market", {"market_params": {"tickers": ["A"]}})
+    assert at.session_state["seen"] == [False, None, True, True, request, None, False, "market"]
+

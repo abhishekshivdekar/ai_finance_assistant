@@ -1,98 +1,13 @@
-"""The Streamlit app, driven with streamlit.testing.v1.AppTest and a fake backend (no graph, no LLM, no network)."""
+"""The Streamlit app shell and Chat tab, driven with AppTest and a fake backend (no graph, no LLM, no network)."""
 from __future__ import annotations
-
-from pathlib import Path
 
 import pytest
 import streamlit as st
-from streamlit.testing.v1 import AppTest
 
 from src.core.usage_tracker import UsageRegistry
 from src.utils.config import get_config
 from src.web_app import backend
-
-APP = str(Path(__file__).resolve().parent.parent / "app.py")
-HOSTILE = "<script>alert(1)</script> [x](javascript:alert(1))"
-SOURCE = {"title": "Capital Gains Basics", "url": "https://www.incometax.gov.in", "chunk_id": "a/b#0", "score": 0.7,
-          "snippet": "A capital gain is the profit from selling an asset"}
-
-
-def disclaimer() -> str:
-    return " ".join(get_config()["app"]["disclaimer"].split())
-
-
-def ui(path: str, **values) -> str:
-    node = get_config()["ui"]
-    for part in path.split("."):
-        node = node[part]
-    text = " ".join(node.split())
-    return text.format(**values) if values else text
-
-
-def answer_result(text="A bond is a loan [1].", sources=None, **kw) -> backend.QueryResult:
-    """What the facade returns for a normal turn: the backend has already added the disclaimer."""
-    return backend.QueryResult(answer=f"{text}\n\n{disclaimer()}", sources=[SOURCE] if sources is None else sources,
-                               intents=["finance_qa"], **kw)
-
-
-class FakeBackend:
-    """Stands in for src.web_app.backend: records every call, returns scripted results."""
-
-    def __init__(self):
-        self.asks, self.start_ups, self.usage_calls = [], 0, 0
-        self.reply = answer_result()
-        self.usage_value = backend.UsageSummary(tokens=1234, cost=0.0123, limit=2_000_000, exceeded=False)
-        self.warm = backend.WarmUp(ok=True, seconds=1.5)
-        self.start_up_error = None
-
-    def ask(self, *args, **kwargs):
-        self.asks.append((args, kwargs))
-        return self.reply
-
-    def start_up(self):
-        self.start_ups += 1
-        if self.start_up_error:
-            raise self.start_up_error
-        return self.warm
-
-    def usage(self):
-        self.usage_calls += 1
-        return self.usage_value
-
-
-@pytest.fixture
-def fake(monkeypatch):
-    st.cache_resource.clear()
-    fb = FakeBackend()
-    monkeypatch.setattr(backend, "ask", fb.ask)
-    monkeypatch.setattr(backend, "start_up", fb.start_up)
-    monkeypatch.setattr(backend, "usage", fb.usage)
-    yield fb
-    st.cache_resource.clear()
-
-
-def start() -> AppTest:
-    at = AppTest.from_file(APP, default_timeout=10)
-    at.run()
-    assert not at.exception, [e.value for e in at.exception]
-    return at
-
-
-def ask(at: AppTest, question: str) -> AppTest:
-    at.chat_input[0].set_value(question).run()
-    assert not at.exception, [e.value for e in at.exception]
-    return at
-
-
-def shown(at: AppTest) -> list[str]:
-    """Every text the page shows, as passed to Streamlit (markdown, captions, boxes, metrics, expander labels)."""
-    out: list[str] = []
-    for block in (at.main, at.sidebar):
-        for kind in ("markdown", "caption", "warning", "info", "success", "error", "title", "subheader"):
-            out += [e.value for e in getattr(block, kind)]
-        out += [m.label + " " + m.value for m in block.metric]
-    out += [x.label for x in at.expander]
-    return out
+from web_support import HOSTILE, SOURCE, FakeBackend, answer_result, ask, disclaimer, fake, shown, start, ui  # noqa: F401
 
 
 # ---- first load ----
@@ -101,9 +16,10 @@ def test_first_load_shows_the_shell_the_usage_and_an_enabled_input_and_asks_noth
     at = start()
     texts = shown(at)
     assert ui("app_title") in texts and ui("app_tagline") in texts and ui("chat.empty_state") in texts
-    assert [t.label for t in at.tabs] == [ui("tabs.chat")]
+    assert [t.label for t in at.tabs] == [ui("tabs.chat"), ui("tabs.market"), ui("tabs.news")]
     metric = at.sidebar.metric[0]
-    assert metric.label == ui("sidebar.usage_tokens") == "Tokens used since the app started (all visitors)" and metric.value == "1,234"
+    assert metric.label == ui("sidebar.usage_tokens") == "Tokens used (all visitors)" and metric.value == "1,234"
+    assert "since the app started" in metric.help and "does not reset" in metric.help
     assert ui("sidebar.usage_limit", limit="2,000,000") in texts and ui("sidebar.usage_cost", cost="0.0123") in texts
     assert ui("sidebar.warmup_ok") in texts
     assert at.chat_input[0].disabled is False and at.chat_input[0].placeholder == ui("chat.placeholder")
@@ -237,8 +153,8 @@ def test_no_sources_means_no_expander(fake):
 def test_a_reached_budget_shows_the_message_and_disables_the_input(fake):
     fake.usage_value = backend.UsageSummary(tokens=2_000_001, cost=1.0, limit=2_000_000, exceeded=True)
     at = start()
-    assert [w.value for w in at.main.warning] == [ui("messages.budget_stopped")]
-    assert at.chat_input[0].disabled is True and at.chat_input[0].placeholder == ui("chat.placeholder_stopped")
+    assert [w.value for w in at.main.warning] == [ui("messages.budget_stopped")] * 3          # once in each tab
+    assert [b.disabled for b in at.main.button] == [True, True] and at.chat_input[0].disabled is True and at.chat_input[0].placeholder == ui("chat.placeholder_stopped")
     assert fake.asks == []
 
 
