@@ -10,6 +10,7 @@ from src.agents.portfolio import PortfolioAgent
 from src.core.models import MarketResult
 from src.core.usage_tracker import UsageTracker, get_usage_registry
 from src.data.market.provider import error_result
+from src.data.tickers.resolver import build_resolver
 from src.utils.config import get_config
 
 T0 = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -21,9 +22,17 @@ def quote(price, currency="INR", source="live", stale=False):
     return MarketResult(data={"price": price}, currency=currency, as_of=T0, source=source, is_stale=stale)
 
 
+def prices(currency="INR"):
+    """A recent history that passes the resolver's price check."""
+    return MarketResult(data=[{"close": 1.0}], currency=currency, as_of=T0, source="live")
+
+
 class FakeProvider:
-    def __init__(self, quotes):
-        self.quotes, self.calls = quotes, []
+    def __init__(self, quotes, histories=None):
+        self.quotes, self.histories, self.calls = quotes, histories or {}, []
+
+    def get_history(self, ticker, period):
+        return self.histories.get(ticker, error_result("no data"))
 
     def get_quote(self, ticker):
         self.calls.append(ticker)
@@ -54,8 +63,22 @@ TWO = [{"ticker": "A.NS", "quantity": 10}, {"ticker": "B.NS", "quantity": 10}]
 PROVIDER_TWO = {"A.NS": quote(100), "B.NS": quote(100)}
 
 
-def run(rows, quotes=None, llm=None):
-    agent = PortfolioAgent(llm=llm or FakeLLM(), provider=FakeProvider(quotes or {}))
+class Search:
+    """Yahoo's search as a table of quotes (no network); counts its calls."""
+
+    def __init__(self, table=None, error=None):
+        self.table, self.error, self.calls = table or {}, error, []
+
+    def __call__(self, query, limit, timeout):
+        self.calls.append(query)
+        if self.error:
+            raise self.error
+        return self.table.get(query.casefold(), [])
+
+
+def run(rows, quotes=None, llm=None, histories=None, search=None):
+    provider = FakeProvider(quotes or {}, histories)
+    agent = PortfolioAgent(llm=llm or FakeLLM(), provider=provider, resolver=build_resolver(provider, search=search or Search()))
     return agent, agent.run({"turn_id": "t1", "portfolio": rows})
 
 
@@ -138,7 +161,7 @@ def test_summary_using_only_input_numbers_is_accepted():
 
 # ---- needs_input / no_answer / errors ----
 
-@pytest.mark.parametrize("rows", [None, [], [{"ticker": "A.NS", "quantity": 0}], [{"ticker": "???", "quantity": 1}]])
+@pytest.mark.parametrize("rows", [None, [], [{"ticker": "A.NS", "quantity": 0}], [None, {"ticker": "", "quantity": 1}, {"ticker": "  ", "quantity": 1}, {"quantity": 1}, 5]])
 def test_empty_or_invalid_portfolio_needs_input_and_calls_nothing(rows):
     agent, result = run(rows, PROVIDER_TWO)
     assert result["status"] == "needs_input" and result["answer"] == PF["needs_input_message"].strip()
@@ -146,7 +169,7 @@ def test_empty_or_invalid_portfolio_needs_input_and_calls_nothing(rows):
 
 
 def test_state_without_a_portfolio_key_needs_input():
-    agent = PortfolioAgent(llm=FakeLLM(), provider=FakeProvider({}))
+    agent = PortfolioAgent(llm=FakeLLM(), provider=FakeProvider({}), resolver=build_resolver(FakeProvider({}), search=Search()))
     assert agent.run({"turn_id": "t1"})["status"] == "needs_input"
 
 
@@ -163,7 +186,7 @@ def test_provider_exception_for_one_ticker_only_excludes_that_ticker():
                 raise RuntimeError("provider exploded")
             return quote(100)
 
-    agent = PortfolioAgent(llm=FakeLLM(), provider=Boom())
+    agent = PortfolioAgent(llm=FakeLLM(), provider=Boom(), resolver=build_resolver(Boom(), search=Search()))
     result = agent.run({"turn_id": "t1", "portfolio": TWO})
     assert result["status"] == "ok" and result["data"]["metrics"]["currencies"]["INR"]["position_count"] == 1
     assert "B.NS was left out: no price is available right now." in result["data"]["warnings"]
@@ -174,7 +197,7 @@ def test_provider_exception_for_every_ticker_gives_no_answer():
         def get_quote(self, ticker):
             raise RuntimeError("provider exploded")
 
-    result = PortfolioAgent(llm=FakeLLM(), provider=Boom()).run({"turn_id": "t1", "portfolio": TWO})
+    result = PortfolioAgent(llm=FakeLLM(), provider=Boom(), resolver=build_resolver(Boom(), search=Search())).run({"turn_id": "t1", "portfolio": TWO})
     assert result["status"] == "no_answer"
 
 
@@ -262,3 +285,96 @@ def test_not_provided_expense_ratio_is_sent_without_any_coverage_fraction():
     assert "covers" not in prompt.split("JSON:\n", 1)[1]
     instructions = " ".join(PF["summary_prompt"].split())   # ignore the YAML line breaks
     assert "not provided" in instructions and "give no coverage figures" in instructions
+
+
+# ---- company names in the ticker column (UI step 3a) ----
+
+def q(symbol, name, exchange, display, kind="EQUITY"):
+    return {"symbol": symbol, "longname": name, "exchange": exchange, "exchDisp": display, "quoteType": kind}
+
+
+TABLE = {
+    "suzlon": [q("SUZLON.NS", "Suzlon Energy Limited", "NSI", "NSE")],
+    "globe corp": [q("GLB", "Globe Corp.", "NMS", "NASDAQ"), q("GLBA", "Globe Corp.", "NMS", "NASDAQ")],
+}
+QUOTES = {"SUZLON.NS": quote(50), "INFY.NS": quote(100), "A.NS": quote(100), "GLB": quote(20, "USD"), "GLBA": quote(30, "USD")}
+HISTORIES = {s: prices("USD" if s.startswith("GLB") else "INR") for s in QUOTES}
+
+
+def test_a_company_name_is_resolved_and_the_answer_says_which_symbol_it_became():
+    search = Search(TABLE)
+    agent, result = run([{"ticker": "Suzlon", "quantity": 10}, {"ticker": "A.NS", "quantity": 10}], QUOTES, histories=HISTORIES, search=search)
+    assert result["status"] == "ok" and [p["ticker"] for p in result["data"]["metrics"]["positions"]] == ["SUZLON.NS", "A.NS"]
+    note = 'Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR) for "Suzlon".'
+    assert result["data"]["lookup_notes"] == [note] and result["answer"].endswith(f"\n\n{note}") and result["answer"].count(note) == 1
+    assert note not in agent.llm.calls[0] and search.calls == ["Suzlon"]                  # symbols are never looked up
+
+
+def test_an_alias_name_shows_a_plain_note_when_the_lookup_had_none():
+    _, result = run([{"ticker": "Infosys", "quantity": 1}], QUOTES, histories=HISTORIES)
+    assert result["data"]["lookup_notes"] == ['Row "Infosys": using INFY.NS.'] and result["answer"].endswith('Row "Infosys": using INFY.NS.')
+
+
+def test_every_problem_row_is_reported_at_once_and_nothing_is_analysed():
+    rows = [{"ticker": "Suzlon", "quantity": 1}, {"ticker": "Globe Corp", "quantity": 1}, {"ticker": "Qzxv Wplk", "quantity": 1}, {"ticker": "???", "quantity": 1},
+            {"ticker": "A.NS", "quantity": 1}]
+    agent, result = run(rows, QUOTES, histories=HISTORIES, search=Search(TABLE))
+    assert result["status"] == "needs_input"
+    lines = result["answer"].split("\n\n")
+    assert len(lines) == 3 and lines[0].startswith('Row "Globe Corp": I found more than one match for "Globe Corp": GLB (Globe Corp., NASDAQ, USD); GLBA')
+    assert lines[1].startswith('Row "Qzxv Wplk": I couldn\'t find a listed company called "Qzxv Wplk"') and lines[2].startswith('Row "???": I couldn\'t read that company name')
+    assert agent.provider.calls == [] and agent.llm.calls == [] and "Suzlon" not in result["answer"]       # no quotes asked, no summary written
+
+
+def test_a_lookup_that_is_down_names_every_name_row_and_never_guesses():
+    rows = [{"ticker": "Suzlon", "quantity": 1}, {"ticker": "Zeta Corp", "quantity": 1}, {"ticker": "A.NS", "quantity": 1}]
+    agent, result = run(rows, QUOTES, histories=HISTORIES, search=Search(error=ConnectionError("offline")))
+    assert result["status"] == "needs_input" and result["answer"].count("can't look up company names") == 2
+    assert 'Row "Suzlon":' in result["answer"] and 'Row "Zeta Corp":' in result["answer"] and agent.provider.calls == []
+
+
+def test_at_most_max_holdings_names_are_looked_up_and_the_rest_are_left_out_with_a_warning(monkeypatch):
+    limited = {**get_config(), "portfolio": {**PF, "max_holdings": 2}}
+    monkeypatch.setattr(portfolio, "get_config", lambda: limited)
+    search = Search({"zetacorp": [q("ZETA.NS", "Zetacorp Limited", "NSI", "NSE")], "etaworks": [q("ETA.NS", "Etaworks Limited", "NSI", "NSE")], "thetacorp": [q("THE.NS", "Thetacorp Limited", "NSI", "NSE")]})
+    histories = {s: prices() for s in ("ZETA.NS", "ETA.NS", "THE.NS")}
+    quotes = {s: quote(10) for s in histories}
+    rows = [{"ticker": "Zetacorp", "quantity": 1}, {"ticker": "Etaworks", "quantity": 1}, {"ticker": "Thetacorp", "quantity": 1}]
+    _, result = run(rows, quotes, histories=histories, search=search)
+    assert search.calls == ["Zetacorp", "Etaworks"] and result["status"] == "ok"
+    assert [p["ticker"] for p in result["data"]["metrics"]["positions"]] == ["ZETA.NS", "ETA.NS"]
+    assert 'Only the first 2 rows are looked up; "Thetacorp" was left out.' in result["data"]["warnings"]
+
+
+def test_resolved_rows_keep_their_order_and_a_name_that_matches_a_symbol_row_is_a_duplicate():
+    rows = [{"ticker": "Infosys", "quantity": 1}, {"ticker": "A.NS", "quantity": 2}, {"ticker": "INFY.NS", "quantity": 3}]
+    _, result = run(rows, QUOTES, histories=HISTORIES)
+    assert [p["ticker"] for p in result["data"]["metrics"]["positions"]] == ["INFY.NS", "A.NS"]
+    assert "INFY.NS appears more than once; only the first row is used." in result["data"]["warnings"]
+
+
+def numbers_in_payload(value):
+    if isinstance(value, dict):
+        return [n for v in value.values() for n in numbers_in_payload(v)]
+    if isinstance(value, (list, tuple)):
+        return [n for v in value for n in numbers_in_payload(v)]
+    return [float(value)] if isinstance(value, (int, float)) and not isinstance(value, bool) else []
+
+
+def test_two_currencies_are_never_added_together():
+    rows = [{"ticker": "A.NS", "quantity": 10}, {"ticker": "GLB", "quantity": 5}, {"ticker": "GLBA", "quantity": 5}]
+    _, result = run(rows, QUOTES)
+    metrics = result["data"]["metrics"]
+    assert sorted(metrics["currencies"]) == ["INR", "USD"]
+    assert metrics["currencies"]["INR"]["total_value"] == 1000 and metrics["currencies"]["USD"]["total_value"] == 250
+    assert 1250.0 not in numbers_in_payload(result["data"])                                           # 1000 INR + 250 USD, never summed
+    assert [key for key in metrics if "total" in key] == [] and [key for key in result["data"] if "total" in key] == []
+    assert all(p["weight"] <= 1 for p in metrics["positions"]) and sum(c["allocation_by_asset_class"]["equity"] for c in metrics["currencies"].values()) == 2
+
+
+def test_the_payload_carries_the_freshness_of_the_prices():
+    _, live = run(TWO, PROVIDER_TWO)
+    assert live["data"]["source"] == "live" and live["data"]["is_stale"] is False and live["data"]["as_of"] == T0.isoformat()
+    assert "lookup_notes" not in live["data"]
+    _, mixed = run(TWO, {"A.NS": quote(100), "B.NS": quote(100, source="stale cache", stale=True)})
+    assert mixed["data"]["source"] == "stale cache" and mixed["data"]["is_stale"] is True

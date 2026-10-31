@@ -326,7 +326,13 @@ finance_qa:                   # Finance Q&A agent prompts and messages (architec
     - Use short, plain language that a beginner can follow.
 
 portfolio:                    # Portfolio agent (architecture section 2.2). All values illustrative.
-  max_holdings: 50            # holdings beyond this are ignored (bounds the number of quote calls)
+  max_holdings: 50            # holdings beyond this are ignored (bounds the number of quote calls and of company-name lookups)
+  instrument_types: [stock, etf, fund, bond, cash, other]   # the choices of the Portfolio table (checked at load against InstrumentType in portfolio_models.py)
+  asset_classes: [equity, debt, gold, cash, other]          # the choices of the Portfolio table (checked at load against AssetClass in portfolio_models.py)
+  defaults: {instrument_type: stock, asset_class: equity}   # what a new table row starts with
+  row_problem_message: 'Row "{typed}": {message}'            # a name in the ticker column that needs the user (ambiguous, not found, unavailable)
+  resolved_note: 'Row "{typed}": using {symbol}.'            # shown for a resolved name whose lookup had no disclosure of its own
+  lookup_limit_message: 'Only the first {limit} rows are looked up; "{typed}" was left out.'
   max_workers: 8              # quotes are fetched concurrently with at most this many threads
   full_diversification_holdings: 20   # equal positions in one currency that count as fully spread (HHI scaling)
   single_class_penalty: 15    # points taken off the diversification score when everything is one asset class
@@ -842,6 +848,7 @@ ui:                           # Streamlit UI texts (architecture section 13). Ev
   app_tagline: "Plain-language answers about investing, markets, taxes in India and saving goals."
   tabs:
     chat: "Chat"
+    portfolio: "Portfolio"
     market: "Market"
     news: "News"
   sidebar:
@@ -869,6 +876,53 @@ ui:                           # Streamlit UI texts (architecture section 13). Ev
   freshness:                  # where the data came from (Market and News); wording only, the values come from the payload
     with_time: "Data source: {source} (as of {as_of})."
     no_time: "Data source: {source}."
+  portfolio:
+    intro: "Enter your holdings to see how your money is spread across asset classes. Use a ticker or a company name. Values are shown per currency and are never added across currencies. This is education, not a recommendation."
+    columns:
+      ticker: "Ticker or company name"
+      quantity: "Quantity"
+      avg_cost: "Average cost"
+      instrument_type: "Instrument type"
+      asset_class: "Asset class"
+      expense_ratio_pct: "Expense ratio (%)"
+    column_help:
+      ticker: "A ticker such as AAPL or TCS.NS, or a company name such as Suzlon. If a name matches several listings you will be asked to type the ticker."
+      quantity: "Number of units you hold."
+      avg_cost: "Average price you paid per unit, in the currency the holding trades in (INR for .NS tickers, USD for US tickers). Optional."
+      instrument_type: "What the holding is."
+      asset_class: "What it behaves like; this drives the risk and allocation figures."
+      expense_ratio_pct: "Yearly fund cost in percent. Optional; leave empty for shares."
+    instrument_labels: {stock: "Stock", etf: "ETF", fund: "Fund", bond: "Bond", cash: "Cash", other: "Other"}
+    asset_class_labels: {equity: "Equity", debt: "Debt / bonds", gold: "Gold", cash: "Cash", other: "Other"}
+    submit: "Analyse portfolio"
+    working: "Pricing your holdings..."
+    rows_required: "Add at least one holding with a ticker and a quantity."
+    query_template: "Portfolio analysis of {count} holdings."
+    allocation_heading: "Allocation by asset class"
+    metrics_heading: "Portfolio measures"
+    positions_heading: "Holdings"
+    currency_heading: "{currency} holdings"
+    not_available: "not available"
+    metrics:
+      total_value: "Total value"
+      position_count: "Number of holdings"
+      largest: "Largest holding"
+      top3: "Top 3 holdings"
+      diversification: "Diversification"
+      risk: "Risk label"
+      equity_share: "Equity share"
+      expense_ratio: "Expense ratio"
+    positions:
+      ticker: "Ticker"
+      instrument_type: "Type"
+      asset_class: "Asset class"
+      quantity: "Quantity"
+      avg_cost: "Average cost"
+      price: "Price"
+      value: "Value"
+      weight: "Share"
+      pnl: "Gain / loss"
+      pnl_pct: "Gain / loss %"
   market:
     intro: "Compare up to {max_tickers} tickers over a period. Prices, returns and risk measures are calculated from market data; this is education, not a recommendation."
     tickers_label: "Tickers (comma-separated)"

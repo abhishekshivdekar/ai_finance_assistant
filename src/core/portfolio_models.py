@@ -8,14 +8,11 @@ instead of editing the valued ones in place.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.core.portfolio_types import AssetClass, InstrumentType
 from src.data.market.provider import validate_symbol
-
-InstrumentType = Literal["stock", "etf", "fund", "bond", "cash", "other"]   # what the holding IS
-AssetClass = Literal["equity", "debt", "gold", "cash", "other"]            # what it behaves like (drives risk)
 
 
 class _Frozen(BaseModel):

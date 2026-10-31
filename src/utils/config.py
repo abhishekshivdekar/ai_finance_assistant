@@ -251,6 +251,7 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
 
 UI_TEXT_KEYS = (
     "page_title", "app_title", "app_tagline", "tabs.chat", "tabs.market", "tabs.news",
+    "tabs.portfolio", "portfolio.intro", "portfolio.submit", "portfolio.working", "portfolio.rows_required", "portfolio.query_template", "portfolio.allocation_heading", "portfolio.metrics_heading", "portfolio.positions_heading", "portfolio.currency_heading", "portfolio.not_available", "portfolio.columns.ticker", "portfolio.columns.quantity", "portfolio.columns.avg_cost", "portfolio.columns.instrument_type", "portfolio.columns.asset_class", "portfolio.columns.expense_ratio_pct", "portfolio.column_help.ticker", "portfolio.column_help.quantity", "portfolio.column_help.avg_cost", "portfolio.column_help.instrument_type", "portfolio.column_help.asset_class", "portfolio.column_help.expense_ratio_pct", "portfolio.metrics.total_value", "portfolio.metrics.position_count", "portfolio.metrics.largest", "portfolio.metrics.top3", "portfolio.metrics.diversification", "portfolio.metrics.risk", "portfolio.metrics.equity_share", "portfolio.metrics.expense_ratio", "portfolio.positions.ticker", "portfolio.positions.instrument_type", "portfolio.positions.asset_class", "portfolio.positions.quantity", "portfolio.positions.avg_cost", "portfolio.positions.price", "portfolio.positions.value", "portfolio.positions.weight", "portfolio.positions.pnl", "portfolio.positions.pnl_pct",
     "freshness.with_time", "freshness.no_time",
     "market.intro", "market.tickers_label", "market.tickers_placeholder", "market.tickers_help", "market.period_label",
     "market.submit", "market.working", "market.tickers_required", "market.query_template", "market.chart_heading",
@@ -267,6 +268,29 @@ UI_TEXT_KEYS = (
     "chat.sources_title", "chat.source_link",
     "messages.budget_stopped", "messages.empty_answer", "messages.needs_input_hint", "messages.no_answer_hint",
 )
+
+
+def _validate_portfolio(portfolio: dict[str, Any], ui: Any) -> None:
+    """portfolio: the table choices equal the Literals of portfolio_models.py, defaults are choices, every choice has a UI label."""
+    from typing import get_args
+
+    from src.core.portfolio_types import AssetClass, InstrumentType   # imported here, not at the top: keeps config free of app imports
+
+    for key, literal in (("instrument_types", InstrumentType), ("asset_classes", AssetClass)):
+        values = portfolio[key]
+        if not isinstance(values, list) or sorted(values) != sorted(get_args(literal)):
+            raise ConfigError(f"portfolio.{key} must list exactly {', '.join(get_args(literal))} (the Literal in portfolio_models.py).")
+    defaults = portfolio["defaults"]
+    if defaults.get("instrument_type") not in portfolio["instrument_types"] or defaults.get("asset_class") not in portfolio["asset_classes"]:
+        raise ConfigError("portfolio.defaults must name an instrument type and an asset class from the lists.")
+    for key in ("row_problem_message", "resolved_note", "lookup_limit_message"):
+        if not str(portfolio.get(key) or "").strip():
+            raise ConfigError(f"portfolio.{key} must not be empty.")
+    if isinstance(ui, dict) and "portfolio" in ui:
+        for labels, choices in (("instrument_labels", portfolio["instrument_types"]), ("asset_class_labels", portfolio["asset_classes"])):
+            shown = ui["portfolio"].get(labels) or {}
+            if sorted(shown) != sorted(choices) or not all(isinstance(v, str) and v.strip() for v in shown.values()):
+                raise ConfigError(f"ui.portfolio.{labels} needs a non-empty label for every choice in portfolio.")
 
 
 def _validate_ui(ui: Any) -> None:
@@ -299,6 +323,9 @@ def _validate(cfg: dict[str, Any]) -> None:
     news = cfg.get("news")
     if news is not None:
         _validate_news(news)
+    portfolio = cfg.get("portfolio")
+    if portfolio is not None and "instrument_types" in portfolio:
+        _validate_portfolio(portfolio, cfg.get("ui"))
     lookup = cfg.get("ticker_lookup")
     if lookup is not None:
         _validate_ticker_lookup(lookup, cfg["market_data"]["history_periods"])

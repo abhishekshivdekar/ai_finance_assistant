@@ -52,6 +52,10 @@ class PortfolioPayload(TypedDict, total=False):
 
     metrics: dict[str, Any]
     warnings: list[str]
+    as_of: str                # ISO time of the oldest price used ("" when unknown)
+    source: str               # the least live price source among the positions (live, cache, stale cache, sample data)
+    is_stale: bool            # a stale cache or sample price was used
+    lookup_notes: list[str]   # which symbol a typed company name became; also in the answer
 
 
 class GoalPayload(TypedDict, total=False):
