@@ -66,7 +66,7 @@ def must_keep(result: AgentResult) -> list[str]:
     """Texts the agent put in its answer from its payload that a merge must not drop.
 
     The payload `label` (Tax: "illustrative, verify before relying"), the `source` of stale or sample prices
-    and every whole price sentence of a price that is not live (Market `freshness_texts`), every `exclusions` line
+    every whole price sentence of a price that is not live (Market `freshness_texts`), the company-lookup notes (Market `lookup_notes`), every `exclusions` line
     and the `as_of` dates of `config_used` figures, each only when the agent's own answer contains it (an agent
     that left it out leaves nothing to keep).
     Example: a Tax answer ending "Figures quoted are illustrative, verify before relying (as of 2026-10-29)..."
@@ -76,6 +76,7 @@ def must_keep(result: AgentResult) -> list[str]:
     data = result.get("data") or {}
     candidates: list[Any] = [data.get("label"), data.get("source") if data.get("is_stale") else None]
     candidates += list(data.get("freshness_texts") or [])
+    candidates += list(data.get("lookup_notes") or [])
     candidates += list(data.get("exclusions") or [])
     candidates += [entry.get("as_of") for entry in (data.get("config_used") or {}).values() if isinstance(entry, dict)]
     answer = _norm(result["answer"])

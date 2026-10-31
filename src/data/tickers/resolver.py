@@ -2,20 +2,26 @@
 
 Design patterns:
 - STRATEGY: candidates come from injected TickerStrategy objects (alias table, Yahoo search, a fake in tests).
-- CHAIN of strategies: the first one whose price-checked candidates give a decision wins.
-Example: "Suzlon" -> the Yahoo strategy finds SUZLON.NS and SUZLON.BO (the same company, one market); both pass the price
-check; the config order [NSI, BSE] picks SUZLON.NS. "Taiwan Semiconductor Manufacturing" finds TSM (NYSE) and 2330.TW
-(Taiwan): the same company in two markets, so the answer is `ambiguous` and the user types the symbol they mean.
+- CHAIN of strategies: the first one that gives a decision wins.
+Example: "Infosys" -> Yahoo lists INFY (NYSE), INFY.NS (NSE), INFY.BO, HCL-INSYS.BO ...; only names equal to "infosys"
+count (HCL Infosystems does not); the best exchange in `preferred_markets` is NSI, so INFY.NS is price-checked and
+accepted, with a note: "Showing INFY.NS (Infosys Limited, NSE, INR). The same company is also listed as INFY (NYSE) ...".
 
 Rules (all numbers and lists are in config `ticker_lookup`):
 1. The language model is never a source. A symbol comes from the alias table or from Yahoo's search.
-2. Every accepted symbol passes a price check first (recent history from the market provider, live or cached; stale or
-   sample data does not count). Candidates that fail are dropped.
-3. A name is accepted only when exactly one company remains, it has one listing (listings of one company in the same
-   market, such as NSE and BSE, collapse to the most preferred exchange) and the words typed are the first words of its
-   name. Anything else is `ambiguous`: the user types the symbol, which then takes the ordinary literal path.
-4. A lookup that is down or slow is `unavailable`, never a guess. Only resolved and ambiguous answers are cached.
-Log lines carry the length of the name and the status, never the text.
+2. Filter: only EQUITY and INDEX quotes (ETF only when the name typed has "etf", "fund" or "trust" in it).
+3. Name match: the words typed equal the company name (legal suffixes such as Ltd ignored). Only when no company matches
+   exactly, a name that STARTS with the words typed (whole words, at least `min_prefix_chars` characters) counts. No
+   spelling or fuzzy matches. No match is `not_found`.
+4. Selection among the listings of one company: the best exchange in `preferred_markets` wins. Two listings on the same
+   best exchange (GOOG and GOOGL), or several listings with none on a preferred market, are `ambiguous`; several
+   companies matching by prefix are `ambiguous` too (up to `max_candidates_shown`, each with its best listing). The user
+   then types the symbol, which takes the ordinary literal path. A company with one listing is accepted.
+5. Price check, lazily: only the best-ranked candidates (`max_validated`), in rank order, inside
+   `validation_budget_seconds`; stale or sample data does not count. The first that passes is accepted. A currency is
+   named only for a listing that was checked.
+6. A lookup that is down, slow or out of time is `unavailable`, never a guess. Only resolved and ambiguous answers
+   are cached. Log lines carry the length of the name and the status, never the text.
 """
 from __future__ import annotations
 
@@ -81,7 +87,7 @@ class TickerResolver:
     def __init__(self, strategies: list[TickerStrategy], validator: Validator, cfg: dict[str, Any] | None = None,
                  clock: Callable[[], float] = time.monotonic) -> None:
         self._cfg = cfg if cfg is not None else get_config()["ticker_lookup"]
-        self._strategies, self._validate = strategies, validator
+        self._strategies, self._validate, self._clock = strategies, validator, clock
         self._cache = ResolutionCache(self._cfg["cache_ttl_minutes"] * 60, self._cfg["cache_max_entries"], clock)
 
     def resolve(self, name: Any) -> Resolution:
@@ -97,11 +103,10 @@ class TickerResolver:
         unavailable = False
         for strategy in self._strategies:
             try:
-                found = strategy.find(query)
+                decision = self._decide(query, strategy.find(query), strategy)
             except (TransientProviderError, PermanentProviderError):
                 unavailable = True
                 continue
-            decision = self._decide(query, found, strategy)
             if decision is not None:
                 self._cache.put(key, decision)
                 return self._done(decision, len(query))
@@ -118,50 +123,110 @@ class TickerResolver:
         log.info("Ticker lookup: %d chars, status=%s, source=%s%s", length, resolution.status, resolution.source or "-", " (cached)" if cached else "")
         return resolution
 
-    def _checked(self, candidates: list[Candidate]) -> list[Candidate]:
-        """The first max_validated distinct symbols that pass the price check, with their currency."""
-        seen: list[str] = []
-        valid: list[Candidate] = []
-        for candidate in candidates:
-            if candidate.symbol in seen or len(seen) >= self._cfg["max_validated"]:
-                continue
-            seen.append(candidate.symbol)
-            check = self._validate(candidate.symbol)
-            if check.ok:
-                valid.append(replace(candidate, currency=check.currency))
-        return valid
+    def _rank(self, candidate: Candidate) -> int:
+        """Position of the candidate's exchange in preferred_markets; unlisted exchanges rank after all of them."""
+        markets = self._cfg["preferred_markets"]
+        return markets.index(candidate.exchange) if candidate.exchange in markets else len(markets)
 
-    def _one_listing(self, members: list[Candidate]) -> list[Candidate]:
-        """Listings of one company: if all are in one market group (NSE and BSE) keep the most preferred, else keep all."""
-        for group in self._cfg["same_market_groups"]:
-            if all(member.exchange in group for member in members):
-                return [min(members, key=lambda member: group.index(member.exchange))]
-        return members
+    def _filtered(self, query: str, found: list[Candidate]) -> list[Candidate]:
+        """Candidates of an allowed quote type (ETFs only when the name typed says etf, fund or trust), one per symbol."""
+        allowed = set(self._cfg["allowed_quote_types"])
+        words = {word.casefold() for word in query.replace("-", " ").split()}
+        if words & {word.casefold() for word in self._cfg["etf_words"]}:
+            allowed |= set(self._cfg["etf_quote_types"])
+        unique: dict[str, Candidate] = {}
+        for candidate in found:
+            if candidate.quote_type in allowed:
+                unique.setdefault(candidate.symbol, candidate)
+        return list(unique.values())
+
+    def _matching(self, query: str, found: list[Candidate]) -> list[list[Candidate]]:
+        """Companies whose name equals the words typed, else (long enough query) starts with them.
+
+        Each company is its listings, best-ranked first; the companies are ordered by their best listing.
+        """
+        suffixes = self._cfg["legal_suffixes"]
+        typed = tokens(query, suffixes)
+        named = [(tokens(candidate.name, suffixes), candidate) for candidate in found]
+        matched = [(name, c) for name, c in named if name == typed]
+        if not matched and len(" ".join(typed)) >= self._cfg["min_prefix_chars"]:
+            matched = [(name, c) for name, c in named if is_name_start(typed, name)]
+        companies: dict[tuple[str, ...], list[Candidate]] = {}
+        for name, candidate in matched:
+            companies.setdefault(name, []).append(candidate)
+        listings = [sorted(members, key=self._rank) for members in companies.values()]
+        return sorted(listings, key=lambda members: self._rank(members[0]))
+
+    def _check(self, candidates: list[Candidate], first_only: bool) -> list[tuple[Candidate, Validation]]:
+        """Price-check the first max_validated candidates in order; stop at the first pass when `first_only`.
+
+        Raises TransientProviderError when the time budget is used up before the next check.
+        """
+        started, checked = self._clock(), []
+        for candidate in candidates[: self._cfg["max_validated"]]:
+            if self._clock() - started > self._cfg["validation_budget_seconds"]:
+                raise TransientProviderError("The price checks ran out of time.")
+            result = self._validate(candidate.symbol)
+            checked.append((candidate, result))
+            if first_only and result.ok:
+                break
+        return checked
+
+    def _listing_text(self, candidate: Candidate) -> str:
+        """Company name, exchange and, only for a checked listing, currency, as text."""
+        parts = [candidate.name, candidate.exchange_name or candidate.exchange, candidate.currency or ""]
+        return ", ".join(part for part in parts if part)
+
+    def _accepted(self, query: str, chosen: Candidate, others: list[Candidate], source: str, whole_name: bool) -> Resolution:
+        """A resolved answer. The note names the company chosen and other listings; it is empty for a plain exact match."""
+        shown = [self._say("other_listing", symbol=o.symbol, details=o.exchange_name or o.exchange) for o in others[: self._cfg["max_others_shown"]]]
+        note = ""
+        if shown:
+            note = self._say("disclosure_with_others", symbol=chosen.symbol, details=self._listing_text(chosen), others="; ".join(shown))
+        elif not whole_name:
+            note = self._say("disclosure_name_only", symbol=chosen.symbol, details=self._listing_text(chosen), name=query)
+        return Resolution("resolved", query, (chosen.symbol,), (chosen,), source, note=note)
+
+    def _ask(self, query: str, options: list[Candidate], source: str) -> Resolution | None:
+        """The question for the user: the options with a currency where one could be checked; failed options are dropped.
+
+        One option left means there was no real choice (it is accepted); none left means nothing usable.
+        """
+        kept = [replace(c, currency=v.currency) for c, v in self._check(options, first_only=False) if v.ok]
+        kept += options[self._cfg["max_validated"]:]
+        if not kept:
+            return None
+        if len(kept) == 1:
+            return self._accepted(query, kept[0], [], source, whole_name=False)
+        shown = kept[: self._cfg["max_candidates_shown"]]
+        options_text = "; ".join(self._say("option", symbol=c.symbol, details=self._listing_text(c)) for c in shown)
+        return Resolution("ambiguous", query, (), tuple(shown), source, self._say("ambiguous", name=query, options=options_text, example=shown[0].symbol))
 
     def _decide(self, query: str, found: list[Candidate], strategy: TickerStrategy) -> Resolution | None:
-        """resolved / ambiguous from the price-checked candidates of one strategy, or None when nothing usable is left."""
-        suffixes = self._cfg["legal_suffixes"]
-        if not strategy.trusted:
-            found = [c for c in found if c.quote_type in self._cfg["allowed_quote_types"]]
-        valid = self._checked(found)
-        if not valid:
-            return None
+        """resolved or ambiguous, or None when this strategy has nothing usable."""
         if strategy.trusted:
-            return Resolution("resolved", query, (valid[0].symbol,), (valid[0],), strategy.name)
-        companies: dict[tuple[str, ...], list[Candidate]] = {}
-        for candidate in valid:
-            companies.setdefault(tokens(candidate.name, suffixes), []).append(candidate)
-        options = [option for members in companies.values() for option in self._one_listing(members)]
-        if len(options) == 1 and is_name_start(tokens(query, suffixes), next(iter(companies))):
-            return Resolution("resolved", query, (options[0].symbol,), (options[0],), strategy.name)
-        shown = tuple(options[: self._cfg["max_candidates_shown"]])
-        text = self._say("ambiguous", name=query, options="; ".join(self._option(c) for c in shown), example=shown[0].symbol)
-        return Resolution("ambiguous", query, (), shown, strategy.name, text)
-
-    def _option(self, candidate: Candidate) -> str:
-        """One candidate as text: symbol, then name, exchange and currency when known."""
-        details = [candidate.name, candidate.exchange_name or candidate.exchange, candidate.currency or ""]
-        return self._say("option", symbol=candidate.symbol, details=", ".join(part for part in details if part))
+            passed = [(c, v) for c, v in self._check(found[:1], first_only=True) if v.ok]
+            if not passed:
+                return None
+            chosen = replace(passed[0][0], currency=passed[0][1].currency)
+            note = self._cfg["alias_notes"].get(chosen.symbol, "")
+            return Resolution("resolved", query, (chosen.symbol,), (chosen,), strategy.name, note=note.format(currency=chosen.currency or "its trading currency"))
+        companies = self._matching(query, self._filtered(query, found))
+        if not companies:
+            return None
+        if len(companies) > 1:
+            return self._ask(query, [listings[0] for listings in companies], strategy.name)
+        listings = companies[0]
+        best = [c for c in listings if self._rank(c) == self._rank(listings[0])]
+        if len(listings) > 1 and (len(best) > 1 or self._rank(listings[0]) >= len(self._cfg["preferred_markets"])):
+            return self._ask(query, listings, strategy.name)
+        passed = [(c, v) for c, v in self._check(listings, first_only=True) if v.ok]
+        if not passed:
+            return None
+        chosen = replace(passed[0][0], currency=passed[0][1].currency)
+        suffixes = self._cfg["legal_suffixes"]
+        whole_name = tokens(chosen.name, suffixes) == tokens(query, suffixes)
+        return self._accepted(query, chosen, [c for c in listings if c.symbol != chosen.symbol], strategy.name, whole_name)
 
 
 def build_resolver(provider: MarketDataProvider, search: Search = yahoo_search, clock: Callable[[], float] = time.monotonic) -> TickerResolver:

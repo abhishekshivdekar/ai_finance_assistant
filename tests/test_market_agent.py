@@ -10,6 +10,7 @@ from src.agents.market import MarketAgent
 from src.core.models import MarketResult
 from src.core.usage_tracker import UsageTracker, get_usage_registry
 from src.data.market.provider import error_result
+from src.data.tickers.resolver import build_resolver
 from src.utils.config import get_config
 
 T0 = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -60,8 +61,15 @@ def _no_real_llm_or_provider(monkeypatch):
     monkeypatch.setattr(market, "get_market_provider", fail)
 
 
-def run(tickers, histories=None, llm=None, period="6mo"):
-    agent = MarketAgent(llm=llm or FakeLLM(), provider=FakeProvider(histories or {}))
+def offline(provider, quotes=None):
+    """A resolver whose Yahoo search is a table of scripted quotes (no network); the alias table is the real one."""
+    table = quotes or {}
+    return build_resolver(provider, search=lambda query, limit, timeout: table.get(query.casefold(), []))
+
+
+def run(tickers, histories=None, llm=None, period="6mo", quotes=None):
+    provider = FakeProvider(histories or {})
+    agent = MarketAgent(llm=llm or FakeLLM(), provider=provider, resolver=offline(provider, quotes))
     params = {"tickers": tickers, "period": period}
     return agent, agent.run({"turn_id": "t1", "market_params": params})
 
@@ -157,18 +165,20 @@ def test_provider_exception_for_every_ticker_gives_no_answer():
         def get_history(self, ticker, period):
             raise RuntimeError("provider exploded")
 
-    agent = MarketAgent(llm=FakeLLM(), provider=Boom())
+    agent = MarketAgent(llm=FakeLLM(), provider=Boom(), resolver=offline(Boom()))
     result = agent.run({"turn_id": "t1", "market_params": {"tickers": ["AAA"]}})
     assert result["status"] == "no_answer" and agent.llm.calls == []
 
 
 def test_no_valid_ticker_needs_input_and_makes_no_calls():
-    agent, result = run(["???"], TWO)
+    agent, result = run([7], TWO)
     assert result["status"] == "needs_input" and result["answer"] == CFG["needs_input_message"].strip()
     assert agent.provider.calls == [] and agent.llm.calls == []
-    assert result["data"]["warnings"] == ["'???' was skipped: it is not a valid ticker."]
-    empty = MarketAgent(llm=FakeLLM(), provider=FakeProvider({})).run({"turn_id": "t1"})
-    assert empty["status"] == "needs_input"
+    assert result["data"]["warnings"] == ["'7' was skipped: it is not a valid ticker."]
+    empty = MarketAgent(llm=FakeLLM(), provider=FakeProvider({}), resolver=offline(FakeProvider({}))).run({"turn_id": "t1"})
+    assert empty["status"] == "needs_input" and empty["answer"] == CFG["needs_input_message"].strip()
+    unreadable = run(["???"], TWO)[1]                                   # not a symbol and not a readable name
+    assert unreadable["status"] == "needs_input" and unreadable["answer"] == get_config()["ticker_lookup"]["messages"]["invalid"]
 
 
 # ---- freshness ----
@@ -235,7 +245,7 @@ def test_default_llm_and_provider_come_from_the_factories(monkeypatch):
     monkeypatch.setattr(base_agent, "get_llm", lambda role=None, **kw: seen.setdefault("role", role) and FakeLLM())
     monkeypatch.setattr(market, "get_market_provider", lambda: provider)
     agent = MarketAgent()
-    assert seen["role"] == "market_summary" and agent.provider is provider
+    assert seen["role"] == "market_summary" and agent.provider is provider and agent.resolver is not None
     assert "market_summary" in get_config()["llm"]["roles"]
 
 
@@ -306,3 +316,103 @@ def test_summary_prompt_asks_for_short_per_ticker_paragraphs_and_a_limited_set_o
     assert "ONLY numbers that appear in the JSON" in prompt                  # the number-guard requirement stays
     assert "never tell the" in prompt and "Never predict" in prompt          # no advice or prediction wording
     assert prompt.count("{metrics_json}") == 1
+
+
+# ---- company names (commit 10b): the resolver is injected, Yahoo's search is a table ----
+
+def q(symbol, name, exchange, display, kind="EQUITY"):
+    return {"symbol": symbol, "longname": name, "exchange": exchange, "exchDisp": display, "quoteType": kind}
+
+
+QUOTES = {
+    "suzlon": [q("SUZLON.BO", "Suzlon Energy Limited", "BSE", "Bombay"), q("SUZLON.NS", "Suzlon Energy Limited", "NSI", "NSE")],
+    "infosys": [q("INFY", "Infosys Limited", "NYQ", "NYSE"), q("INFY.NS", "Infosys Limited", "NSI", "NSE")],
+    "globe corp": [q("GLB", "Globe Corp.", "NMS", "NASDAQ"), q("GLBA", "Globe Corp.", "NMS", "NASDAQ")],
+    "pinecone": [q("PINE", "Pinecone Systems Inc", "NYQ", "NYSE")],
+    "globe": [q("GLB", "Globe Corp.", "NMS", "NASDAQ"), q("GLBA", "Globe Corp.", "NMS", "NASDAQ")],
+}
+INDIA = {"SUZLON.NS": history(RISING, "INR"), "INFY.NS": history(RISING, "INR"), "INFY": history(FALLING, "USD"), "AAPL": history(RISING, "USD"),
+         "GLB": history(RISING, "USD"), "GLBA": history(RISING, "USD"), "PINE": history(RISING, "USD")}
+
+
+def tickers_of(result):
+    return [t["ticker"] for t in result["data"]["metrics"]["tickers"]]
+
+
+def test_a_company_name_becomes_a_checked_symbol_and_the_answer_says_which_company_it_chose():
+    agent, result = run(["Suzlon"], INDIA, quotes=QUOTES)
+    assert result["status"] == "ok" and tickers_of(result) == ["SUZLON.NS"]
+    note = "Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR). The same company is also listed as SUZLON.BO (Bombay); ask for that symbol if you meant it."
+    assert result["data"]["lookup_notes"] == [note] and result["answer"] == f"{SUMMARY}\n\n{note}"
+    assert "Showing" not in agent.llm.calls[0]                                           # the note is not part of the model's input
+    assert "SUZLON.BO" not in [call[0] for call in agent.provider.calls]
+
+
+def test_an_alias_note_and_a_plain_exact_match_note_only_when_there_is_something_to_say():
+    _, tsmc = run(["tsmc"], {"TSM": history(RISING, "USD")})
+    assert "NYSE-listed ADR" in tsmc["answer"] and "priced in USD" in tsmc["answer"]
+    _, plain = run(["Pinecone Systems"], INDIA, quotes={"pinecone systems": QUOTES["pinecone"]})
+    assert plain["data"].get("lookup_notes") is None and plain["answer"] == SUMMARY
+
+
+def test_an_ambiguous_name_asks_for_the_symbol_and_fetches_nothing():
+    agent, result = run(["Globe Corp"], INDIA, quotes=QUOTES)
+    assert result["status"] == "needs_input" and agent.llm.calls == []
+    assert "GLB (Globe Corp., NASDAQ, USD); GLBA (Globe Corp., NASDAQ, USD)" in result["answer"] and "Please type the ticker symbol" in result["answer"]
+    assert all(period == get_config()["ticker_lookup"]["validation_period"] for _, period in agent.provider.calls)      # only price checks
+
+
+def test_a_name_that_is_not_found_is_a_needs_input_with_the_ticker_hint():
+    _, result = run(["Qzxv Wplk"], INDIA, quotes=QUOTES)
+    assert result["status"] == "needs_input" and 'couldn\'t find a listed company called "Qzxv Wplk"' in result["answer"] and "AAPL" in result["answer"]
+
+
+def down(query, limit, timeout):
+    raise ConnectionError("offline")
+
+
+def test_a_lookup_that_is_down_asks_for_the_symbol_instead_of_guessing():
+    provider = FakeProvider(INDIA)
+    agent = MarketAgent(llm=FakeLLM(), provider=provider, resolver=build_resolver(provider, search=down))
+    result = agent.run({"turn_id": "t", "market_params": {"tickers": ["Suzlon"]}})
+    assert result["status"] == "needs_input" and "can't look up company names" in result["answer"] and agent.llm.calls == []
+
+
+def test_a_name_that_needs_the_user_is_a_warning_when_another_ticker_can_be_analysed():
+    _, result = run(["AAPL", "Qzxv Wplk", "Globe Corp"], INDIA, quotes=QUOTES)
+    assert result["status"] == "ok" and tickers_of(result) == ["AAPL"]
+    warnings = result["data"]["warnings"]
+    assert any("couldn't find a listed company" in w for w in warnings) and any("more than one match" in w for w in warnings)
+    assert "lookup_notes" not in result["data"]
+
+
+def test_a_symbol_looking_word_without_prices_is_looked_up_once_as_a_name():
+    _, result = run(["apple", "AAPL"], INDIA, quotes=QUOTES)                         # APPLE has no prices; "apple" is an alias for AAPL, already in the list
+    assert tickers_of(result) == ["AAPL"] and "APPLE was left out: no price history is available right now." in result["data"]["warnings"]
+    _, result = run(["apple"], INDIA, quotes=QUOTES)                                 # the alias replaces the symbol that had no prices
+    assert tickers_of(result) == ["AAPL"] and result["data"].get("lookup_notes") is None
+    _, result = run(["TSMC"], {"TSM": history(RISING, "USD")})                       # 4 letters, a valid symbol shape: its note is kept
+    assert tickers_of(result) == ["TSM"] and "NYSE-listed ADR" in result["data"]["lookup_notes"][0]
+    _, result = run(["infosys"], INDIA, quotes=QUOTES)                               # a name from the start (7 letters)
+    assert tickers_of(result) == ["INFY.NS"]
+    _, result = run(["INFY"], INDIA, quotes=QUOTES)                                  # a real symbol with prices is used as typed
+    assert tickers_of(result) == ["INFY"] and result["data"].get("lookup_notes") is None
+
+
+def test_a_symbol_looking_word_with_no_prices_that_is_ambiguous_or_unavailable_adds_the_message():
+    _, result = run(["GLOBE", "AAPL"], INDIA, quotes=QUOTES)
+    assert any("more than one match" in w for w in result["data"]["warnings"]) and tickers_of(result) == ["AAPL"]
+    provider = FakeProvider({"AAPL": history(RISING)})
+    agent = MarketAgent(llm=FakeLLM(), provider=provider, resolver=build_resolver(provider, search=down))
+    result = agent.run({"turn_id": "t", "market_params": {"tickers": ["AAPL", "ZZZZ"]}})
+    assert result["status"] == "ok" and any("can't look up company names" in w for w in result["data"]["warnings"])
+
+
+def test_market_params_may_be_a_single_text_and_entries_beyond_the_limit_are_warned_about():
+    provider = FakeProvider(INDIA)
+    agent = MarketAgent(llm=FakeLLM(), provider=provider, resolver=offline(provider, QUOTES))
+    result = agent.run({"turn_id": "t", "market_params": {"tickers": "Suzlon, Infosys"}})
+    assert tickers_of(result) == ["SUZLON.NS", "INFY.NS"] and len(result["data"]["lookup_notes"]) == 1   # Infosys is an alias: no note
+    many = agent.run({"turn_id": "t", "market_params": {"tickers": ["AAPL", "INFY", "SUZLON.NS", "GLB", "GLBA", "PINE", "Suzlon"]}})
+    assert any("Only the first" in w and "was left out" in w for w in many["data"]["warnings"])
+    assert agent.run({"turn_id": "t", "market_params": "not a dict"})["status"] == "needs_input"

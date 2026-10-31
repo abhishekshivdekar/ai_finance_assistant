@@ -67,25 +67,27 @@ def _validate_news(news: dict[str, Any]) -> None:
         raise ConfigError("news.query_templates needs us, nse and index.")
 
 
-TICKER_LOOKUP_MESSAGES = ("ambiguous", "option", "not_found", "unavailable", "invalid")
+TICKER_LOOKUP_MESSAGES = (
+    "ambiguous", "option", "not_found", "unavailable", "invalid", "disclosure_with_others", "disclosure_name_only", "other_listing",
+)
 
 
 def _validate_ticker_lookup(lookup: dict[str, Any], periods: list[str]) -> None:
-    """ticker_lookup: positive limits, a known validation period, string lists, market groups and every message."""
-    for key in ("timeout_seconds", "max_query_chars", "max_results", "max_validated", "max_candidates_shown",
-                "cache_ttl_minutes", "cache_max_entries"):
+    """ticker_lookup: positive limits, a known validation period, string lists, alias notes and every message."""
+    for key in ("timeout_seconds", "validation_budget_seconds", "max_query_chars", "min_prefix_chars", "max_results", "max_validated",
+                "max_candidates_shown", "max_others_shown", "cache_ttl_minutes", "cache_max_entries"):
         value = lookup[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0:
             raise ConfigError(f"ticker_lookup.{key} must be a number greater than zero.")
     if lookup["validation_period"] not in periods:
         raise ConfigError("ticker_lookup.validation_period must be one of market_data.history_periods.")
-    for key in ("allowed_quote_types", "legal_suffixes"):
+    for key in ("allowed_quote_types", "etf_quote_types", "etf_words", "legal_suffixes", "preferred_markets"):
         values = lookup[key]
-        if not isinstance(values, list) or (key == "allowed_quote_types" and not values) or not all(isinstance(v, str) and v.strip() for v in values):
-            raise ConfigError(f"ticker_lookup.{key} must be a list of non-empty text (allowed_quote_types not empty).")
-    for group in lookup["same_market_groups"]:
-        if not isinstance(group, list) or len(group) < 2 or not all(isinstance(v, str) and v.strip() for v in group):
-            raise ConfigError("ticker_lookup.same_market_groups needs lists of at least two exchange codes.")
+        if not isinstance(values, list) or not values or not all(isinstance(v, str) and v.strip() for v in values):
+            raise ConfigError(f"ticker_lookup.{key} must be a non-empty list of non-empty text.")
+    for symbol, note in lookup["alias_notes"].items():
+        if not str(symbol).strip() or not isinstance(note, str) or not note.strip():
+            raise ConfigError(f"ticker_lookup.alias_notes.{symbol} needs a non-empty note.")
     for key in TICKER_LOOKUP_MESSAGES:
         if not str(lookup["messages"].get(key) or "").strip():
             raise ConfigError(f"ticker_lookup.messages.{key} must not be empty.")

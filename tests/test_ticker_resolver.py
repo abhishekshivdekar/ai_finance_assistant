@@ -15,7 +15,7 @@ from src.data.tickers import strategies as s
 from src.data.tickers.fake import FakeLookup
 from src.data.tickers.models import Candidate, Resolution, Validation
 from src.data.tickers.names import InvalidQueryError, clean_query, is_name_start, tokens
-from src.utils.config import ConfigError, get_config
+from src.utils.config import TICKER_LOOKUP_MESSAGES, ConfigError, get_config
 
 CFG = get_config()["ticker_lookup"]
 SUFFIXES = CFG["legal_suffixes"]
@@ -27,12 +27,6 @@ def cand(symbol, name="", exchange="", quote_type="EQUITY", exchange_name=""):
 
 def quote(symbol, name, exchange, exch_disp="", kind="EQUITY"):
     return {"symbol": symbol, "longname": name, "exchange": exchange, "exchDisp": exch_disp, "quoteType": kind}
-
-
-SUZLON_NSE = cand("SUZLON.NS", "Suzlon Energy Limited", "NSI", exchange_name="NSE")
-SUZLON_BSE = cand("SUZLON.BO", "Suzlon Energy Limited", "BSE", exchange_name="BSE")
-TSM = cand("TSM", "Taiwan Semiconductor Manufacturing Company Limited", "NYQ", exchange_name="NYSE")
-TSMC = cand("2330.TW", "Taiwan Semiconductor Manufacturing Company Limited", "TAI", exchange_name="Taiwan")
 
 
 def validator(ok=None, currencies=None):
@@ -230,14 +224,43 @@ def test_the_cache_keeps_entries_for_the_time_limit_and_drops_the_oldest_when_fu
 
 # ------------------------------------------------------------------ resolver
 
+def sample(symbol, name, exchange, exchange_name="", quote_type="EQUITY"):
+    return Candidate(symbol, name, exchange, exchange_name, quote_type)
+
+
+SUZLON_NSE = sample("SUZLON.NS", "Suzlon Energy Limited", "NSI", "NSE")
+SUZLON_BSE = sample("SUZLON.BO", "Suzlon Energy Limited", "BSE", "Bombay")
+INFY_NYSE = sample("INFY", "Infosys Limited", "NYQ", "NYSE")
+INFY_NSE = sample("INFY.NS", "Infosys Limited", "NSI", "NSE")
+INFY_BSE = sample("INFY.BO", "Infosys Limited", "BSE", "Bombay")
+HCL = sample("HCL-INSYS.BO", "HCL Infosystems Limited", "BSE", "Bombay")
+GOOG = sample("GOOG", "Alphabet Inc.", "NMS", "NASDAQ")
+GOOGL = sample("GOOGL", "Alphabet Inc.", "NMS", "NASDAQ")
+TSM = sample("TSM", "Taiwan Semiconductor Manufacturing Company Limited", "NYQ", "NYSE")
+TSMC = sample("2330.TW", "Taiwan Semiconductor Manufacturing Company Limited", "TAI", "Taiwan")
+
+
 def test_an_alias_is_price_checked_and_resolved_without_a_search():
     res, lookup, check = make({})
     result = res.resolve("Tata Consultancy Services")
-    assert (result.status, result.symbols, result.source) == ("resolved", ("TCS.NS",), "alias") and check.asked == ["TCS.NS"] and lookup.calls == []
+    assert (result.status, result.symbols, result.source, result.note) == ("resolved", ("TCS.NS",), "alias", "") and check.asked == ["TCS.NS"] and lookup.calls == []
+
+
+@pytest.mark.parametrize("name", ["tsmc", "Taiwan Semiconductor", "taiwan semiconductors", "TSMC Ltd"])
+def test_the_taiwan_semiconductor_names_are_aliases_for_the_nyse_adr_and_say_so_with_the_checked_currency(name):
+    res, lookup, _ = make({}, currencies={"TSM": "USD"})
+    result = res.resolve(name)
+    assert result.symbols == ("TSM",) and result.source == "alias" and lookup.calls == []
+    assert "NYSE-listed ADR" in result.note and "priced in USD" in result.note
+
+
+def test_an_alias_note_without_a_reported_currency_does_not_invent_one():
+    res, *_ = make({})
+    assert "priced in its trading currency" in res.resolve("tsmc").note
 
 
 def test_an_alias_that_fails_the_price_check_is_not_accepted_and_the_search_is_tried():
-    res, lookup, check = make({"infosys": [cand("INFY", "Infosys Limited", "NYQ")]}, ok={"INFY"}, currencies={"INFY": "USD"})
+    res, lookup, check = make({"infosys": [INFY_NYSE]}, ok={"INFY"}, currencies={"INFY": "USD"})
     result = res.resolve("Infosys")
     assert result.status == "resolved" and result.symbols == ("INFY",) and result.source == "fake lookup" and lookup.calls == ["Infosys"]
     assert check.asked == ["INFY.NS", "INFY"]
@@ -245,54 +268,110 @@ def test_an_alias_that_fails_the_price_check_is_not_accepted_and_the_search_is_t
     assert res.resolve("Infosys").status == "not_found"
 
 
-def test_one_company_on_nse_and_bse_resolves_to_the_preferred_exchange():
-    res, _, check = make({"suzlon": [SUZLON_BSE, SUZLON_NSE]}, currencies={"SUZLON.NS": "INR"})
+def test_the_best_ranked_listing_wins_is_the_only_one_checked_and_the_note_names_the_others_without_a_currency():
+    res, _, check = make({"infosys": [INFY_NYSE, HCL, INFY_BSE, INFY_NSE]}, currencies={"INFY.NS": "INR"}, alias=False)
+    result = res.resolve("Infosys")
+    assert result.status == "resolved" and result.symbols == ("INFY.NS",) and result.candidates[0].currency == "INR"
+    assert check.asked == ["INFY.NS"]                                              # lazy: nothing else is checked
+    assert result.note == "Showing INFY.NS (Infosys Limited, NSE, INR). The same company is also listed as INFY.BO (Bombay); INFY (NYSE); ask for that symbol if you meant it."
+    assert "USD" not in result.note and "HCL" not in result.note
+
+
+def test_a_plain_exact_match_with_one_listing_has_no_note():
+    res, *_ = make({"infosys": [INFY_NSE]}, alias=False)
+    assert res.resolve("Infosys Ltd").note == ""
+
+
+def test_the_next_listing_is_used_when_the_best_one_has_no_prices_and_at_most_max_validated_are_tried():
+    res, _, check = make({"suzlon": [SUZLON_NSE, SUZLON_BSE]}, ok={"SUZLON.BO"}, alias=False)
+    assert res.resolve("Suzlon").symbols == ("SUZLON.BO",) and check.asked == ["SUZLON.NS", "SUZLON.BO"]
+    four = [sample(f"X{i}", "X Corp", "NYQ") for i in range(1)] + [sample("X.NS", "X Corp", "NSI"), sample("X.BO", "X Corp", "BSE"), sample("XN", "X Corp", "NMS")]
+    res, _, check = make({"x": four}, ok=set(), alias=False)
+    assert res.resolve("x").status == "not_found" and check.asked == ["X.NS", "X.BO", "X0"]
+
+
+def test_a_name_that_is_the_start_of_a_company_name_resolves_and_the_note_shows_the_full_name():
+    res, *_ = make({"suzlon": [SUZLON_BSE, SUZLON_NSE]}, currencies={"SUZLON.NS": "INR"}, alias=False)
     result = res.resolve("SUZLON")
-    assert result.status == "resolved" and result.symbols == ("SUZLON.NS",) and result.candidates[0].currency == "INR"
-    assert check.asked == ["SUZLON.BO", "SUZLON.NS"]
+    assert result.symbols == ("SUZLON.NS",)
+    assert result.note.startswith("Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR). The same company is also listed as SUZLON.BO (Bombay)")
+    res, *_ = make({"tata consultancy": [sample("TCS.NS", "Tata Consultancy Services Limited", "NSI", "NSE")]}, alias=False, currencies={"TCS.NS": "INR"})
+    assert res.resolve("tata consultancy").note == 'Showing TCS.NS (Tata Consultancy Services Limited, NSE, INR) for "tata consultancy".'
 
 
-def test_only_the_listing_that_passes_the_price_check_counts():
-    res, *_ = make({"suzlon": [SUZLON_NSE, SUZLON_BSE]}, ok={"SUZLON.BO"})
-    assert res.resolve("Suzlon").symbols == ("SUZLON.BO",)
+def test_an_exact_company_name_beats_longer_names_that_merely_start_with_it():
+    res, *_ = make({"apple": [sample("APLE", "Apple Hospitality REIT, Inc.", "NYQ"), sample("AAPL", "Apple Inc.", "NMS")]}, alias=False)
+    result = res.resolve("apple")
+    assert result.symbols == ("AAPL",) and result.note == ""
 
 
-def test_the_same_company_in_two_markets_is_ambiguous_and_the_message_lists_symbol_exchange_and_currency():
-    res, *_ = make({"taiwan semiconductor manufacturing": [TSM, TSMC]}, currencies={"TSM": "USD", "2330.TW": "TWD"})
-    result = res.resolve("Taiwan Semiconductor Manufacturing")
-    assert result.status == "ambiguous" and result.symbols == () and [c.symbol for c in result.candidates] == ["TSM", "2330.TW"]
-    assert "TSM (Taiwan Semiconductor Manufacturing Company Limited, NYSE, USD)" in result.message
-    assert "2330.TW (Taiwan Semiconductor Manufacturing Company Limited, Taiwan, TWD)" in result.message
-    assert "type the ticker symbol" in result.message and "for example TSM" in result.message
+def test_a_short_name_must_match_exactly_and_no_spelling_matches_are_offered():
+    res, *_ = make({"abb": [sample("ABB.NS", "ABB India Limited", "NSI")]}, alias=False)
+    assert res.resolve("abb").status == "not_found"
+    res, *_ = make({"suzlon": [SUZLON_NSE]}, cfg={**CFG, "min_prefix_chars": 10}, alias=False)
+    assert res.resolve("suzlon").status == "not_found"
+    res, *_ = make({"taiwan semiconductors": [TSM], "pine": [sample("PINE", "Pineapple Co", "NYQ")]}, alias=False)
+    assert res.resolve("taiwan semiconductors").status == "not_found" and res.resolve("pine").status == "not_found"
 
 
-def test_a_single_match_whose_name_does_not_start_with_the_words_typed_is_asked_not_guessed():
-    res, *_ = make({"taiwan semiconductors": [cand("2330.TW", "Taiwan Semiconductor Manufacturing Company Limited", "TAI")]})
-    result = res.resolve("taiwan semiconductors")
-    assert result.status == "ambiguous" and [c.symbol for c in result.candidates] == ["2330.TW"]
+def test_several_companies_that_start_with_the_name_are_listed_with_their_best_listing_and_checked_currency():
+    table = {"tata": [sample("TATASTEEL.BO", "Tata Steel Limited", "BSE", "Bombay"), sample("TATAMOTORS.NS", "Tata Motors Limited", "NSI", "NSE"),
+                      sample("TATASTEEL.NS", "Tata Steel Limited", "NSI", "NSE"), sample("TTM", "Tata Motors Limited", "NYQ", "NYSE")]}
+    res, _, check = make(table, currencies={"TATAMOTORS.NS": "INR", "TATASTEEL.NS": "INR"}, alias=False)
+    result = res.resolve("tata")
+    assert result.status == "ambiguous" and result.symbols == () and [c.symbol for c in result.candidates] == ["TATASTEEL.NS", "TATAMOTORS.NS"]     # equal rank: the search's own order
+    assert "TATASTEEL.NS (Tata Steel Limited, NSE, INR); TATAMOTORS.NS (Tata Motors Limited, NSE, INR)" in result.message
+    assert "Please type the ticker symbol you mean, for example TATASTEEL.NS." in result.message and check.asked == ["TATASTEEL.NS", "TATAMOTORS.NS"]
 
 
-def test_two_different_companies_are_ambiguous_even_if_one_matches_exactly():
-    res, *_ = make({"apple hospitality": [cand("APLE", "Apple Hospitality REIT, Inc.", "NYQ"), cand("AAPL", "Apple Inc.", "NMS")]})
-    assert res.resolve("apple hospitality").status == "ambiguous"
+def test_two_listings_on_the_same_best_exchange_are_ambiguous_with_exchange_and_currency():
+    res, *_ = make({"alphabet": [GOOG, GOOGL]}, currencies={"GOOG": "USD", "GOOGL": "USD"}, alias=False)
+    result = res.resolve("Alphabet")
+    assert result.status == "ambiguous" and [c.symbol for c in result.candidates] == ["GOOG", "GOOGL"]
+    assert "GOOG (Alphabet Inc., NASDAQ, USD); GOOGL (Alphabet Inc., NASDAQ, USD)" in result.message
 
 
-def test_nse_and_bse_of_a_company_plus_a_foreign_listing_stay_ambiguous_with_every_listing_shown():
-    res, *_ = make({"x": [cand("X.NS", "X Ltd", "NSI"), cand("X.BO", "X Ltd", "BSE"), cand("XADR", "X Ltd", "NYQ")]})
-    result = res.resolve("x")
-    assert result.status == "ambiguous" and [c.symbol for c in result.candidates] == ["X.NS", "X.BO", "XADR"]
+def test_an_option_that_fails_its_price_check_is_dropped_and_one_left_means_no_choice():
+    res, *_ = make({"alphabet": [GOOG, GOOGL]}, ok={"GOOG"}, alias=False)
+    result = res.resolve("Alphabet")
+    assert result.status == "resolved" and result.symbols == ("GOOG",)
+    res, *_ = make({"alphabet": [GOOG, GOOGL]}, ok=set(), alias=False)
+    assert res.resolve("Alphabet").status == "not_found"
 
 
-def test_only_equities_etfs_and_indexes_are_considered():
-    res, *_ = make({"gold": [cand("GLD", "Gold Fund", "MF", quote_type="MUTUALFUND"), cand("FUTX", "Gold Futures", "CMX", quote_type="FUTURE"), cand("NOTYPE", "no type", "", quote_type="")]})
+def test_options_beyond_max_validated_are_listed_unchecked_without_a_currency():
+    many = [sample(f"A{i}", "Alpha Co", "NYQ", "NYSE") for i in range(5)]
+    res, _, check = make({"alpha": many}, currencies={f"A{i}": "USD" for i in range(5)}, alias=False)
+    result = res.resolve("alpha")
+    assert check.asked == ["A0", "A1", "A2"] and len(result.candidates) == 5
+    assert [c.currency for c in result.candidates] == ["USD", "USD", "USD", None, None]
+    assert "A3 (Alpha Co, NYSE); A4 (Alpha Co, NYSE)" in result.message
+
+
+def test_several_listings_with_none_on_a_preferred_market_are_ambiguous_but_a_single_listing_is_accepted():
+    res, *_ = make({"z": [sample("Z.TW", "Z Corp", "TAI", "Taiwan"), sample("Z.L", "Z Corp", "LSE", "London")]}, alias=False)
+    assert res.resolve("z").status == "ambiguous"
+    res, *_ = make({"z": [sample("Z.L", "Z Corp", "LSE", "London")]}, alias=False)
+    assert res.resolve("z").symbols == ("Z.L",)
+
+
+def test_only_equities_and_indexes_are_considered_and_etfs_only_when_the_name_says_etf_fund_or_trust():
+    table = {"gold": [sample("GLD", "Gold", "MF", quote_type="MUTUALFUND"), sample("FUTX", "Gold", "CMX", quote_type="FUTURE"), sample("NOTYPE", "Gold", "X", quote_type="")],
+             "gold etf": [sample("GLDE", "Gold ETF", "NYQ", quote_type="ETF"), sample("GLDM", "Gold ETF", "NYQ", quote_type="MUTUALFUND")],
+             "nifty 50": [sample("^NSEI", "NIFTY 50", "NSI", quote_type="INDEX"), sample("NFTY", "NIFTY 50", "NYQ", quote_type="ETF")],
+             "global x-trust": [sample("GXT", "Global X-Trust", "NYQ", quote_type="ETF")]}
+    res, *_ = make(table, alias=False)
     assert res.resolve("gold").status == "not_found"
+    assert res.resolve("Gold ETF").symbols == ("GLDE",)
+    assert res.resolve("Nifty 50").symbols == ("^NSEI",)
+    assert res.resolve("Global X-Trust").symbols == ("GXT",)
 
 
 def test_a_name_with_no_candidates_or_no_valid_prices_is_not_found_with_the_name_in_the_message():
     res, *_ = make({})
     result = res.resolve("Qzxv Wplk")
     assert result.status == "not_found" and "couldn't find a listed company called \"Qzxv Wplk\"" in result.message and "AAPL" in result.message
-    res, *_ = make({"suzlon": [SUZLON_NSE]}, ok=set())
+    res, *_ = make({"suzlon": [SUZLON_NSE]}, ok=set(), alias=False)
     assert res.resolve("suzlon").status == "not_found"
 
 
@@ -304,9 +383,27 @@ def test_a_lookup_that_is_down_or_slow_is_unavailable_never_a_guess():
 
 
 def test_unavailable_wins_over_not_found_but_a_later_strategy_can_still_resolve():
-    down, up = FakeLookup({"x": TransientProviderError("t")}), FakeLookup({"x": [cand("X.NS", "X Ltd", "NSI")]})
+    down, up = FakeLookup({"x": TransientProviderError("t")}), FakeLookup({"x": [sample("X.NS", "X Ltd", "NSI")]})
     assert r.TickerResolver([down, FakeLookup()], validator()).resolve("x").status == "unavailable"
     assert r.TickerResolver([down, up], validator()).resolve("x").symbols == ("X.NS",)
+
+
+def test_price_checks_that_run_out_of_time_make_the_answer_unavailable_not_a_guess():
+    now = [0.0]
+
+    def slow(symbol):
+        now[0] += 6
+        return Validation(False)
+
+    cfg = {**CFG, "validation_budget_seconds": 10}
+    infosys = r.TickerResolver([FakeLookup({"infosys": [INFY_NSE, INFY_BSE, INFY_NYSE]})], slow, cfg, clock=lambda: now[0])
+    assert infosys.resolve("Infosys").status == "unavailable"
+    now[0] = 0.0
+    tie = r.TickerResolver([FakeLookup({"alphabet": [GOOG, GOOGL, sample("GOOGX", "Alphabet Inc.", "NMS")]})], slow, cfg, clock=lambda: now[0])
+    assert tie.resolve("Alphabet").status == "unavailable"
+    now[0] = 0.0
+    alias = r.TickerResolver([s.AliasStrategy({"x": "X"}, SUFFIXES)], slow, {**cfg, "validation_budget_seconds": -1}, clock=lambda: now[0])
+    assert alias.resolve("x").status == "unavailable"
 
 
 @pytest.mark.parametrize("name", [None, 12, "", "<>", "x" * 200])
@@ -323,11 +420,11 @@ def test_the_query_sent_to_the_lookup_is_the_cleaned_one():
 
 
 def test_successful_lookups_are_cached_by_name_and_failures_are_not():
-    res, lookup, check = make({"suzlon": [SUZLON_NSE]})
+    res, lookup, check = make({"suzlon": [SUZLON_NSE]}, alias=False)
     first = res.resolve("Suzlon")
     assert res.resolve("  SUZLON ") is first and lookup.calls == ["Suzlon"] and check.asked == ["SUZLON.NS"]
-    ambiguous_res, lookup2, _ = make({"t": [TSM, TSMC]})
-    assert ambiguous_res.resolve("t") is ambiguous_res.resolve("T") and lookup2.calls == ["t"]
+    asking, lookup2, _ = make({"alphabet": [GOOG, GOOGL]}, alias=False)
+    assert asking.resolve("alphabet") is asking.resolve("ALPHABET") and lookup2.calls == ["alphabet"]
     lookup3 = FakeLookup({"x": TransientProviderError("t")})
     res3 = r.TickerResolver([lookup3], validator())
     res3.resolve("x"), res3.resolve("x")
@@ -336,20 +433,8 @@ def test_successful_lookups_are_cached_by_name_and_failures_are_not():
     assert res3.resolve("y").status == "not_found" and res3.resolve("y").status == "not_found" and lookup3.calls.count("y") == 2
 
 
-def test_at_most_max_validated_distinct_symbols_get_a_price_check_and_at_most_max_candidates_are_shown():
-    cfg = {**CFG, "max_validated": 2, "max_candidates_shown": 1}
-    res, _, check = make({"n": [cand("A", "N Co", "NYQ"), cand("A", "N Co", "NYQ"), cand("B", "N Co", "TAI"), cand("C", "N Co", "LSE")]}, cfg=cfg)
-    result = res.resolve("n")
-    assert check.asked == ["A", "B"] and result.status == "ambiguous" and [c.symbol for c in result.candidates] == ["A"]
-
-
-def test_an_option_without_a_name_or_currency_shows_only_what_is_known():
-    res, *_ = make({"q": [cand("A", "", "NYQ"), cand("B", "", "", exchange_name="")]})
-    assert "A (NYQ); B ()" in res.resolve("q").message
-
-
 def test_the_log_has_the_length_and_status_but_not_the_name(caplog):
-    res, *_ = make({"suzlon": [SUZLON_NSE]})
+    res, *_ = make({"suzlon": [SUZLON_NSE]}, alias=False)
     with caplog.at_level(logging.INFO):
         res.resolve("Suzlon")
         res.resolve("Suzlon")
@@ -359,14 +444,17 @@ def test_the_log_has_the_length_and_status_but_not_the_name(caplog):
     assert "Suzlon" not in text and "SUZLON.NS" not in text
 
 
-# ------------------------------------------------------------------ the factory and the three failing queries
+# ------------------------------------------------------------------ the factory and the queries that failed in the UI
+
+def quote_of(candidate):
+    return quote(candidate.symbol, candidate.name, candidate.exchange, candidate.exchange_name)
+
 
 SEARCH_TABLE = {
-    "taiwan semiconductors": [quote("TSM", "Taiwan Semiconductor Manufacturing Company Limited", "NYQ", "NYSE"),
-                              quote("2330.TW", "Taiwan Semiconductor Manufacturing Company Limited", "TAI", "Taiwan")],
-    "taiwan semiconductor manufacturing co ltd tpe 2330": [quote("2330.TW", "Taiwan Semiconductor Manufacturing Company Limited", "TAI", "Taiwan"),
-                                                           quote("TSM", "Taiwan Semiconductor Manufacturing Company Limited", "NYQ", "NYSE")],
-    "suzlon": [quote("SUZLON.BO", "Suzlon Energy Limited", "BSE", "BSE"), quote("SUZLON.NS", "Suzlon Energy Limited", "NSI", "NSE")],
+    "taiwan semiconductor manufacturing": [quote_of(TSMC), quote_of(TSM)],
+    "taiwan semiconductor manufacturing co ltd tpe 2330": [quote_of(TSMC), quote_of(TSM)],
+    "suzlon": [quote_of(SUZLON_BSE), quote_of(SUZLON_NSE)],
+    "infosys": [quote_of(INFY_NYSE), quote_of(INFY_NSE), quote_of(INFY_BSE), quote_of(HCL)],
 }
 
 
@@ -374,16 +462,18 @@ def fake_search(query, max_results, timeout):
     return SEARCH_TABLE.get(query.casefold(), [])
 
 
-def test_the_three_queries_that_failed_in_the_ui_with_a_fake_search():
+def test_the_queries_that_failed_in_the_ui_with_a_fake_search():
     provider = FakeProvider(history())
     resolver = r.build_resolver(provider, search=fake_search)
     suzlon = resolver.resolve("SUZLON")
     assert suzlon.status == "resolved" and suzlon.symbols == ("SUZLON.NS",)
-    for name in ("taiwan semiconductors", "Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330"):
-        result = resolver.resolve(name)
-        assert result.status == "ambiguous" and {c.symbol for c in result.candidates} == {"TSM", "2330.TW"}
-        assert "INR" in result.message                       # the fake provider reports INR for every symbol
+    for name in ("taiwan semiconductors", "TSMC"):
+        assert resolver.resolve(name).symbols == ("TSM",)                       # the alias, with its note
+    full = resolver.resolve("Taiwan Semiconductor Manufacturing")
+    assert full.symbols == ("TSM",) and "also listed as 2330.TW (Taiwan)" in full.note
     assert resolver.resolve("Infosys").symbols == ("INFY.NS",) and resolver.resolve("nonsense qzx").status == "not_found"
+    # Known limit: the full legal name with the exchange code appended is not the company name, so it is not found
+    assert resolver.resolve("Taiwan Semiconductor Manufacturing Co Ltd TPE: 2330").status == "not_found"
     assert all(period == CFG["validation_period"] for _, period in provider.calls)
 
 
@@ -408,8 +498,9 @@ def _config(tmp_path, change):
 
 
 def test_the_real_block_is_valid_and_has_every_message():
-    assert CFG["validation_period"] in get_config()["market_data"]["history_periods"] and set(CFG["messages"]) >= {"ambiguous", "option", "not_found", "unavailable", "invalid"}
-    assert CFG["same_market_groups"][0][0] == "NSI"
+    assert CFG["validation_period"] in get_config()["market_data"]["history_periods"] and set(CFG["messages"]) >= set(TICKER_LOOKUP_MESSAGES)
+    assert CFG["preferred_markets"] == ["NSI", "BSE", "NYQ", "NMS", "NGM"] and CFG["min_prefix_chars"] == 4 and CFG["max_validated"] == 3
+    assert CFG["allowed_quote_types"] == ["EQUITY", "INDEX"] and "same_market_groups" not in CFG
 
 
 def test_a_valid_block_loads(tmp_path):
@@ -418,17 +509,19 @@ def test_a_valid_block_loads(tmp_path):
 
 @pytest.mark.parametrize("change, text", [
     (lambda b: b.update(timeout_seconds=0), "timeout_seconds"),
+    (lambda b: b.update(validation_budget_seconds=0), "validation_budget_seconds"),
+    (lambda b: b.update(min_prefix_chars=0), "min_prefix_chars"),
     (lambda b: b.update(max_validated=-1), "max_validated"),
     (lambda b: b.update(cache_ttl_minutes=True), "cache_ttl_minutes"),
     (lambda b: b.update(max_results="8"), "max_results"),
     (lambda b: b.update(validation_period="10y"), "validation_period"),
     (lambda b: b.update(allowed_quote_types=[]), "allowed_quote_types"),
-    (lambda b: b.update(legal_suffixes="inc"), "legal_suffixes"),
+    (lambda b: b.update(etf_words="etf"), "etf_words"),
     (lambda b: b.update(legal_suffixes=[""]), "legal_suffixes"),
-    (lambda b: b.update(same_market_groups=[["NSI"]]), "same_market_groups"),
-    (lambda b: b.update(same_market_groups=["NSI"]), "same_market_groups"),
+    (lambda b: b.update(preferred_markets=[]), "preferred_markets"),
+    (lambda b: b["alias_notes"].update(TSM=" "), "alias_notes.TSM"),
     (lambda b: b["messages"].update(not_found=" "), "messages.not_found"),
-    (lambda b: b["messages"].pop("option"), "messages.option"),
+    (lambda b: b["messages"].pop("disclosure_with_others"), "messages.disclosure_with_others"),
 ])
 def test_a_bad_block_is_rejected_with_the_key_named(tmp_path, change, text):
     with pytest.raises(ConfigError, match=text):

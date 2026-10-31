@@ -3,7 +3,9 @@
 Design pattern: ADAPTER plus GUARD. Router wraps a structured-output LLM call and turns its untrusted reply into a
 trusted Decision. Every check is code, not trust. Example: for "What is Apple trading at?" the model may return the
 mention "Apple"; code keeps it only because "apple" occurs in the query, and maps it to AAPL through
-workflow.ticker_aliases. The model never supplies a symbol, so it cannot invent one.
+workflow.ticker_aliases. The model never supplies a symbol, so it cannot invent one. A mention that is neither an alias
+nor a literal symbol stays a NAME (only if it occurs in the query); the Market agent's TickerResolver turns names into
+price-checked symbols or asks the user. Example: "SUZLON" -> the name "SUZLON" -> SUZLON.NS, after a lookup and a price check.
 
 What the router extracts: ticker mentions, a news phrase and a period. It never extracts amounts, holdings, goals
 or tax-calculator inputs; those come only from tab forms. The user's query and the earlier conversation reach the
@@ -146,21 +148,34 @@ def resolve_mention(mention: Any, query: str, aliases: dict[str, str]) -> str | 
     return None
 
 
+def grounded_name(mention: Any, query: str) -> str | None:
+    """The mention as a company name (spaces collapsed) when it occurs in the query, else None. It is not a symbol yet."""
+    if not isinstance(mention, str):
+        return None
+    text, plain = " ".join(mention.split()), " ".join(query.split())
+    return text if text and text.casefold() in plain.casefold() else None
+
+
 def ground_params(entities: dict[str, Any], query: str, cfg: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """(market_params, news_params) from the entities, keeping only what the query itself supports.
 
-    market_params needs at least one resolved symbol; the period must be one of market_analysis.periods.
-    news_params is the phrase when it occurs in the query, else the first resolved symbol, else None.
+    market_params needs at least one entry: a resolved symbol (alias or literal) or a company name that occurs in the query
+    (the Market agent resolves names); the period must be one of market_analysis.periods.
+    news_params is the phrase when it occurs in the query, else the first resolved symbol (never a name), else None.
     """
     mentions = entities.get("tickers")
     symbols: list[str] = []
+    entries: list[str] = []
     for mention in mentions if isinstance(mentions, list) else []:
         symbol = resolve_mention(mention, query, cfg["ticker_aliases"])
+        entry = symbol or grounded_name(mention, query)
         if symbol and symbol not in symbols:
             symbols.append(symbol)
+        if entry and entry not in entries:
+            entries.append(entry)
     market: dict[str, Any] | None = None
-    if symbols:
-        market = {"tickers": symbols}
+    if entries:
+        market = {"tickers": entries}
         if entities.get("period") in get_config()["market_analysis"]["periods"]:
             market["period"] = entities["period"]
     phrase = entities.get("news_query")

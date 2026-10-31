@@ -150,6 +150,9 @@ def test_must_keep_lists_payload_texts_that_the_agent_answer_contains():
     assert must_keep(TAX) == [LABEL, STT, "2026-10-29"]                  # "Brokerage ..." is not in the answer, so nothing to keep
     assert must_keep(MARKET) == ["sample data"]
     assert must_keep(result("market", "Plain.", None, {"source": "live", "is_stale": False})) == []
+    note = "Showing SUZLON.NS (Suzlon Energy Limited, NSE, INR) for \"Suzlon\"."
+    assert must_keep(result("market", f"Up 5.0%.\n\n{note}", None, {"source": "live", "is_stale": False, "lookup_notes": [note]})) == [note]
+    assert must_keep(result("market", "Up 5.0%.", None, {"source": "live", "is_stale": False, "lookup_notes": [note]})) == []
     assert must_keep(result("market", "Sample data here.", None, {"source": "sample data", "is_stale": False})) == []
     assert must_keep(QA) == [] and must_keep(result("x", "t", None, {"label": 5, "exclusions": None, "config_used": {"a": 3}})) == []
 

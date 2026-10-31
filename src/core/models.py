@@ -41,6 +41,7 @@ class MarketPayload(TypedDict, total=False):
     metrics: dict[str, Any]
     comparison: list[dict[str, Any]]
     warnings: list[str]
+    lookup_notes: list[str]   # which company a typed name became (and other listings); also in the answer, a merge must keep them
 
 
 class PortfolioPayload(TypedDict, total=False):

@@ -33,7 +33,8 @@ class Resolution:
 
     resolved: `symbols` holds the one price-checked symbol. ambiguous: `candidates` lists the price-checked options and
     `message` asks the user to type the symbol. not_found / unavailable / invalid: no symbol, `message` says why.
-    `source` is "alias" or "yahoo search" for a resolved or ambiguous answer, else "".
+    `source` is "alias" or "yahoo search" for a resolved or ambiguous answer, else "". `note` is the disclosure for a
+    resolved name (the company and listing chosen, other listings that exist); empty when nothing needs saying.
     """
 
     status: Status
@@ -42,3 +43,4 @@ class Resolution:
     candidates: tuple[Candidate, ...] = ()
     source: str = ""
     message: str = ""
+    note: str = ""

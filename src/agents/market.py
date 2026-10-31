@@ -13,7 +13,9 @@ guard shared with the Portfolio agent rejects any summary that contains a number
 that was not in that JSON. Only the summary step falls back (to a fixed text);
 any other failure is turned into an error result by BaseAgent.run().
 
-Input: state["market_params"] = {"tickers": ["AAPL", "TCS.NS"], "period": "6mo"}.
+Input: state["market_params"] = {"tickers": ["AAPL", "TCS.NS", "Suzlon"], "period": "6mo"}. An entry that is not a symbol is
+a company name: the injected TickerResolver turns it into a price-checked symbol, or the agent asks the user (needs_input)
+for the symbol. A symbol that has no prices is looked up once as a name ("apple" reads as the symbol APPLE).
 """
 from __future__ import annotations
 
@@ -31,6 +33,8 @@ from src.core.number_guard import collect_numbers, numbers_in
 from src.core.portfolio_valuation import NOT_LIVE_SOURCES
 from src.data.market import get_market_provider
 from src.data.market.provider import MarketDataProvider
+from src.data.tickers.entries import resolve_entries
+from src.data.tickers.resolver import TickerResolver, build_resolver
 from src.utils.config import get_config
 from src.workflow.state import GraphState
 
@@ -41,10 +45,11 @@ class MarketAgent(BaseAgent):
     name = "market"
     llm_role = "market_summary"
 
-    def __init__(self, llm: Any = None, provider: MarketDataProvider | None = None) -> None:
-        """Defaults: llm from role market_summary, provider from get_market_provider()."""
+    def __init__(self, llm: Any = None, provider: MarketDataProvider | None = None, resolver: TickerResolver | None = None) -> None:
+        """Defaults: llm from role market_summary, provider from get_market_provider(), resolver built on that provider."""
         super().__init__(llm=llm)
         self.provider = provider if provider is not None else get_market_provider()
+        self.resolver = resolver if resolver is not None else build_resolver(self.provider)
 
     def _result(self, status: str, answer: str, payload: MarketPayload) -> AgentResult:
         """Build the envelope; turn_id is filled in by BaseAgent.run()."""
@@ -74,13 +79,31 @@ class MarketAgent(BaseAgent):
     def _execute(self, state: GraphState) -> AgentResult:
         """Validate the request, fetch histories, compute metrics, then summarise."""
         cfg = get_config()["market_analysis"]
-        tickers, period, warnings = parse_request(state.get("market_params"), cfg)
+        params = state.get("market_params")
+        params = params if isinstance(params, dict) else {}
+        entries = resolve_entries(params.get("tickers"), self.resolver, cfg["max_tickers"])
+        tickers, period, warnings = parse_request({**params, "tickers": entries.tickers}, cfg)
+        warnings = entries.warnings + warnings
         if not tickers:
-            return self._result("needs_input", cfg["needs_input_message"].strip(), {"warnings": warnings})
+            asked = "\n\n".join(entries.asks) or cfg["needs_input_message"].strip()
+            return self._result("needs_input", asked, {"warnings": warnings})
+
+        results = fetch_histories(tickers, self.provider, cfg)
+        lookup_notes, asks = list(entries.notes), list(entries.asks)
+        for index, ticker in enumerate(tickers):                 # a symbol-looking word with no prices may be a name
+            if (results[index].error or not results[index].currency) and ticker in entries.names:
+                found = self.resolver.resolve(entries.names[ticker])
+                if found.status == "resolved" and found.symbols[0] not in tickers:
+                    tickers[index] = found.symbols[0]
+                    results[index] = fetch_histories([found.symbols[0]], self.provider, cfg)[0]
+                    lookup_notes += [found.note] if found.note else []
+                elif found.status in ("ambiguous", "unavailable"):
+                    asks.append(found.message)
+        warnings += asks
 
         analysed: list[TickerMetrics] = []
         history: list[dict[str, Any]] = []
-        for ticker, result in zip(tickers, fetch_histories(tickers, self.provider, cfg)):
+        for ticker, result in zip(tickers, results):
             series = [] if result.error or not result.currency else price_series(result.data)
             stale = bool(result.is_stale or result.source in NOT_LIVE_SOURCES)
             found, notes = ticker_metrics(
@@ -111,4 +134,7 @@ class MarketAgent(BaseAgent):
             "freshness_texts": [price_text(t, cfg) for t in metrics.tickers if t.price_source not in LIVE_SOURCES],
             "warnings": all_warnings,
         }
+        if lookup_notes:
+            payload["lookup_notes"] = lookup_notes
+            summary = f"{summary}\n\n{' '.join(lookup_notes)}"
         return self._result("ok", summary, payload)

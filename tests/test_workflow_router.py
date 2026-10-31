@@ -202,10 +202,20 @@ def test_an_unlisted_period_is_left_out(period):
     assert market == {"tickers": ["AAPL"]}
 
 
-def test_no_resolved_symbol_gives_no_market_params_even_with_a_period():
-    assert ground_params({"tickers": ["Nobody"], "period": "6mo", "news_query": None}, "Nobody over 6mo", WF) == (None, None)
+def test_a_mention_that_is_not_in_the_query_or_not_a_list_gives_no_market_params():
+    assert ground_params({"tickers": ["Nobody"], "period": "6mo", "news_query": None}, "How is the market?", WF) == (None, None)
     assert ground_params({"tickers": "Apple", "period": None, "news_query": None}, "Apple", WF) == (None, None)   # not a list
+    assert ground_params({"tickers": [None, 7, "  "], "period": None, "news_query": None}, "anything 7", WF) == (None, None)
     assert ground_params({}, "Apple", WF) == (None, None)
+
+
+def test_a_company_name_in_the_query_goes_on_as_a_name_for_the_market_agent_to_resolve_and_is_never_a_news_ticker():
+    entities = {"tickers": ["Suzlon", "SUZLON", "Apple", "Taiwan  Semiconductors", "Globe  Corp", "Tesla"], "period": "6mo", "news_query": None}
+    market, news = ground_params(entities, "Compare Suzlon, SUZLON, Apple, Taiwan Semiconductors and Globe Corp for 6 months", WF)
+    assert market == {"tickers": ["Suzlon", "SUZLON", "AAPL", "TSM", "Globe Corp"], "period": "6mo"}       # aliases become symbols; Tesla is not in the query
+    assert news == {"ticker": "AAPL"}                                                                              # only real symbols
+    market, news = ground_params({"tickers": ["Zomato"], "period": None, "news_query": None}, "How is Zomato doing?", WF)
+    assert market == {"tickers": ["Zomato"]} and news is None
 
 
 def test_a_news_phrase_must_occur_in_the_query():
