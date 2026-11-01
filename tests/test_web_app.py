@@ -206,3 +206,19 @@ def test_hostile_text_in_an_answer_and_a_source_is_not_rendered_as_html_or_as_a_
     assert "&lt;script>alert\\(1)&lt;/script>" in text or "&lt;script&gt;alert" in text    # shown as literal text
     links = [e.value for e in at.expander[0].markdown if e.value.startswith(f"[{ui('chat.source_link')}]")]
     assert links == [f"[{ui('chat.source_link')}](https://www.sebi.gov.in)"]            # only the real http(s) source has a link
+
+
+# ---- persistence status in the sidebar ----
+
+def test_the_sidebar_says_conversations_are_saved_as_a_quiet_caption(fake):
+    at = start()
+    saved = " ".join(get_config()["persistence"]["messages"]["saving"].split())
+    assert saved in [c.value for c in at.sidebar.caption] and saved not in [w.value for w in at.sidebar.warning]
+
+
+@pytest.mark.parametrize("saving, key", [(False, "unavailable"), (False, "corrupt_locked"), (True, "recovered"), (False, "disabled")])
+def test_any_other_persistence_state_is_a_warning_in_the_sidebar(fake, saving, key):
+    message = " ".join(get_config()["persistence"]["messages"][key].split())
+    fake.persistence_status = backend.PersistenceStatus(saving, message)
+    at = start()
+    assert message in [w.value for w in at.sidebar.warning]

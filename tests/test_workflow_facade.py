@@ -292,7 +292,7 @@ class BlockingGraph(SpyGraph):
         self.entered, self.release, self.active, self.max_active = threading.Semaphore(0), threading.Event(), 0, 0
         self.count_lock = threading.Lock()
 
-    def stream(self, turn, config, stream_mode):
+    def stream(self, turn, config, stream_mode, durability=None):
         with self.count_lock:
             self.active += 1
             self.max_active = max(self.max_active, self.active)
@@ -341,12 +341,14 @@ def test_one_lock_per_thread_id():
 def test_get_graph_builds_the_real_router_graph_once(monkeypatch):
     built = []
     monkeypatch.setattr(facade, "Router", lambda: "router")
-    monkeypatch.setattr(facade, "build_graph", lambda classify: built.append(classify) or object())
+    monkeypatch.setattr(facade, "build_graph", lambda classify, checkpointer: built.append((classify, checkpointer)) or object())
     get_graph.cache_clear()
+    facade.get_store.cache_clear()
     try:
-        assert get_graph() is get_graph() and built == ["router"]
+        assert get_graph() is get_graph() and built == [("router", facade.get_store().saver)]
     finally:
         get_graph.cache_clear()
+        facade.get_store.cache_clear()
 
 
 # ---- warm_up and usage_summary ----

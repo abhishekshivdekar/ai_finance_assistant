@@ -9,9 +9,8 @@ from __future__ import annotations
 from typing import Any
 
 from src.workflow.facade import (
-    HistoryItem, QueryResult, UsageSummary, WarmUp, delete_thread, history, persistence_status, run_query, usage_summary, warm_up,
+    HistoryItem, PersistenceStatus, QueryResult, UsageSummary, WarmUp, delete_thread, history, persistence_status, run_query, usage_summary, warm_up,
 )
-from src.workflow.persistence import PersistenceStatus
 
 __all__ = [
     "HistoryItem", "PersistenceStatus", "QueryResult", "UsageSummary", "WarmUp", "ask", "forget", "persistence", "read_history", "start_up", "usage",
