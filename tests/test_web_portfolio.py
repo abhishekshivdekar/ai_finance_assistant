@@ -117,11 +117,11 @@ def plain_values(value):
 
 def test_the_tabs_are_chat_portfolio_market_news_and_the_real_editor_builds_with_an_empty_table(fake):
     at = start()
-    assert [t.label for t in at.tabs] == [ui("tabs.chat"), ui("tabs.portfolio"), ui("tabs.market"), ui("tabs.news")]
+    assert [t.label for t in at.tabs] == [ui("tabs.chat"), ui("tabs.portfolio"), ui("tabs.goals"), ui("tabs.market"), ui("tabs.news")]
     assert ui("portfolio.intro") in shown(at)
     editors = [f for f in at.dataframe if f.key == "portfolio_table"]
     assert len(editors) == 1 and len(editors[0].value) == 0 and list(editors[0].value.columns) == COLUMNS         # no example data
-    assert [b.label for b in at.main.button] == [ui("portfolio.submit"), ui("market.submit"), ui("news.submit")] and not any(b.disabled for b in at.main.button)
+    assert [b.label for b in at.main.button] == [ui("portfolio.submit"), ui("goals.submit"), ui("market.submit"), ui("news.submit")] and not any(b.disabled for b in at.main.button)
     assert fake.asks == []
 
 
@@ -231,7 +231,7 @@ def test_a_reached_budget_disables_the_submit_and_shows_the_message(fake, editor
     fake.usage_value = backend.UsageSummary(tokens=2_000_001, cost=1.0, limit=2_000_000, exceeded=True)
     at = start()
     assert next(b for b in at.main.button if b.label == ui("portfolio.submit")).disabled is True
-    assert warnings(at).count(ui("messages.budget_stopped")) == 4 and fake.asks == []
+    assert warnings(at).count(ui("messages.budget_stopped")) == 5 and fake.asks == []
 
 
 # ============================== showing a result ==============================

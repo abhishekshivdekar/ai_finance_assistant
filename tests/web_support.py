@@ -98,6 +98,13 @@ def shown(at: AppTest) -> list[str]:
     return out
 
 
+def labelled(elements, label: str):
+    """The one widget with this label (tests must not depend on the position of a tab's widgets)."""
+    found = [e for e in elements if e.label == label]
+    assert len(found) == 1, [e.label for e in elements]
+    return found[0]
+
+
 def dataframes(at: AppTest) -> list:
     """The tables on the page without the Portfolio tab's editor (it is on every page, empty until the user types)."""
     return [frame for frame in at.dataframe if getattr(frame, "key", None) != "portfolio_table"]

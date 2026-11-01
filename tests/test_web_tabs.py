@@ -8,7 +8,7 @@ from streamlit.testing.v1 import AppTest
 from src.utils.config import get_config
 from src.web_app import backend
 from src.web_app.render_common import plain_text
-from web_support import HOSTILE, FakeBackend, answer_result, ask, charts, dataframes, disclaimer, fake, shown, start, ui  # noqa: F401
+from web_support import HOSTILE, FakeBackend, answer_result, ask, charts, dataframes, disclaimer, fake, labelled, shown, start, ui  # noqa: F401
 
 LIVE_AT = "2026-10-30T08:32:00+00:00"
 
@@ -32,8 +32,8 @@ def market_reply(text="AAPL last price USD 120.25 (live). It rose over the perio
 
 
 def submit_market(at, tickers="AAPL", period="6mo"):
-    at.text_input[0].input(tickers)
-    at.selectbox[0].select(period)
+    labelled(at.text_input, ui("market.tickers_label")).input(tickers)
+    labelled(at.selectbox, ui("market.period_label")).select(period)
     next(b for b in at.main.button if b.label == ui("market.submit")).click().run()
     assert not at.exception, [e.value for e in at.exception]
     return at
@@ -96,8 +96,8 @@ def test_tickers_are_split_on_commas_and_trimmed_and_the_backend_does_the_valida
 def test_the_period_choices_and_the_default_come_from_the_config(fake):
     at = start()
     cfg = get_config()["market_analysis"]
-    assert list(at.selectbox[0].options) == [cfg["period_labels"][p] for p in cfg["periods"]]
-    assert at.selectbox[0].value == cfg["default_period"]
+    assert list(labelled(at.selectbox, ui("market.period_label")).options) == [cfg["period_labels"][p] for p in cfg["periods"]]
+    assert labelled(at.selectbox, ui("market.period_label")).value == cfg["default_period"]
 
 
 @pytest.mark.parametrize("source, stale, details, level", [
@@ -262,7 +262,7 @@ def news_reply(text="- Markets rose [1][2]\n- Banks led [2]", data=None, status=
 def submit_news(at, text="Nifty 50", mode=None):
     if mode:
         at.radio[0].set_value(mode)
-    at.text_input[1].input(text)
+    labelled(at.text_input, ui("news.text_label")).input(text)
     next(b for b in at.main.button if b.label == ui("news.submit")).click().run()
     assert not at.exception, [e.value for e in at.exception]
     return at

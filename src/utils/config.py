@@ -249,9 +249,21 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
         raise ConfigError(f"workflow.messages is missing {missing}.")
 
 
+GOALS_UI_KEYS = tuple(f"goals.{key}" for key in (
+    "intro", "goal_amount", "goal_amount_help", "horizon_years", "horizon_years_help", "horizon_years_placeholder", "current_savings",
+    "current_savings_help", "monthly_contribution", "monthly_contribution_help", "money_placeholder", "amount_caption", "digits_only",
+    "risk_profile", "risk_profile_help", "annual_step_up_pct", "annual_step_up_pct_help", "inflation_adjust", "inflation_adjust_help",
+    "submit", "working", "query_template", "chart_heading", "chart_title", "chart_title_todays", "chart_x", "chart_y", "goal_line",
+    "goal_line_todays", "table_heading", "not_available", "columns.scenario", "columns.annual_return", "columns.final_value",
+    "columns.final_value_todays", "columns.outcome", "columns.required", "columns.months", "surplus", "shortfall", "months_value",
+    "inflation_heading", "inflation_todays", "inflation_future", "inflation_rate", "assumptions_title", "assumptions_asof",
+    "assumptions_returns", "assumptions_inflation", "assumptions_applied", "assumptions_not_applied",
+))
+
+
 UI_TEXT_KEYS = (
     "page_title", "app_title", "app_tagline", "tabs.chat", "tabs.market", "tabs.news",
-    "tabs.portfolio", "tabs.goals", "portfolio.intro", "portfolio.submit", "portfolio.working", "portfolio.rows_required", "portfolio.query_template", "portfolio.allocation_heading", "portfolio.metrics_heading", "portfolio.positions_heading", "portfolio.currency_heading", "portfolio.not_available", "portfolio.largest_value", "portfolio.diversification_value", "portfolio.expense_value", "portfolio.allocation_title", "portfolio.columns.ticker", "portfolio.columns.quantity", "portfolio.columns.avg_cost", "portfolio.columns.instrument_type", "portfolio.columns.asset_class", "portfolio.columns.expense_ratio_pct", "portfolio.column_help.ticker", "portfolio.column_help.quantity", "portfolio.column_help.avg_cost", "portfolio.column_help.instrument_type", "portfolio.column_help.asset_class", "portfolio.column_help.expense_ratio_pct", "portfolio.metrics.total_value", "portfolio.metrics.position_count", "portfolio.metrics.largest", "portfolio.metrics.top3", "portfolio.metrics.diversification", "portfolio.metrics.risk", "portfolio.metrics.equity_share", "portfolio.metrics.expense_ratio", "portfolio.positions.ticker", "portfolio.positions.instrument_type", "portfolio.positions.asset_class", "portfolio.positions.quantity", "portfolio.positions.avg_cost", "portfolio.positions.price", "portfolio.positions.value", "portfolio.positions.weight", "portfolio.positions.pnl", "portfolio.positions.pnl_pct",
+    "tabs.portfolio", "tabs.goals", *GOALS_UI_KEYS, "portfolio.intro", "portfolio.submit", "portfolio.working", "portfolio.rows_required", "portfolio.query_template", "portfolio.allocation_heading", "portfolio.metrics_heading", "portfolio.positions_heading", "portfolio.currency_heading", "portfolio.not_available", "portfolio.largest_value", "portfolio.diversification_value", "portfolio.expense_value", "portfolio.allocation_title", "portfolio.columns.ticker", "portfolio.columns.quantity", "portfolio.columns.avg_cost", "portfolio.columns.instrument_type", "portfolio.columns.asset_class", "portfolio.columns.expense_ratio_pct", "portfolio.column_help.ticker", "portfolio.column_help.quantity", "portfolio.column_help.avg_cost", "portfolio.column_help.instrument_type", "portfolio.column_help.asset_class", "portfolio.column_help.expense_ratio_pct", "portfolio.metrics.total_value", "portfolio.metrics.position_count", "portfolio.metrics.largest", "portfolio.metrics.top3", "portfolio.metrics.diversification", "portfolio.metrics.risk", "portfolio.metrics.equity_share", "portfolio.metrics.expense_ratio", "portfolio.positions.ticker", "portfolio.positions.instrument_type", "portfolio.positions.asset_class", "portfolio.positions.quantity", "portfolio.positions.avg_cost", "portfolio.positions.price", "portfolio.positions.value", "portfolio.positions.weight", "portfolio.positions.pnl", "portfolio.positions.pnl_pct",
     "freshness.with_time", "freshness.no_time",
     "market.intro", "market.tickers_label", "market.tickers_placeholder", "market.tickers_help", "market.period_label",
     "market.submit", "market.working", "market.tickers_required", "market.query_template", "market.chart_heading",
@@ -268,6 +280,18 @@ UI_TEXT_KEYS = (
     "chat.sources_title", "chat.source_link",
     "messages.budget_stopped", "messages.empty_answer", "messages.needs_input_hint", "messages.no_answer_hint",
 )
+
+
+def _validate_goals_ui(goal: dict[str, Any], ui: Any) -> None:
+    """ui.goals.risk_labels names exactly goal_planning.risk_profiles and ui.goals.scenario_labels exactly goal_planning.scenarios."""
+    block = ui.get("goals") if isinstance(ui, dict) else None
+    block = block if isinstance(block, dict) else {}
+    for table, wanted in (("risk_labels", goal["risk_profiles"]), ("scenario_labels", goal["scenarios"])):
+        labels = block.get(table)
+        if not isinstance(labels, dict) or sorted(labels) != sorted(wanted) or not all(isinstance(v, str) and v.strip() for v in labels.values()):
+            raise ConfigError(f"ui.goals.{table} must give a non-empty label for exactly: {', '.join(wanted)}.")
+    if block.get("default_risk_profile") not in goal["risk_profiles"]:
+        raise ConfigError("ui.goals.default_risk_profile must be one of goal_planning.risk_profiles.")
 
 
 def _validate_portfolio(portfolio: dict[str, Any], ui: Any) -> None:
@@ -389,6 +413,8 @@ def _validate(cfg: dict[str, Any]) -> None:
     _validate_llm(cfg.get("llm"))
     if "ui" in cfg:
         _validate_ui(cfg["ui"])
+        if goal is not None:
+            _validate_goals_ui(goal, cfg["ui"])
 
 
 @lru_cache(maxsize=1)
