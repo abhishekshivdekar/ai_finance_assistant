@@ -143,7 +143,7 @@ def open_store(settings: dict[str, Any] | None = None) -> ConversationStore:
     settings = get_config()["persistence"] if settings is None else settings
     messages = settings["messages"]
     if not settings["enabled"]:
-        return memory_store(messages["off"])
+        return memory_store(messages["disabled"])
     path = Path(settings["path"])
     path = path if path.is_absolute() else PROJECT_ROOT / path
     try:

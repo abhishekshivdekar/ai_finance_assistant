@@ -338,7 +338,7 @@ def _validate_persistence(block: Any) -> None:
         if isinstance(block.get(key), bool) or not isinstance(block.get(key), int) or block[key] < 1:
             raise ConfigError(f"persistence.{key} must be a whole number of at least 1.")
     messages = block.get("messages")
-    for key in ("saving", "off", "unavailable", "recovered", "corrupt_locked"):
+    for key in ("saving", "disabled", "unavailable", "recovered", "corrupt_locked"):
         if not isinstance(messages, dict) or not str(messages.get(key) or "").strip():
             raise ConfigError(f"persistence.messages.{key} must not be empty.")
 

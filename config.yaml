@@ -141,7 +141,7 @@ persistence:                  # where conversations are kept (architecture secti
   max_threads: 200            # beyond this many conversations the least recently used are deleted at start-up
   messages:                   # sentences for the sidebar status
     saving: Conversations are saved on this computer.
-    off: Saving conversations is switched off, so they are kept only while the app runs.
+    disabled: Saving conversations is switched off, so they are kept only while the app runs.
     unavailable: The conversation file could not be opened (it may be locked or not writable), so conversations are kept only while the app runs.
     recovered: A damaged conversation file was set aside and a new one was started. Conversations in the damaged file are not available.
     corrupt_locked: The conversation file is damaged and could not be set aside (it may be in use), so conversations are kept only while the app runs.
