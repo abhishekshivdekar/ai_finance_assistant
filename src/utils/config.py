@@ -255,7 +255,7 @@ GOALS_UI_KEYS = tuple(f"goals.{key}" for key in (
     "risk_profile", "risk_profile_help", "annual_step_up_pct", "annual_step_up_pct_help", "inflation_adjust", "inflation_adjust_help",
     "submit", "working", "query_template", "chart_heading", "chart_title", "chart_title_todays", "chart_x", "chart_y", "goal_line",
     "goal_line_todays", "table_heading", "not_available", "columns.scenario", "columns.annual_return", "columns.final_value",
-    "columns.final_value_todays", "columns.outcome", "columns.required", "columns.months", "surplus", "shortfall", "months_value",
+    "columns.final_value_todays", "columns.outcome", "columns.required", "columns.months", "required_note", "surplus", "shortfall", "months_value",
     "inflation_heading", "inflation_todays", "inflation_future", "inflation_rate", "assumptions_title", "assumptions_asof",
     "assumptions_returns", "assumptions_inflation", "assumptions_applied", "assumptions_not_applied",
 ))
@@ -290,6 +290,12 @@ def _validate_goals_ui(goal: dict[str, Any], ui: Any) -> None:
         labels = block.get(table)
         if not isinstance(labels, dict) or sorted(labels) != sorted(wanted) or not all(isinstance(v, str) and v.strip() for v in labels.values()):
             raise ConfigError(f"ui.goals.{table} must give a non-empty label for exactly: {', '.join(wanted)}.")
+    colours = block.get("line_colors")
+    if not isinstance(colours, dict) or sorted(colours) != sorted(goal["scenarios"]):
+        raise ConfigError(f"ui.goals.line_colors must give a colour for exactly: {', '.join(goal['scenarios'])}.")
+    palette = [*colours.values(), block.get("goal_line_color")]
+    if not all(isinstance(c, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", c) for c in palette) or len({c.lower() for c in palette}) != len(palette):
+        raise ConfigError("ui.goals.line_colors and goal_line_color must be different #rrggbb colours.")
     if block.get("default_risk_profile") not in goal["risk_profiles"]:
         raise ConfigError("ui.goals.default_risk_profile must be one of goal_planning.risk_profiles.")
 

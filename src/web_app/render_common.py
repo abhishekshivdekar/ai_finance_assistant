@@ -127,9 +127,13 @@ def payload_of(result: QueryResult, agent: str) -> dict[str, Any] | None:
 
 
 def render_warnings(data: dict[str, Any]) -> None:
-    """Every warning of a payload as a warning box, in plain text (the payload is the source of truth, not the answer)."""
+    """Every warning of a payload as a warning box, in plain text (the payload is the source of truth, not the answer).
+
+    The first letter is shown in capitals (display only: the payload keeps its text). Example: "low scenario: ..." -> "Low scenario: ...".
+    """
     for warning in data.get("warnings") or []:
-        st.warning(plain_text(str(warning)))
+        text = str(warning).strip()
+        st.warning(plain_text(text[:1].upper() + text[1:]))
 
 
 def render_freshness(source: str, as_of: str, stale: bool, details: list[str]) -> None:

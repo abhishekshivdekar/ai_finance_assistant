@@ -39,8 +39,9 @@ def empty_table() -> pd.DataFrame:
 
 
 def _label(group: str, key: str) -> str:
-    """The UI label of an instrument type or asset class; an unknown key is shown as it is (plain text)."""
-    return str(get_config()["ui"]["portfolio"][group].get(key, plain_text(str(key))))
+    """The UI label of an instrument type or asset class; an unknown key is shown as it is. Raw text: a table cell is not Markdown,
+    so it must not be Markdown-escaped (a chart label is HTML-escaped where it is drawn)."""
+    return str(get_config()["ui"]["portfolio"][group].get(key, str(key)))
 
 
 def column_config() -> dict[str, Any]:
@@ -71,7 +72,7 @@ def _money(value: Any, currency: str, missing: str) -> str:
 
 def _allocation_chart(currency: str, shares: dict[str, float]) -> None:
     """One pie per currency from the payload's shares (they sum to 1 inside that currency)."""
-    labels = [_label("asset_class_labels", key) for key in shares]
+    labels = [html.escape(_label("asset_class_labels", key), quote=False) for key in shares]
     figure = go.Figure(go.Pie(labels=labels, values=list(shares.values()), textinfo="label+percent", sort=False))
     figure.update_layout(title=html.escape(ui_text("portfolio.allocation_title", currency=currency)), height=320, margin={"l": 10, "r": 10, "t": 50, "b": 10})
     st.plotly_chart(figure, key=f"allocation_{currency}")

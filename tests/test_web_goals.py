@@ -188,7 +188,7 @@ def test_a_goal_that_is_not_reached_shows_the_payload_note_and_a_goal_already_me
                                               "annual_step_up_pct": 10.0, "inflation_adjust": True}
     frame = dataframes(at)[0].value
     for (_, row), s in zip(frame.iterrows(), hard["data"]["scenarios"]):
-        assert s["months_to_goal"] is None and row[ui("goals.columns.months")] == plain_text(s["months_note"]) and row[ui("goals.columns.outcome")].startswith("Shortfall")
+        assert s["months_to_goal"] is None and row[ui("goals.columns.months")] == s["months_note"] and row[ui("goals.columns.outcome")].startswith("Shortfall")
     assert plain_text(hard["data"]["scenarios"][0]["months_note"]) in captions(at)
     easy = planned(goal_amount=500_000, horizon_years=3, current_savings=600_000, monthly_contribution=0, risk_profile="low", inflation_adjust=False)
     fake.reply = reply(easy)
@@ -222,12 +222,12 @@ def test_hostile_text_in_the_answer_assumptions_notes_and_labels_is_neutralised(
     fake.reply = reply(result, text=f"Plan: {HOSTILE}")
     at = start()
     sample(at)
-    page = [t for t in shown(at) if "script" in t or "javascript" in t]
+    cells = [str(v) for v in dataframes(at)[0].value.to_numpy().ravel()]
+    page = [t for t in shown(at) if ("script" in t or "javascript" in t) and t not in cells]          # table cells are not Markdown or HTML: raw text is inert there
     assert page and all("<script" not in t and "](javascript:" not in t for t in page)
     [chart] = charts(at)
     assert all("<script" not in trace["name"] for trace in chart["data"]) and "&lt;script" in " ".join(trace["name"] for trace in chart["data"])
-    cells = " ".join(str(v) for v in dataframes(at)[0].value.to_numpy().ravel())
-    assert "<script" not in cells
+    assert HOSTILE in cells and not any("\\" in c for c in cells if c.startswith(("INR", "+", "-")))
 
 
 # ============================== needs_input and stopped values ==============================
@@ -401,6 +401,101 @@ def test_a_valid_goals_block_loads(tmp_path):
     (lambda c: c["ui"]["tabs"].pop("goals"), "ui.tabs.goals"),
 ])
 def test_a_bad_goals_block_is_rejected(tmp_path, change, text):
+    from src.utils.config import ConfigError
+
+    path = _config(tmp_path, change)
+    with pytest.raises(ConfigError, match=text):
+        get_config(path)
+    get_config.cache_clear()
+
+
+# ============================== UI step 4c: browser fixes ==============================
+
+def test_table_cells_hold_raw_text_so_no_backslash_is_shown(fake):
+    result = planned(annual_step_up_pct=10.0)
+    notes = [s["required_label"] for s in result["data"]["scenarios"]]
+    result["data"]["scenarios"][0]["months_to_goal"] = None
+    result["data"]["scenarios"][0]["months_note"] = "Not reached (in 600 months) - try again, 10% a year."
+    fake.reply = reply(result)
+    at = start()
+    sample(at, step=10.0)
+    cells = [str(v) for v in dataframes(at)[0].value.to_numpy().ravel()]
+    assert not [c for c in cells if "\\" in c] and "Not reached (in 600 months) - try again, 10% a year." in cells
+    assert any("rises 10%" in n for n in notes)          # the real label has parentheses and a percent sign
+
+
+def test_the_monthly_amount_cell_holds_only_the_amount_and_the_payload_label_is_shown_once_as_a_caption(fake):
+    result = planned()
+    label = result["data"]["required_labels"]["expected"]
+    fake.reply = reply(result)
+    at = start()
+    sample(at)
+    column = dataframes(at)[0].value[ui("goals.columns.required")]
+    assert list(column) == [format_amount(s["required_monthly_contribution"], "INR") for s in result["data"]["scenarios"]]
+    assert captions(at).count(plain_text(label)) == 1
+
+
+def test_labels_that_differ_between_scenarios_are_captioned_with_their_scenario_names(fake):
+    result = planned(annual_step_up_pct=10.0)
+    result["data"]["required_labels"] = {"conservative": "amount A (rises 10% a year)", "expected": "amount B", "optimistic": "amount B"}
+    fake.reply = reply(result)
+    at = start()
+    sample(at, step=10.0)
+    assert ui("goals.required_note", scenarios="Conservative", label=plain_text("amount A (rises 10% a year)")) in captions(at)
+    assert ui("goals.required_note", scenarios="Expected, Optimistic", label="amount B") in captions(at)
+    assert "amount B" not in captions(at)
+
+
+def test_the_outcome_column_says_it_compares_future_money_and_the_other_column_names_are_unchanged(fake):
+    fake.reply = reply(planned())
+    at = start()
+    sample(at)
+    assert list(dataframes(at)[0].value.columns) == ["Scenario", "Assumed yearly return", "Savings at the end", "Savings at the end (today's money)",
+                                                      "Against the goal (future money)", "Monthly amount needed", "Time to reach the goal"]
+
+
+def test_the_three_scenario_lines_and_the_goal_line_have_four_different_colours_from_the_config(fake):
+    fake.reply = reply(planned())
+    at = start()
+    sample(at)
+    [chart] = charts(at)
+    ui_cfg = get_config()["ui"]["goals"]
+    colours = [trace["line"]["color"] for trace in chart["data"]]
+    assert colours == [ui_cfg["line_colors"][n] for n in ("conservative", "expected", "optimistic")]
+    goal = chart["layout"]["shapes"][0]["line"]
+    assert goal["dash"] == "dash" and goal["color"] == ui_cfg["goal_line_color"]
+    assert len({*colours, goal["color"]}) == 4
+
+
+def test_a_scenario_without_a_configured_colour_gets_the_default(fake):
+    result = planned()
+    result["data"]["projections"] = [{**r, "scenario": "mystery"} for r in result["data"]["projections"] if r["scenario"] == "expected"]
+    fake.reply = reply(result)
+    at = start()
+    sample(at)
+    assert charts(at)[0]["data"][0]["name"] == "mystery" and "color" not in (charts(at)[0]["data"][0].get("line") or {})
+
+
+def test_payload_warnings_start_with_a_capital_letter_but_the_payload_text_is_not_changed(fake):
+    result = planned()
+    result["data"]["warnings"] = ["low scenario: grows slower than prices.", "  already Capital.", "", "(odd) start"]
+    original = list(result["data"]["warnings"])
+    fake.reply = reply(result)
+    at = start()
+    sample(at)
+    assert warnings(at)[:2] == [plain_text("Low scenario: grows slower than prices."), plain_text("Already Capital.")]
+    assert result["data"]["warnings"] == original
+
+
+@pytest.mark.parametrize("change, text", [
+    (lambda c: c["ui"]["goals"].pop("line_colors"), "line_colors"),
+    (lambda c: c["ui"]["goals"]["line_colors"].pop("expected"), "line_colors"),
+    (lambda c: c["ui"]["goals"]["line_colors"].update(expected="red"), "different #rrggbb"),
+    (lambda c: c["ui"]["goals"]["line_colors"].update(expected="#3B82F6"), "different #rrggbb"),
+    (lambda c: c["ui"]["goals"].update(goal_line_color="#10b981"), "different #rrggbb"),
+    (lambda c: c["ui"]["goals"].pop("goal_line_color"), "different #rrggbb"),
+])
+def test_a_bad_colour_block_is_rejected(tmp_path, change, text):
     from src.utils.config import ConfigError
 
     path = _config(tmp_path, change)

@@ -40,9 +40,11 @@ def read_digits(text: str) -> int | str:
     return int(text) if text.isascii() and text.isdigit() else BAD
 
 
-def _scenario(name: Any, chart: bool = False) -> str:
-    """The UI label of a scenario; an unknown name is untrusted text: HTML-escaped in a chart, plain text everywhere else."""
-    return str(get_config()["ui"]["goals"]["scenario_labels"].get(name, html.escape(str(name)) if chart else plain_text(str(name))))
+def _scenario(name: Any, where: str = "markdown") -> str:
+    """The UI label of a scenario. An unknown name is untrusted text and is made safe for where it is shown:
+    "chart" = HTML-escaped, "table" = raw (a table cell is not Markdown, so escaping would show backslashes), "markdown" = plain_text."""
+    safe = {"chart": lambda text: html.escape(text), "table": lambda text: text, "markdown": plain_text}[where]
+    return str(get_config()["ui"]["goals"]["scenario_labels"].get(name, safe(str(name))))
 
 
 def _profile(name: Any) -> str:
@@ -63,10 +65,11 @@ def _chart(data: dict[str, Any], currency: str) -> None:
     figure = go.Figure()
     for name, points in by_scenario.items():
         values = [p["value_todays_money"] if todays and p.get("value_todays_money") is not None else p["value"] for p in points]
-        figure.add_trace(go.Scatter(x=[p["year"] for p in points], y=values, mode="lines", name=_scenario(name, chart=True)))
+        colour = get_config()["ui"]["goals"]["line_colors"].get(name)
+        figure.add_trace(go.Scatter(x=[p["year"] for p in points], y=values, mode="lines", name=_scenario(name, "chart"), line={"color": colour} if colour else None))
     goal = inflation.get("goal_in_todays_money") if todays else data.get("target_amount")
     if goal is not None:
-        figure.add_hline(y=goal, line_dash="dash", annotation_text=html.escape(ui_text("goals.goal_line_todays" if todays else "goals.goal_line"), quote=False))
+        figure.add_hline(y=goal, line_dash="dash", line_color=get_config()["ui"]["goals"]["goal_line_color"], annotation_text=html.escape(ui_text("goals.goal_line_todays" if todays else "goals.goal_line"), quote=False))
     figure.update_layout(
         title=html.escape(ui_text("goals.chart_title_todays" if todays else "goals.chart_title", currency=currency), quote=False),
         xaxis_title=html.escape(ui_text("goals.chart_x"), quote=False), yaxis_title=html.escape(ui_text("goals.chart_y", currency=currency), quote=False),
@@ -88,7 +91,7 @@ def _table(data: dict[str, Any], currency: str) -> None:
         gap = format_amount(abs(float(s["shortfall"])), currency)
         months = s.get("months_to_goal")
         row = {
-            ui_text("goals.columns.scenario"): _scenario(s["name"]),
+            ui_text("goals.columns.scenario"): _scenario(s["name"], "table"),
             ui_text("goals.columns.annual_return"): format_ratio_percent(s.get("annual_return_pct"), missing),
             ui_text("goals.columns.final_value"): format_amount(float(s["final_value"]), currency),
         }
@@ -96,13 +99,27 @@ def _table(data: dict[str, Any], currency: str) -> None:
             value = s.get("final_value_todays_money")
             row[ui_text("goals.columns.final_value_todays")] = missing if value is None else format_amount(float(value), currency)
         row[ui_text("goals.columns.outcome")] = ui_text("goals.surplus" if s.get("goal_met") else "goals.shortfall", amount=gap)
-        row[ui_text("goals.columns.required")] = f"{format_amount(float(s['required_monthly_contribution']), currency)} ({plain_text(str(s.get('required_label') or ''))})"
-        row[ui_text("goals.columns.months")] = ui_text("goals.months_value", months=months) if months is not None else plain_text(str(s.get("months_note") or missing))
+        row[ui_text("goals.columns.required")] = format_amount(float(s["required_monthly_contribution"]), currency)
+        row[ui_text("goals.columns.months")] = ui_text("goals.months_value", months=months) if months is not None else str(s.get("months_note") or missing)
         table.append(row)
     st.subheader(ui_text("goals.table_heading"))
     st.dataframe(table, hide_index=True, key="goal_scenarios")
+    _required_notes(data)
     for note in dict.fromkeys(str(s["months_note"]) for s in scenarios if s.get("months_note")):
         st.caption(plain_text(note))
+
+
+def _required_notes(data: dict[str, Any]) -> None:
+    """What the "Monthly amount needed" column means, once, from the payload's `required_labels` (unchanged text).
+
+    One caption when every scenario has the same label; otherwise one caption per label, led by the scenarios it belongs to.
+    """
+    groups: dict[str, list[str]] = {}
+    for name, label in (data.get("required_labels") or {}).items():
+        groups.setdefault(str(label), []).append(_scenario(name))
+    for label, names in groups.items():
+        text = plain_text(label)
+        st.caption(text if len(groups) == 1 else ui_text("goals.required_note", scenarios=", ".join(names), label=text))
 
 
 def _inflation(data: dict[str, Any], currency: str) -> None:

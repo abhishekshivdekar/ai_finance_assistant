@@ -152,7 +152,7 @@ def test_the_dropdown_labels_come_from_the_config_and_an_unknown_choice_is_shown
     config = tab.column_config()
     ui_cfg = get_config()["ui"]["portfolio"]
     assert tab._label("instrument_labels", "etf") == ui_cfg["instrument_labels"]["etf"] and tab._label("asset_class_labels", "gold") == ui_cfg["asset_class_labels"]["gold"]
-    assert tab._label("asset_class_labels", "<b>x</b>") == plain_text("<b>x</b>")
+    assert tab._label("asset_class_labels", "<b>x</b>") == "<b>x</b>"      # raw: table cells are not Markdown
     assert config["instrument_type"] is not None
 
 
@@ -354,3 +354,19 @@ def test_a_budget_stop_shows_the_ui_message(fake, editor):
     editor.type_rows([["AAPL", 1.0, np.nan, "stock", "equity", np.nan]])
     submit(at)
     assert ui("messages.budget_stopped") in warnings(at) and not any("backend text" in t for t in shown(at))
+
+
+# ============================== UI step 4c: tables are not Markdown ==============================
+
+def test_table_cells_hold_raw_text_and_the_pie_label_is_html_escaped(fake, editor):
+    data = mixed_data()
+    data["metrics"]["positions"][1] = {**data["metrics"]["positions"][1], "instrument_type": "fund (new) - x", "asset_class": "<b>odd</b> (x)"}
+    data["metrics"]["currencies"]["INR"]["allocation_by_asset_class"] = {"equity": 0.8337, "<b>odd</b> (x)": 0.1663}
+    fake.reply = reply(data=data)
+    at = start()
+    editor.type_rows([["AAPL", 1.0, np.nan, "stock", "equity", np.nan]])
+    submit(at)
+    cells = [str(v) for frame in dataframes(at) for v in frame.value.to_numpy().ravel()]
+    assert "fund (new) - x" in cells and "<b>odd</b> (x)" in cells and not [c for c in cells if "\\" in c]
+    labels = [label for c in charts(at) if c["data"][0]["type"] == "pie" for label in c["data"][0]["labels"]]
+    assert "&lt;b&gt;odd&lt;/b&gt; (x)" in labels and not [label for label in labels if "<b>" in label]

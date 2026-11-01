@@ -451,3 +451,12 @@ def test_the_tabs_keep_separate_results_and_new_conversation_keeps_them(fake):
     assert ui("news.headlines_heading", count=3) in shown(at) and len(charts(at)) == 1
     at.sidebar.button[0].click().run()
     assert ui("news.headlines_heading", count=3) in shown(at) and len(charts(at)) == 1 and len(fake.asks) == 2
+
+
+def test_market_table_cells_are_raw_text_not_markdown(fake):
+    rows = [{"ticker": "A(1)-B", "currency": "INR", "period_return_pct": 1.0, "volatility_pct": 2.0, "max_drawdown_pct": -3.0, "trend": "up (mild) - ok"}]
+    fake.reply = market_reply(data=market_data(comparison=rows))
+    at = start()
+    submit_market(at)
+    cells = [str(v) for v in dataframes(at)[0].value.to_numpy().ravel()]
+    assert "A(1)-B" in cells and "up (mild) - ok" in cells and not [c for c in cells if "\\" in c]
