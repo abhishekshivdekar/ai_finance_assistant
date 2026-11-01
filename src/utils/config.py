@@ -274,7 +274,7 @@ UI_TEXT_KEYS = (
     "news.text_help", "news.submit", "news.working", "news.text_required", "news.query_template_query",
     "news.query_template_ticker", "news.headlines_heading", "news.published", "news.open_article",
     "sidebar.usage_title", "sidebar.usage_tokens", "sidebar.usage_tokens_help", "sidebar.usage_limit", "sidebar.usage_no_limit", "sidebar.usage_cost",
-    "sidebar.usage_cost_unknown", "sidebar.new_conversation", "sidebar.new_conversation_help", "sidebar.status_title",
+    "sidebar.usage_cost_unknown", "sidebar.new_conversation", "sidebar.new_conversation_help", "sidebar.delete_confirm", "sidebar.delete_confirm_help", "sidebar.delete_button", "sidebar.delete_help", "sidebar.delete_done", "sidebar.delete_failed", "sidebar.status_title",
     "sidebar.warmup_running", "sidebar.warmup_ok", "sidebar.warmup_failed",
     "chat.placeholder", "chat.placeholder_busy", "chat.placeholder_stopped", "chat.empty_state", "chat.thinking",
     "chat.sources_title", "chat.source_link",

@@ -43,6 +43,16 @@ def _render_sidebar(usage: backend.UsageSummary, warm: backend.WarmUp) -> None:
             ui_text("sidebar.new_conversation"), help=ui_text("sidebar.new_conversation_help"),
             on_click=session.new_conversation, disabled=session.is_busy(),
         )
+        confirmed = st.checkbox(
+            ui_text("sidebar.delete_confirm"), key=session.CONFIRM_DELETE, help=ui_text("sidebar.delete_confirm_help"), disabled=session.is_busy(),
+        )
+        st.button(
+            ui_text("sidebar.delete_button"), help=ui_text("sidebar.delete_help"), on_click=session.delete_conversation,
+            disabled=session.is_busy() or not confirmed,
+        )
+        notice = session.take_notice()
+        if notice:
+            (st.success if notice == "delete_done" else st.warning)(ui_text(f"sidebar.{notice}"))
         st.subheader(ui_text("sidebar.status_title"))
         if warm.ok:
             st.success(ui_text("sidebar.warmup_ok"))

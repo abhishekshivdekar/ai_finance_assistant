@@ -20,6 +20,13 @@ def _no_outside_network(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _streamlit_skips_the_component_scan(monkeypatch):
+    """Every AppTest run makes Streamlit read the metadata of ALL installed packages (about 0.9 s) to look for custom v2
+    components. The app uses none, so tests skip the scan; it changes no element the pages draw."""
+    monkeypatch.setattr("streamlit.components.v2.manifest_scanner.scan_component_manifests", lambda *args, **kwargs: [])
+
+
+@pytest.fixture(autouse=True)
 def _conversations_stay_in_memory(monkeypatch):
     """Tests never create the SQLite file: the facade's store is the in-memory one unless a test opens its own (tmp_path)."""
     from src.workflow.persistence import memory_store

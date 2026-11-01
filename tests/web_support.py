@@ -44,6 +44,7 @@ class FakeBackend:
         self.usage_value = backend.UsageSummary(tokens=1234, cost=0.0123, limit=2_000_000, exceeded=False)
         self.warm = backend.WarmUp(ok=True, seconds=1.5)
         self.start_up_error = None
+        self.histories, self.history_reads, self.forgotten, self.forget_ok = {}, [], [], True
         self.persistence_status = backend.PersistenceStatus(True, " ".join(get_config()["persistence"]["messages"]["saving"].split()))
 
     def ask(self, *args, **kwargs):
@@ -63,6 +64,14 @@ class FakeBackend:
     def persistence(self):
         return self.persistence_status
 
+    def read_history(self, thread_id):
+        self.history_reads.append(thread_id)
+        return list(self.histories.get(thread_id, []))
+
+    def forget(self, thread_id):
+        self.forgotten.append(thread_id)
+        return self.forget_ok
+
 
 @pytest.fixture
 def fake(monkeypatch):
@@ -72,6 +81,8 @@ def fake(monkeypatch):
     monkeypatch.setattr(backend, "start_up", fb.start_up)
     monkeypatch.setattr(backend, "usage", fb.usage)
     monkeypatch.setattr(backend, "persistence", fb.persistence)
+    monkeypatch.setattr(backend, "read_history", fb.read_history)
+    monkeypatch.setattr(backend, "forget", fb.forget)
     yield fb
     st.cache_resource.clear()
 
