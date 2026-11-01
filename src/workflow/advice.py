@@ -18,6 +18,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from src.core.citations import apply_citations, strip_citations
 from src.core.models import Source
 from src.core.number_guard import collect_numbers, numbers_in
+from src.core.format_guard import mentions_data_format
 from src.core.output_guard import guard_answer
 from src.rag.retriever import RetrievedChunk, format_context, merge_retrieval, to_sources
 from src.utils.logger import get_logger
@@ -88,6 +89,9 @@ def educational_answer(
         text = str(getattr(reply, "content", reply)).strip()
     except Exception:
         log.warning("Educational answer failed; using the static text", exc_info=True)
+        return None
+    if mentions_data_format(text):
+        log.warning("Educational answer mentions the data format; using the static text")
         return None
     answer, cited = apply_citations(with_advice_opening(text, cfg), chunks)       # the opening is part of every check below
     allowed = collect_numbers([[c.text, c.title] for c in chunks] + [query])

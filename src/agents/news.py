@@ -24,6 +24,7 @@ from typing import Any
 
 from src.agents.base_agent import BaseAgent
 from src.core.citations import drop_invalid_citations, strip_citations
+from src.core.format_guard import format_warning, mentions_data_format
 from src.core.models import AgentResult, NewsPayload
 from src.core.news_query import resolve_query
 from src.core.number_guard import collect_numbers, numbers_in
@@ -64,6 +65,8 @@ class NewsAgent(BaseAgent):
             return fallback, [], messages["summary_unavailable"]
         if not text:
             return fallback, [], messages["summary_empty"]
+        if mentions_data_format(text):
+            return fallback, [], format_warning()
         text, cited = drop_invalid_citations(text, len(items))
         if not cited:
             return fallback, [], messages["summary_no_citation"]

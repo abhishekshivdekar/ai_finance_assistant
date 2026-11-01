@@ -15,6 +15,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.core.citations import CITATION, FACT_CITATION, drop_invalid_citations
+from src.core.format_guard import mentions_data_format
 from src.core.models import AgentResult, Source
 from src.core.number_guard import collect_numbers, numbers_in
 from src.core.output_guard import find_violation
@@ -96,6 +97,8 @@ def validate_merge(
     """
     text = text.strip()
     if not text or find_violation(text) or _norm(get_config()["app"]["disclaimer"]) in _norm(text):
+        return None
+    if mentions_data_format(text):                  # no exemption: even if an agent let it through, the merged text must not say it
         return None
     inputs = [body for _, body in sections]
     for pattern in workflow_cfg()["merge_banned_phrases"] if banned is None else banned:

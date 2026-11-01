@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage
 
 from src.agents import base_agent, market
 from src.agents.market import MarketAgent
+from src.core.format_guard import format_warning
 from src.core.models import MarketResult
 from src.core.usage_tracker import UsageTracker, get_usage_registry
 from src.data.market.provider import error_result
@@ -442,3 +443,10 @@ def test_a_name_that_is_not_found_lists_did_you_mean_suggestions_without_choosin
     agent, result = run(["Hindustan uniliver"], {"HUL.NS": history(RISING, "INR")}, quotes=quotes)
     assert result["status"] == "needs_input" and "Did you mean: HUL.NS (Hindustan Unilever Limited, NSE, INR)" in result["answer"]
     assert "HUL.NS" not in [call[0] for call in agent.provider.calls if call[1] == CFG["fetch_period"]]      # only a price check, nothing analysed
+
+
+def test_a_summary_that_mentions_the_data_format_is_replaced_by_the_fallback_text():
+    _, result = run(["AAA"], TWO, llm=FakeLLM(reply="The price is 100.00, and the JSON says it is above its 20-day average."))
+    assert result["status"] == "ok" and result["answer"] == CFG["summary_fallback"].strip() and format_warning() in result["data"]["warnings"]
+    _, clean = run(["AAA"], TWO, llm=FakeLLM(reply=SUMMARY))
+    assert clean["answer"] == SUMMARY and format_warning() not in clean["data"]["warnings"]

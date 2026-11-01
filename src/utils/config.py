@@ -293,6 +293,20 @@ def _validate_portfolio(portfolio: dict[str, Any], ui: Any) -> None:
                 raise ConfigError(f"ui.portfolio.{labels} needs a non-empty label for every choice in portfolio.")
 
 
+def _validate_output_guard(guard: dict[str, Any]) -> None:
+    """output_guard.format_patterns: a non-empty list of valid regexes; output_guard.format_warning: non-empty text."""
+    patterns = guard.get("format_patterns")
+    if not isinstance(patterns, list) or not patterns or not all(isinstance(p, str) and p.strip() for p in patterns):
+        raise ConfigError("output_guard.format_patterns must be a non-empty list of regexes.")
+    for pattern in patterns:
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ConfigError(f"output_guard.format_patterns has an invalid regex {pattern!r}: {exc}") from exc
+    if not str(guard.get("format_warning") or "").strip():
+        raise ConfigError("output_guard.format_warning must not be empty.")
+
+
 def _validate_ui(ui: Any) -> None:
     """Every key in UI_TEXT_KEYS must be a non-empty string, so a typo fails at load, not in the browser."""
     if not isinstance(ui, dict):
@@ -326,6 +340,9 @@ def _validate(cfg: dict[str, Any]) -> None:
     portfolio = cfg.get("portfolio")
     if portfolio is not None and "instrument_types" in portfolio:
         _validate_portfolio(portfolio, cfg.get("ui"))
+    guard = cfg.get("output_guard")
+    if guard is not None:
+        _validate_output_guard(guard)
     lookup = cfg.get("ticker_lookup")
     if lookup is not None:
         _validate_ticker_lookup(lookup, cfg["market_data"]["history_periods"])

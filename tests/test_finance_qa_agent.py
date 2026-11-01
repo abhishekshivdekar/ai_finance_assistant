@@ -319,3 +319,11 @@ def test_an_acronym_in_the_question_is_also_searched_in_plain_words():
     assert [q for q, _ in retrieve.calls] == [
         "What is LTCG?", "What is long-term capital gains tax?", "what is LTCG", "what is long-term capital gains tax"]
     assert result["status"] == "ok" and result["sources"]
+
+
+def test_an_answer_that_mentions_the_data_format_gives_the_fixed_no_answer_message():
+    agent, _ = make({STATE["query"]: [A]}, answer="A bond is a loan [1]. The JSON says it pays interest.")
+    result = agent.run(STATE)
+    assert result["status"] == "no_answer" and result["answer"] == get_config()["finance_qa"]["no_answer_message"].strip() and result["sources"] == []
+    ok, _ = make({STATE["query"]: [A]}, answer="A bond is a loan [1]. Analysts use data and inputs to a DCF.")
+    assert ok.run(STATE)["status"] == "ok"

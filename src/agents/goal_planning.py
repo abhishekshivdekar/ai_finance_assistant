@@ -24,6 +24,7 @@ import json
 from typing import Any
 
 from src.agents.base_agent import BaseAgent
+from src.core.format_guard import format_warning, mentions_data_format
 from src.core.goal_inputs import parse_goal_params
 from src.core.goal_metrics import below_inflation_text, build_plan, summary_input
 from src.core.goal_models import GoalPlan
@@ -87,6 +88,8 @@ class GoalPlanningAgent(BaseAgent):
             return fallback, warn["commentary_unavailable"]
         if not text:
             return fallback, warn["commentary_empty"]
+        if mentions_data_format(text):
+            return fallback, format_warning()
         allowed = collect_numbers({k: v for k, v in payload.items() if k != "assumptions"})
         invented = numbers_in(text) - allowed
         if invented:

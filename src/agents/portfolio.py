@@ -24,6 +24,7 @@ from typing import Any
 
 from src.agents.base_agent import BaseAgent
 from src.core.market_metrics import worst_source
+from src.core.format_guard import format_warning, mentions_data_format
 from src.core.models import AgentResult, PortfolioPayload
 from src.core.number_guard import collect_numbers, numbers_in
 from src.core.portfolio_metrics import build_metrics, summary_input
@@ -68,6 +69,8 @@ class PortfolioAgent(BaseAgent):
             return fallback, "The plain-language summary was unavailable, so a standard description is shown."
         if not text:
             return fallback, "The plain-language summary was empty, so a standard description is shown."
+        if mentions_data_format(text):
+            return fallback, format_warning()
         invented = numbers_in(text) - collect_numbers(payload)
         if invented:
             self.log.warning("Summary contains numbers not in the metrics: %s", sorted(invented))

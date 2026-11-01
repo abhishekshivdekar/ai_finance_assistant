@@ -179,7 +179,6 @@ workflow:                     # LangGraph router and nodes (architecture section
     zomato: ETERNAL.NS
     eternal: ETERNAL.NS
   merge_banned_phrases:       # regexes (case-insensitive): a merged text may not match one unless an input answer does
-    - '\bjson\b'
     - '\bthe answers\b'
     - '\bother assistants?\b'
     - '\bthe inputs?\b'
@@ -292,6 +291,13 @@ output_guard:
   safe_message: >
     I can explain how this works in general terms, but I can't give personal
     buy, sell or hold recommendations.
+  format_patterns:            # whole words (case-insensitive) that give away the internal data format; a summary that has one is replaced by the agent's fallback text, with no exemption for the input
+    - '\bjson\b'
+    - '\bpayload\b'
+    - '\bschema\b'
+  format_warning: >
+    The plain-language summary was discarded because it mentioned the internal data
+    format, so a standard description is shown.
 
 finance_qa:                   # Finance Q&A agent prompts and messages (architecture section 2.1)
   rewrite_max_chars: 120      # longer rewrites are cut at a word boundary (much longer = malformed, original is used)
@@ -377,6 +383,7 @@ portfolio:                    # Portfolio agent (architecture section 2.2). All 
       never say "you should".
     - If the JSON lists warnings (a missing price, or a stale or sample price),
       mention them briefly.
+    - Never mention JSON, the data format or that you were given data; write as if you simply know these facts.
 
     JSON:
     {metrics_json}
@@ -441,7 +448,7 @@ market_analysis:              # Market agent (architecture section 2.3). All val
       Each ticker is reported in its own currency.
     - Describe what the numbers show, using observation wording, for example "the
       price is below its short-term average" or "the price fell from its peak
-      during the period". Use the wording from the JSON for the averages and for
+      during the period". Use the wording given for the averages and for
       the 52-week range, with the numbers exactly as written there.
     - If a ticker has "period_covered", its return, volatility and drawdown cover
       only that shorter span, not the whole analysis period: say so, and do not
@@ -453,6 +460,7 @@ market_analysis:              # Market agent (architecture section 2.3). All val
       information, not personal advice.
     - If the JSON lists warnings (a missing price, stale or sample data, or a
       metric that was left out), mention them briefly.
+    - Never mention JSON, the data format or that you were given data; write as if you simply know these facts.
 
     JSON:
     {metrics_json}
@@ -574,6 +582,7 @@ goal_planning:                # Goal Planning agent (architecture section 2.4). 
       the scenario has a shortfall at the end of the horizon.
     - If a scenario has a below-inflation sentence, mention it briefly in plain words.
     - Do not repeat dates or numbers from the assumptions notes; refer to them in words.
+    - Never mention JSON, the data format or that you were given data; write as if you simply know these facts.
 
     JSON:
     {results_json}
@@ -633,6 +642,7 @@ news:                         # News agent and Google News RSS source (architect
       never say "you should".
     - Do not state any fact, name or number that is not in the headlines.
     - Cite only headline numbers that exist in the list.
+    - Never mention JSON, the data format or that you were given data; write as if you simply know these facts.
 
     Headlines (JSON):
     {headlines_json}
@@ -835,6 +845,7 @@ tax:                          # Tax Education agent (architecture section 2.6). 
     - Educational only: never tell the reader what to buy, sell or hold, and give no personal advice.
       Suggest a chartered accountant for their own situation.
     - Do not repeat dates or sources.
+    - Never mention JSON, the data format or that you were given data; write as if you simply know these facts.
 
     JSON:
     {results_json}

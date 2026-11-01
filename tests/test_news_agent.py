@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from src.core.format_guard import format_warning
+
 from src.agents import base_agent
 from src.agents import news as news_module
 from src.agents.news import NewsAgent
@@ -271,3 +273,9 @@ def test_the_default_provider_comes_from_the_factory(monkeypatch):
     sentinel = FakeProvider()
     monkeypatch.setattr(news_module, "get_market_provider", lambda: sentinel)
     assert NewsAgent(llm=FakeLLM()).provider is sentinel
+
+
+def test_a_summary_that_mentions_the_data_format_is_replaced_by_the_fallback_line():
+    _, _, result = run({"ticker": "AAPL"}, llm=FakeLLM("- Shares rose, the JSON says [1]."))
+    assert result["status"] == "ok" and result["answer"] == CFG["fallback_summary"].strip() and format_warning() in result["data"]["warnings"]
+    assert result["data"]["summary_citations"] == []

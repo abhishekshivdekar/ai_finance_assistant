@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage
 
 from src.agents import base_agent, portfolio
 from src.agents.portfolio import PortfolioAgent
+from src.core.format_guard import format_warning
 from src.core.models import MarketResult
 from src.core.usage_tracker import UsageTracker, get_usage_registry
 from src.data.market.provider import error_result
@@ -427,3 +428,8 @@ def test_a_replacement_without_a_price_is_reported_and_can_leave_nothing_to_anal
 
 def test_only_the_first_row_with_a_symbol_remembers_its_typed_text():
     assert PortfolioAgent._typed_symbols([None, {"ticker": " apple "}, {"ticker": "APPLE"}, {"ticker": "Suzlon Energy"}, {"quantity": 1}, 5]) == {"APPLE": "apple"}
+
+
+def test_a_summary_that_mentions_the_data_format_is_replaced_by_the_fallback_text():
+    _, result = run(TWO, PROVIDER_TWO, llm=FakeLLM(reply="The largest holding is 50.0%, according to the JSON."))
+    assert result["answer"] == PF["summary_fallback"].strip() and format_warning() in result["data"]["warnings"]

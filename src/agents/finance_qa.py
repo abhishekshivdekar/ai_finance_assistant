@@ -22,6 +22,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.base_agent import BaseAgent
 from src.core.citations import apply_citations
+from src.core.format_guard import format_warning, mentions_data_format
 from src.core.llm_factory import get_llm
 from src.core.models import AgentResult, QAPayload
 from src.rag.retriever import (
@@ -125,6 +126,8 @@ class FinanceQAAgent(BaseAgent):
             self.log.info("Model replied %s", cfg["no_answer_sentinel"])
             return no_answer
 
+        if mentions_data_format(text):
+            return no_answer
         answer, cited = apply_citations(text, chunks)
         if not cited:
             self.log.warning("Answer has no valid citation; returning it with no sources")

@@ -2,6 +2,8 @@ import json
 
 import pytest
 
+from src.core.format_guard import format_warning
+
 from src.agents import base_agent
 from src.agents import tax as tax_module
 from src.agents.tax import TaxAgent
@@ -471,3 +473,13 @@ def test_a_lakh_style_display_goes_to_the_commentary_as_given_and_repeating_it_i
     assert f'"equity_ltcg_exemption": "{shown}"' in llm.calls[0]                  # sent exactly as in config
     assert "(no \"lakh\"" not in llm.calls[0] and "no lakh" not in llm.calls[0].lower()
     assert result["data"]["warnings"] == [] and shown in result["answer"]          # the guard accepts the repeated display text
+
+
+def test_a_commentary_that_mentions_the_data_format_is_replaced_by_the_fallback_text():
+    _, result = calc(EQUITY, reply="This is an illustrative result and the JSON says tax is due.")
+    assert result["answer"].startswith(" ".join(CFG["fallback_commentary"].split())) and format_warning() in result["data"]["warnings"]
+
+
+def test_a_question_answer_that_mentions_the_data_format_is_discarded():
+    _, _, result = ask("Equity gains are taxed at a rate [1], as the payload says.")
+    assert result["status"] == "no_answer" and result["answer"] == " ".join(CFG["discarded_message"].split())

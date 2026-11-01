@@ -2,6 +2,8 @@ import json
 
 import pytest
 
+from src.core.format_guard import format_warning
+
 from src.agents import base_agent
 from src.agents.goal_planning import GoalPlanningAgent
 from src.core.goal_inputs import parse_goal_params
@@ -282,3 +284,8 @@ def test_warning_sentences_come_from_the_config():
     assert run(llm=FakeLLM(error=RuntimeError("down")))[1]["data"]["warnings"] == [texts["commentary_unavailable"]]
     assert run(llm=FakeLLM(reply="  "))[1]["data"]["warnings"] == [texts["commentary_empty"]]
     assert run(llm=FakeLLM(reply="It is 4242."))[1]["data"]["warnings"] == [texts["commentary_discarded"]]
+
+
+def test_a_commentary_that_mentions_the_data_format_is_replaced_by_the_fallback_text():
+    _, result = run(llm=FakeLLM(reply="These are illustrative assumptions, and the JSON says the goal is reached."))
+    assert result["answer"] == CFG["summary_fallback"].strip() and format_warning() in result["data"]["warnings"]

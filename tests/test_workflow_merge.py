@@ -159,14 +159,13 @@ def test_must_keep_lists_payload_texts_that_the_agent_answer_contains():
 
 # One merged text per banned phrase (workflow.merge_banned_phrases); each is rejected unless an input answer has the phrase too.
 BANNED_TEXTS = {
-    "json": "Here is the JSON: a bond is a loan [1].",
     "the answers": "Combining the answers: a bond is a loan [1].",
     "other assistants": "Other assistants said a bond is a loan [1].",
     "the inputs": "Using the inputs, a bond is a loan [1].",
 }
 
 
-def test_the_banned_phrase_list_in_the_config_starts_with_the_four_known_leaks():
+def test_the_banned_phrase_list_in_the_config_has_the_known_leaks_except_the_data_format_words():
     patterns = WF["merge_banned_phrases"]
     assert len(patterns) == len(BANNED_TEXTS)
     for (name, text), pattern in zip(BANNED_TEXTS.items(), patterns):
@@ -506,3 +505,28 @@ def test_the_disclaimer_appears_exactly_once_in_every_final_node(name):
     graph = build_graph(Classify(intents), fakes, synthesizer_llm=llm, safe_response_llm=llm, retrieve_fn=Retrieve([chunk(1)]))
     _, state = run(graph)
     assert state["final_answer"].count(DISCLAIMER) == 1 and state["final_answer"].endswith(DISCLAIMER)
+
+
+# The data-format words (output_guard.format_patterns) are rejected with no exemption, even when an input answer has them.
+@pytest.mark.parametrize("text", ["Here is the JSON: a bond is a loan [1].", "The payload says a bond is a loan [1].", "By the schema, a bond is a loan [1]."])
+def test_a_merged_text_that_mentions_the_data_format_is_rejected_even_if_an_input_does_too(text):
+    assert validate_merge(text, [("Concepts", "A bond is a loan [1].")], 1, []) is None
+    assert validate_merge(text, [("Concepts", text)], 1, []) is None
+    assert validate_merge(text.upper(), [("Concepts", text)], 1, []) is None
+
+
+def test_a_merge_of_ordinary_data_and_input_wording_is_accepted():
+    body = "Analysts gather data and use inputs to a DCF model to value a bond [1]."
+    assert validate_merge(body, [("Concepts", body)], 1, []) == body
+
+
+def test_an_llm_merge_that_says_json_falls_back_to_the_verbatim_join_even_if_an_agent_said_it():
+    leaky = result("market", "The price is 190.5 and the JSON says it is high.")
+    llm = FakeLLM("The price is 190.5 and the JSON says it is high. A bond is a loan [1][2].")
+    text, _, mode = merge_with_llm([QA, leaky], llm)
+    assert mode == "verbatim" and "A bond is a loan" in text
+
+
+def test_an_educational_answer_that_mentions_the_data_format_gives_the_static_text():
+    state = {"query": "Should I sell?", "intents": ["specific_advice"]}
+    assert educational_answer(state, FakeLLM("People weigh risk [1]. The JSON says a 5 year horizon is common [1]."), Retrieve([chunk(1)])) is None

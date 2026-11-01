@@ -32,6 +32,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.base_agent import BaseAgent
 from src.core.citations import apply_citations, drop_invalid_fact_citations, strip_citations, strip_fact_citations
+from src.core.format_guard import format_warning, mentions_data_format
 from src.core.models import AgentResult, TaxPayload
 from src.core.number_guard import collect_numbers, numbers_in
 from src.core.tax_inputs import CALCULATIONS, parse_capital_gains, parse_small_savings
@@ -105,6 +106,8 @@ class TaxAgent(BaseAgent):
         if not fact_cited and not cited_chunks:
             self.log.warning("Answer cites no chunk or fact; discarding it")
             return discarded
+        if mentions_data_format(answer):
+            return discarded
         allowed = collect_numbers([[c.text, c.title] for c in chunks] + [[f["display"] for f in facts], question])
         bare = strip_fact_citations(strip_citations(answer))
         invented = numbers_in(bare) - allowed
@@ -142,6 +145,8 @@ class TaxAgent(BaseAgent):
             return fallback, warn["commentary_unavailable"]
         if not text:
             return fallback, warn["commentary_empty"]
+        if mentions_data_format(text):
+            return fallback, format_warning()
         allowed = collect_numbers({k: payload[k] for k in ("inputs", "results", "rates")})
         invented = numbers_in(text) - allowed
         if invented:
