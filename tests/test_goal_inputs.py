@@ -2,6 +2,7 @@ import copy
 
 import pytest
 
+from src.core.field_labels import field_label
 from src.core.goal_inputs import parse_goal_params
 from src.utils.config import get_config
 
@@ -44,27 +45,27 @@ def test_a_whole_number_float_horizon_is_accepted():
 
 
 @pytest.mark.parametrize("changes, text", [
-    ({"goal_amount": 0}, "goal_amount must be greater than zero"),
-    ({"goal_amount": -5}, "goal_amount must be greater than zero"),
-    ({"goal_amount": None}, "goal_amount must be a number"),
-    ({"goal_amount": "lots"}, "goal_amount must be a number"),
-    ({"goal_amount": True}, "goal_amount must be a number"),
-    ({"goal_amount": float("nan")}, "goal_amount must be a number"),
-    ({"goal_amount": float("inf")}, "goal_amount must be a number"),
+    ({"goal_amount": 0}, "Goal amount must be greater than zero"),
+    ({"goal_amount": -5}, "Goal amount must be greater than zero"),
+    ({"goal_amount": None}, "Goal amount must be a number"),
+    ({"goal_amount": "lots"}, "Goal amount must be a number"),
+    ({"goal_amount": True}, "Goal amount must be a number"),
+    ({"goal_amount": float("nan")}, "Goal amount must be a number"),
+    ({"goal_amount": float("inf")}, "Goal amount must be a number"),
     ({"goal_amount": 10 ** 13}, "too large"),
-    ({"current_savings": -1}, "current_savings cannot be negative"),
-    ({"monthly_contribution": -1}, "monthly_contribution cannot be negative"),
-    ({"monthly_contribution": "x"}, "monthly_contribution must be a number"),
+    ({"current_savings": -1}, "Current savings cannot be negative"),
+    ({"monthly_contribution": -1}, "Monthly saving cannot be negative"),
+    ({"monthly_contribution": "x"}, "Monthly saving must be a number"),
     ({"horizon_years": 0}, "between 1 and 40"),
     ({"horizon_years": 41}, "between 1 and 40"),
     ({"horizon_years": 2.5}, "whole number of years"),
-    ({"horizon_years": None}, "horizon_years must be a number"),
-    ({"horizon_years": True}, "horizon_years must be a number"),
+    ({"horizon_years": None}, "Time horizon (years) must be a number"),
+    ({"horizon_years": True}, "Time horizon (years) must be a number"),
     ({"risk_profile": "wild"}, "one of: low, medium, high"),
     ({"risk_profile": None}, "one of: low, medium, high"),
     ({"annual_step_up_pct": -1}, "between 0 and 15 percent"),
     ({"annual_step_up_pct": 16}, "between 0 and 15 percent"),
-    ({"inflation_adjust": "yes"}, "true or false"),
+    ({"inflation_adjust": "yes"}, "must be on or off"),
 ])
 def test_invalid_values_give_a_clear_message(changes, text):
     inputs, errors = parse(**changes)
@@ -105,7 +106,7 @@ def test_huge_numbers_give_needs_input_not_an_overflow(field, text, value):
 @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
 def test_inf_and_nan_are_not_numbers(field, value):
     inputs, errors = parse(**{field: value})
-    assert inputs is None and any(f"{field} must be a number" in e for e in errors)
+    assert inputs is None and any(f"{field_label(field)} must be a number" in e for e in errors)
 
 
 @pytest.mark.parametrize("field, text", [
@@ -124,7 +125,7 @@ def test_hugely_negative_ints_are_reported_not_raised(field, text):
 @pytest.mark.parametrize("field", ["goal_amount", "horizon_years", "current_savings", "monthly_contribution", "annual_step_up_pct"])
 def test_booleans_are_not_numbers_for_any_numeric_field(field, flag):
     inputs, errors = parse_goal_params({**GOOD, field: flag}, CFG)
-    assert inputs is None and any(f"{field} must be a number" in e for e in errors)
+    assert inputs is None and any(f"{field_label(field)} must be a number" in e for e in errors)
 
 
 def test_is_number_rejects_bools_and_non_finite_values_and_accepts_huge_ints():

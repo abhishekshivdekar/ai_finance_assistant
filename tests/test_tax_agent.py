@@ -280,7 +280,7 @@ def test_numbers_from_the_inputs_results_and_rates_are_allowed_in_the_commentary
 def test_an_unknown_calculation_is_needs_input_listing_the_choices(params):
     llm, result = calc(params)
     assert result["status"] == "needs_input" and llm.calls == []
-    assert "capital_gains, small_savings_growth" in result["answer"] and result["data"]["warnings"]
+    assert "capital gains, small-savings growth" in result["answer"] and result["data"]["warnings"]
     assert result["data"]["label"] == CFG["label"] and result["data"]["exclusions"] == []
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from src.core.field_labels import choice_list, field_label
 from src.core.goal_models import GoalInputs
 
 
@@ -42,11 +43,11 @@ def _number(params: dict[str, Any], key: str, cfg: dict[str, Any], errors: list[
     if value is None and default is not None:
         return default
     if not _is_number(value):
-        errors.append(msgs["not_a_number"].format(field=key))
+        errors.append(msgs["not_a_number"].format(field=field_label(key)))
         return None
     limit = cfg["max_amount"] if limit is None else limit
     if value > limit:
-        errors.append(msgs[over_key].format(field=key, limit=f"{limit:,}"))
+        errors.append(msgs[over_key].format(field=field_label(key), limit=f"{limit:,}"))
         return None
     return float(max(value, -limit))
 
@@ -59,17 +60,17 @@ def parse_goal_params(params: Any, cfg: dict[str, Any]) -> tuple[GoalInputs | No
 
     goal = _number(params, "goal_amount", cfg, errors)
     if goal is not None and goal <= 0:
-        errors.append(msgs["must_be_positive"].format(field="goal_amount"))
+        errors.append(msgs["must_be_positive"].format(field=field_label("goal_amount")))
     savings = _number(params, "current_savings", cfg, errors, default=0.0)
     contribution = _number(params, "monthly_contribution", cfg, errors, default=0.0)
     for key, value in (("current_savings", savings), ("monthly_contribution", contribution)):
         if value is not None and value < 0:
-            errors.append(msgs["must_not_be_negative"].format(field=key))
+            errors.append(msgs["must_not_be_negative"].format(field=field_label(key)))
 
     years = params.get("horizon_years")
     low, high = cfg["min_horizon_years"], cfg["max_horizon_years"]
     if not _is_number(years):
-        errors.append(msgs["not_a_number"].format(field="horizon_years"))
+        errors.append(msgs["not_a_number"].format(field=field_label("horizon_years")))
         years = None
     elif years != int(years):
         errors.append(msgs["horizon_whole"])
@@ -80,7 +81,7 @@ def parse_goal_params(params: Any, cfg: dict[str, Any]) -> tuple[GoalInputs | No
 
     profile = params.get("risk_profile")
     if profile not in cfg["risk_profiles"]:
-        errors.append(msgs["risk_profile"].format(options=", ".join(cfg["risk_profiles"])))
+        errors.append(msgs["risk_profile"].format(options=choice_list(cfg["risk_profiles"])))
 
     step_up = _number(params, "annual_step_up_pct", cfg, errors, default=0.0,
                       limit=cfg["max_step_up_pct"], over_key="step_up_range")

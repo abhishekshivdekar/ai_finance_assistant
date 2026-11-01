@@ -32,6 +32,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.base_agent import BaseAgent
 from src.core.citations import apply_citations, drop_invalid_fact_citations, strip_citations, strip_fact_citations
+from src.core.field_labels import choice_list
 from src.core.format_guard import format_warning, mentions_data_format
 from src.core.models import AgentResult, TaxPayload
 from src.core.number_guard import collect_numbers, numbers_in
@@ -163,7 +164,7 @@ class TaxAgent(BaseAgent):
         elif name == "small_savings_growth":
             payload["exclusions"] = exclusions_for("small_savings", cfg)
         if name not in CALCULATIONS:
-            errors = [cfg["errors"]["unknown_calculation"].format(choices=", ".join(CALCULATIONS))]
+            errors = [cfg["errors"]["unknown_calculation"].format(choices=choice_list(CALCULATIONS))]
             inputs = None
         elif name == "capital_gains":
             inputs, errors = parse_capital_gains(params, cfg)

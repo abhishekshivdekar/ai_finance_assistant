@@ -251,7 +251,7 @@ def _validate_workflow(wf: dict[str, Any]) -> None:
 
 UI_TEXT_KEYS = (
     "page_title", "app_title", "app_tagline", "tabs.chat", "tabs.market", "tabs.news",
-    "tabs.portfolio", "portfolio.intro", "portfolio.submit", "portfolio.working", "portfolio.rows_required", "portfolio.query_template", "portfolio.allocation_heading", "portfolio.metrics_heading", "portfolio.positions_heading", "portfolio.currency_heading", "portfolio.not_available", "portfolio.largest_value", "portfolio.diversification_value", "portfolio.expense_value", "portfolio.allocation_title", "portfolio.columns.ticker", "portfolio.columns.quantity", "portfolio.columns.avg_cost", "portfolio.columns.instrument_type", "portfolio.columns.asset_class", "portfolio.columns.expense_ratio_pct", "portfolio.column_help.ticker", "portfolio.column_help.quantity", "portfolio.column_help.avg_cost", "portfolio.column_help.instrument_type", "portfolio.column_help.asset_class", "portfolio.column_help.expense_ratio_pct", "portfolio.metrics.total_value", "portfolio.metrics.position_count", "portfolio.metrics.largest", "portfolio.metrics.top3", "portfolio.metrics.diversification", "portfolio.metrics.risk", "portfolio.metrics.equity_share", "portfolio.metrics.expense_ratio", "portfolio.positions.ticker", "portfolio.positions.instrument_type", "portfolio.positions.asset_class", "portfolio.positions.quantity", "portfolio.positions.avg_cost", "portfolio.positions.price", "portfolio.positions.value", "portfolio.positions.weight", "portfolio.positions.pnl", "portfolio.positions.pnl_pct",
+    "tabs.portfolio", "tabs.goals", "portfolio.intro", "portfolio.submit", "portfolio.working", "portfolio.rows_required", "portfolio.query_template", "portfolio.allocation_heading", "portfolio.metrics_heading", "portfolio.positions_heading", "portfolio.currency_heading", "portfolio.not_available", "portfolio.largest_value", "portfolio.diversification_value", "portfolio.expense_value", "portfolio.allocation_title", "portfolio.columns.ticker", "portfolio.columns.quantity", "portfolio.columns.avg_cost", "portfolio.columns.instrument_type", "portfolio.columns.asset_class", "portfolio.columns.expense_ratio_pct", "portfolio.column_help.ticker", "portfolio.column_help.quantity", "portfolio.column_help.avg_cost", "portfolio.column_help.instrument_type", "portfolio.column_help.asset_class", "portfolio.column_help.expense_ratio_pct", "portfolio.metrics.total_value", "portfolio.metrics.position_count", "portfolio.metrics.largest", "portfolio.metrics.top3", "portfolio.metrics.diversification", "portfolio.metrics.risk", "portfolio.metrics.equity_share", "portfolio.metrics.expense_ratio", "portfolio.positions.ticker", "portfolio.positions.instrument_type", "portfolio.positions.asset_class", "portfolio.positions.quantity", "portfolio.positions.avg_cost", "portfolio.positions.price", "portfolio.positions.value", "portfolio.positions.weight", "portfolio.positions.pnl", "portfolio.positions.pnl_pct",
     "freshness.with_time", "freshness.no_time",
     "market.intro", "market.tickers_label", "market.tickers_placeholder", "market.tickers_help", "market.period_label",
     "market.submit", "market.working", "market.tickers_required", "market.query_template", "market.chart_heading",
@@ -307,6 +307,35 @@ def _validate_output_guard(guard: dict[str, Any]) -> None:
         raise ConfigError("output_guard.format_warning must not be empty.")
 
 
+GOAL_FIELD_KEYS = ("goal_amount", "horizon_years", "current_savings", "monthly_contribution", "risk_profile", "annual_step_up_pct", "inflation_adjust")
+TAX_FIELD_KEYS = (
+    "asset_type", "buy_value", "sell_value", "expenses", "ltcg_exemption_already_used", "holding_months", "slab_rate_pct",
+    "scheme", "mode", "amount", "years", "calculation",
+)
+SNAKE_CASE = re.compile(r"\b[a-z]+(?:_[a-z0-9]+)+\b")
+
+
+def _validate_labels(cfg: dict[str, Any]) -> None:
+    """field_labels: a readable label (no snake_case) for every input key the checks report; choice_labels: one for every option shown."""
+    fields, choices = cfg.get("field_labels"), cfg.get("choice_labels")
+    if not isinstance(fields, dict) or not isinstance(choices, dict):
+        raise ConfigError("field_labels and choice_labels must be mappings of key to label.")
+    for name, table in (("field_labels", fields), ("choice_labels", choices)):
+        for key, label in table.items():
+            if not isinstance(label, str) or not label.strip() or SNAKE_CASE.search(label):
+                raise ConfigError(f"{name}.{key} must be a readable label without snake_case words.")
+    missing = [key for key in (*GOAL_FIELD_KEYS, *TAX_FIELD_KEYS, "max_items") if key not in fields]
+    if missing:
+        raise ConfigError(f"field_labels is missing: {', '.join(missing)}.")
+    options = [
+        *(cfg.get("goal_planning", {}).get("risk_profiles") or []), *(cfg.get("tax", {}).get("asset_types") or []),
+        *(cfg.get("tax", {}).get("schemes") or {}), "capital_gains", "small_savings_growth", "annual", "one_time",
+    ]
+    absent = [option for option in options if option not in choices]
+    if absent:
+        raise ConfigError(f"choice_labels is missing: {', '.join(absent)}.")
+
+
 def _validate_ui(ui: Any) -> None:
     """Every key in UI_TEXT_KEYS must be a non-empty string, so a typo fails at load, not in the browser."""
     if not isinstance(ui, dict):
@@ -340,6 +369,8 @@ def _validate(cfg: dict[str, Any]) -> None:
     portfolio = cfg.get("portfolio")
     if portfolio is not None and "instrument_types" in portfolio:
         _validate_portfolio(portfolio, cfg.get("ui"))
+    if "field_labels" in cfg or "choice_labels" in cfg:
+        _validate_labels(cfg)
     guard = cfg.get("output_guard")
     if guard is not None:
         _validate_output_guard(guard)

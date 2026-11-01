@@ -100,6 +100,9 @@ class GoalPlanningAgent(BaseAgent):
     def _execute(self, state: GraphState) -> AgentResult:
         """Validate the request, compute the plan, then write the commentary."""
         cfg = get_config()["goal_planning"]
+        if state.get("goal_params") is None:                       # no form was sent (a Chat question): point to the Goals tab
+            tab = get_config()["ui"]["tabs"]["goals"]
+            return self._result("needs_input", cfg["no_params_message"].format(tab=tab), {"warnings": []})
         inputs, errors = parse_goal_params(state.get("goal_params"), cfg)
         if inputs is None:
             message = "\n".join([cfg["needs_input_message"].strip(), *[f"- {e}" for e in errors]])

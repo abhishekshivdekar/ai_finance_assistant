@@ -1,5 +1,6 @@
 import pytest
 
+from src.core.field_labels import choice_list, field_label
 from src.core.tax_inputs import parse_capital_gains, parse_small_savings, slab_rate_needed
 from tax_cfg import tax_cfg
 
@@ -27,33 +28,33 @@ def test_optional_fields_default_to_zero():
 def test_every_problem_is_reported_at_once():
     inputs, errors = parse_capital_gains({"asset_type": "gold", "buy_value": -1, "sell_value": "x", "holding_months": 1.5}, CFG)
     assert inputs is None and len(errors) == 4
-    assert ERR["unknown_choice"].format(field="asset_type", choices=", ".join(CFG["asset_types"])) in errors
-    assert ERR["must_not_be_negative"].format(field="buy_value") in errors
-    assert ERR["not_a_number"].format(field="sell_value") in errors
-    assert ERR["whole_number"].format(field="holding_months") in errors
+    assert ERR["unknown_choice"].format(field=field_label("asset_type"), choices=choice_list(CFG["asset_types"])) in errors
+    assert ERR["must_not_be_negative"].format(field=field_label("buy_value")) in errors
+    assert ERR["not_a_number"].format(field=field_label("sell_value")) in errors
+    assert ERR["whole_number"].format(field=field_label("holding_months")) in errors
 
 
 @pytest.mark.parametrize("bad", [None, "10", True, float("inf"), float("nan"), [1]])
 def test_non_numbers_are_rejected_for_amounts(bad):
     inputs, errors = cg(buy_value=bad)
-    assert inputs is None and errors == [ERR["not_a_number"].format(field="buy_value")]
+    assert inputs is None and errors == [ERR["not_a_number"].format(field=field_label("buy_value"))]
 
 
 def test_huge_and_tiny_numbers_do_not_crash():
     limit = CFG["input_limits"]["max_amount"]
     for value in (10**400, limit + 1):
         inputs, errors = cg(sell_value=value)
-        assert inputs is None and errors == [ERR["too_large"].format(field="sell_value", limit=f"{limit:,}")]
+        assert inputs is None and errors == [ERR["too_large"].format(field=field_label("sell_value"), limit=f"{limit:,}")]
     inputs, errors = cg(buy_value=-(10**400))
-    assert inputs is None and errors == [ERR["must_not_be_negative"].format(field="buy_value")]
+    assert inputs is None and errors == [ERR["must_not_be_negative"].format(field=field_label("buy_value"))]
     assert cg(sell_value=limit)[1] == []
 
 
 def test_holding_months_limits():
     limit = CFG["input_limits"]["max_months"]
     assert cg(holding_months=0)[1] == [] and cg(holding_months=float(limit))[1] == [] and cg(holding_months=limit + 1)[1]
-    assert cg(holding_months=-1)[1] == [ERR["must_not_be_negative"].format(field="holding_months")]
-    assert cg(holding_months=10**400)[1] == [ERR["too_large"].format(field="holding_months", limit=f"{limit:,}")]
+    assert cg(holding_months=-1)[1] == [ERR["must_not_be_negative"].format(field=field_label("holding_months"))]
+    assert cg(holding_months=10**400)[1] == [ERR["too_large"].format(field=field_label("holding_months"), limit=f"{limit:,}")]
 
 
 def test_slab_rate_needed_for_debt_funds_and_short_term_other_assets_only():
@@ -75,9 +76,9 @@ def test_short_term_other_asset_without_a_slab_rate_is_needs_input():
 def test_slab_rate_is_checked_and_kept_when_given():
     assert cg(asset_type="debt_fund_post_2023", slab_rate_pct=30)[0].slab_rate_pct == 30.0
     limit = CFG["input_limits"]["max_pct"]
-    assert cg(asset_type="debt_fund_post_2023", slab_rate_pct=limit + 1)[1] == [ERR["too_large"].format(field="slab_rate_pct", limit=f"{limit:,}")]
-    assert cg(asset_type="debt_fund_post_2023", slab_rate_pct=-5)[1] == [ERR["must_not_be_negative"].format(field="slab_rate_pct")]
-    assert cg(asset_type="debt_fund_post_2023", slab_rate_pct="30")[1] == [ERR["not_a_number"].format(field="slab_rate_pct")]
+    assert cg(asset_type="debt_fund_post_2023", slab_rate_pct=limit + 1)[1] == [ERR["too_large"].format(field=field_label("slab_rate_pct"), limit=f"{limit:,}")]
+    assert cg(asset_type="debt_fund_post_2023", slab_rate_pct=-5)[1] == [ERR["must_not_be_negative"].format(field=field_label("slab_rate_pct"))]
+    assert cg(asset_type="debt_fund_post_2023", slab_rate_pct="30")[1] == [ERR["not_a_number"].format(field=field_label("slab_rate_pct"))]
 
 
 def test_a_slab_rate_is_ignored_where_it_is_not_needed():
@@ -97,25 +98,25 @@ def test_valid_small_savings_request():
 def test_small_savings_problems_are_all_reported():
     inputs, errors = parse_small_savings({"scheme": "fd", "mode": "monthly", "amount": 0, "years": 0}, CFG)
     assert inputs is None and len(errors) == 4
-    assert ERR["unknown_choice"].format(field="scheme", choices="ppf, nsc, ssy") in errors
-    assert ERR["unknown_choice"].format(field="mode", choices="annual, one_time") in errors
-    assert ERR["must_be_positive"].format(field="amount") in errors
-    assert ERR["must_be_positive"].format(field="years") in errors
+    assert ERR["unknown_choice"].format(field=field_label("scheme"), choices="PPF, NSC, SSY") in errors
+    assert ERR["unknown_choice"].format(field=field_label("mode"), choices="yearly deposits, one-time deposit") in errors
+    assert ERR["must_be_positive"].format(field=field_label("amount")) in errors
+    assert ERR["must_be_positive"].format(field=field_label("years")) in errors
 
 
 @pytest.mark.parametrize("years", [51, 10**400, 2.5, None, -3])
 def test_small_savings_years_are_limited(years):
     inputs, errors = parse_small_savings({**SAVINGS, "years": years}, CFG)
     assert inputs is None and len(errors) == 1
-    assert errors[0].startswith("years")
+    assert errors[0].startswith("Years")
 
 
 def test_small_savings_amount_must_be_a_positive_number_within_the_limit():
     limit = CFG["input_limits"]["max_amount"]
     assert parse_small_savings({**SAVINGS, "amount": limit}, CFG)[1] == []
     assert parse_small_savings({**SAVINGS, "amount": limit + 1}, CFG)[1]
-    assert parse_small_savings({**SAVINGS, "amount": float("nan")}, CFG)[1] == [ERR["not_a_number"].format(field="amount")]
-    assert parse_small_savings({**SAVINGS, "amount": -1}, CFG)[1] == [ERR["must_be_positive"].format(field="amount")]
+    assert parse_small_savings({**SAVINGS, "amount": float("nan")}, CFG)[1] == [ERR["not_a_number"].format(field=field_label("amount"))]
+    assert parse_small_savings({**SAVINGS, "amount": -1}, CFG)[1] == [ERR["must_be_positive"].format(field=field_label("amount"))]
 
 
 @pytest.mark.parametrize("asset, months", [("debt_fund_post_2023", 100), ("other", 3)])
@@ -131,11 +132,11 @@ def test_a_loss_or_zero_gain_on_a_slab_taxed_asset_needs_no_slab_rate(asset, mon
 @pytest.mark.parametrize("flag", [True, False])
 def test_booleans_are_not_numbers_in_the_capital_gains_request(field, flag):
     inputs, errors = cg(**{"asset_type": "debt_fund_post_2023", "slab_rate_pct": 30, field: flag})
-    assert inputs is None and errors == [ERR["not_a_number"].format(field=field)]
+    assert inputs is None and errors == [ERR["not_a_number"].format(field=field_label(field))]
 
 
 @pytest.mark.parametrize("field", ["amount", "years"])
 @pytest.mark.parametrize("flag", [True, False])
 def test_booleans_are_not_numbers_in_the_savings_request(field, flag):
     inputs, errors = parse_small_savings({**SAVINGS, field: flag}, CFG)
-    assert inputs is None and errors == [ERR["not_a_number"].format(field=field)]
+    assert inputs is None and errors == [ERR["not_a_number"].format(field=field_label(field))]

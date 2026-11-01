@@ -231,7 +231,7 @@ def test_the_fallback_text_contains_no_numbers_and_the_disclaimer_words():
 
 @pytest.mark.parametrize("changes, text", [
     ({"risk_profile": "wild"}, "one of: low, medium, high"),
-    ({"goal_amount": -1}, "goal_amount must be greater than zero"),
+    ({"goal_amount": -1}, "Goal amount must be greater than zero"),
     ({"horizon_years": 99}, "between 1 and 40 years"),
 ])
 def test_invalid_input_needs_input_and_the_llm_is_not_called(changes, text):
@@ -244,6 +244,21 @@ def test_invalid_input_needs_input_and_the_llm_is_not_called(changes, text):
 def test_missing_goal_params_need_input():
     agent = GoalPlanningAgent(llm=FakeLLM())
     assert agent.run({"turn_id": "t1"})["status"] == "needs_input"
+
+
+def test_a_chat_question_without_a_form_points_to_the_goals_tab_and_names_no_field_key():
+    llm = FakeLLM()
+    result = GoalPlanningAgent(llm=llm).run({"turn_id": "t1", "query": "I want 10 lakh in 5 years"})
+    tab = get_config()["ui"]["tabs"]["goals"]
+    assert result["status"] == "needs_input" and result["answer"] == CFG["no_params_message"].format(tab=tab)
+    assert f"{tab} tab" in result["answer"] and "_" not in result["answer"] and llm.calls == []
+    assert result["data"]["warnings"] == []
+
+
+def test_an_empty_form_is_checked_field_by_field_with_labels_not_keys():
+    result = GoalPlanningAgent(llm=FakeLLM()).run({"turn_id": "t1", "goal_params": {}})
+    assert result["status"] == "needs_input" and "Goal amount must be a number." in result["answer"]
+    assert "Time horizon (years) must be a number." in result["answer"] and "_" not in result["answer"]
 
 
 # ---- huge numbers through the agent ----

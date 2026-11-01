@@ -465,6 +465,44 @@ market_analysis:              # Market agent (architecture section 2.3). All val
     JSON:
     {metrics_json}
 
+field_labels:                 # input key -> the words a user sees in messages (never the snake_case key); sentence case, used at the start of a sentence
+  goal_amount: Goal amount
+  horizon_years: Time horizon (years)
+  current_savings: Current savings
+  monthly_contribution: Monthly saving
+  risk_profile: Risk profile
+  annual_step_up_pct: Yearly step-up (%)
+  inflation_adjust: Inflation option
+  asset_type: Asset type
+  buy_value: Purchase value
+  sell_value: Sale value
+  expenses: Expenses
+  ltcg_exemption_already_used: Long-term gains exemption already used
+  holding_months: Holding period (months)
+  slab_rate_pct: Income tax slab rate (%)
+  scheme: Scheme
+  mode: Deposit type
+  amount: Amount
+  years: Years
+  calculation: Calculation
+  max_items: Number of headlines
+choice_labels:                # option value -> the words a user sees when a list of options is shown
+  low: low
+  medium: medium
+  high: high
+  capital_gains: capital gains
+  small_savings_growth: small-savings growth
+  annual: yearly deposits
+  one_time: one-time deposit
+  ppf: PPF
+  nsc: NSC
+  ssy: SSY
+  listed_equity: listed shares
+  equity_fund: equity fund
+  property_or_unlisted: property or unlisted shares
+  other: other asset
+  debt_fund_post_2023: debt fund bought after March 2023
+
 goal_planning:                # Goal Planning agent (architecture section 2.4). All values are ILLUSTRATIVE, not predictions.
   currency: INR               # amounts are never converted
   inflation_adjust_default: true   # goal_params["inflation_adjust"] overrides it
@@ -535,8 +573,9 @@ goal_planning:                # Goal Planning agent (architecture section 2.4). 
     horizon_range: "The horizon must be between {low} and {high} years."
     risk_profile: "The risk profile must be one of: {options}."
     step_up_range: "The yearly step-up must be between 0 and {limit} percent."
-    inflation_flag: "inflation_adjust must be true or false."
+    inflation_flag: "The inflation option must be on or off."
   needs_input_message: "Please check the goal details before I can plan:"
+  no_params_message: "To plan a savings goal I need a few details (goal amount, time horizon, savings and risk profile). Please open the {tab} tab and fill in the form there."
   not_reached_note: "Not reached within {months} months at the current contribution."
   already_met_note: "The goal is already met by the current savings."
   below_inflation_months_note: "Months show the first month the balance covers the then-current goal price; with a return below inflation it can fall below that price again later."
@@ -619,7 +658,7 @@ news:                         # News agent and Google News RSS source (architect
     summary_unavailable: The headline summary was unavailable, so a standard line is shown.
     summary_empty: The headline summary was empty, so a standard line is shown.
     summary_no_citation: The headline summary cited no headline, so a standard line is shown.
-    max_items_ignored: "max_items must be a whole number, so the default of {default} headlines was used."
+    max_items_ignored: "The number of headlines must be a whole number, so the default of {default} headlines was used."
     summary_discarded: The headline summary was discarded because it contained numbers that are not in the headlines.
   fallback_summary: >
     These are the latest headlines found for your search. Read them directly
@@ -773,8 +812,8 @@ tax:                          # Tax Education agent (architecture section 2.6). 
     too_large: "{field} must not be more than {limit}."
     whole_number: "{field} must be a whole number."
     unknown_choice: "{field} must be one of: {choices}."
-    slab_rate_needed: "slab_rate_pct (your income tax slab rate, in percent) is needed for this asset and holding period."
-    unknown_calculation: "calculation must be one of: {choices}."
+    slab_rate_needed: "Your income tax slab rate (in percent) is needed for this asset and holding period."
+    unknown_calculation: "The calculation must be one of: {choices}."
   needs_input_message: >
     I need a few details to run this illustrative calculation. Please check the
     points below and try again.
@@ -860,6 +899,7 @@ ui:                           # Streamlit UI texts (architecture section 13). Ev
   tabs:
     chat: "Chat"
     portfolio: "Portfolio"
+    goals: "Goals"
     market: "Market"
     news: "News"
   sidebar:

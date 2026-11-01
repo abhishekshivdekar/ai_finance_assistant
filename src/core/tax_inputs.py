@@ -14,6 +14,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from src.core.field_labels import choice_list, field_label
 from src.core.goal_inputs import is_number
 from src.core.tax_models import CapitalGainsInputs, SmallSavingsInputs
 
@@ -25,7 +26,7 @@ def _check_choice(value: Any, field: str, choices: list[str] | tuple[str, ...], 
     """The value when it is one of the choices; otherwise an error is added and None returned."""
     if isinstance(value, str) and value in choices:
         return value
-    errors.append(cfg["errors"]["unknown_choice"].format(field=field, choices=", ".join(choices)))
+    errors.append(cfg["errors"]["unknown_choice"].format(field=field_label(field), choices=choice_list(choices)))
     return None
 
 
@@ -40,14 +41,14 @@ def _amount(params: dict[str, Any], key: str, cfg: dict[str, Any], errors: list[
     if value is None and default is not None:
         return default
     if not is_number(value):
-        errors.append(msgs["not_a_number"].format(field=key))
+        errors.append(msgs["not_a_number"].format(field=field_label(key)))
         return None
     limit = cfg["input_limits"]["max_amount"] if limit is None else limit
     if value > limit:
-        errors.append(msgs["too_large"].format(field=key, limit=f"{limit:,}"))
+        errors.append(msgs["too_large"].format(field=field_label(key), limit=f"{limit:,}"))
         return None
     if value < 0 or (positive and value == 0):
-        errors.append(msgs["must_be_positive" if positive else "must_not_be_negative"].format(field=key))
+        errors.append(msgs["must_be_positive" if positive else "must_not_be_negative"].format(field=field_label(key)))
         return None
     return float(value)
 
@@ -57,16 +58,16 @@ def _whole(params: dict[str, Any], key: str, cfg: dict[str, Any], errors: list[s
     msgs = cfg["errors"]
     value = params.get(key)
     if not is_number(value):
-        errors.append(msgs["not_a_number"].format(field=key))
+        errors.append(msgs["not_a_number"].format(field=field_label(key)))
         return None
     if isinstance(value, float) and not value.is_integer():
-        errors.append(msgs["whole_number"].format(field=key))
+        errors.append(msgs["whole_number"].format(field=field_label(key)))
         return None
     if value > limit:
-        errors.append(msgs["too_large"].format(field=key, limit=f"{limit:,}"))
+        errors.append(msgs["too_large"].format(field=field_label(key), limit=f"{limit:,}"))
         return None
     if value < minimum:
-        errors.append(msgs["must_be_positive" if minimum else "must_not_be_negative"].format(field=key))
+        errors.append(msgs["must_be_positive" if minimum else "must_not_be_negative"].format(field=field_label(key)))
         return None
     return int(value)
 
