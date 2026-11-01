@@ -21,6 +21,16 @@ def format_percent(value: float | None, missing: str) -> str:
     return missing if value is None else f"{value:+.1f}%"
 
 
+def format_share(fraction: float | None, missing: str) -> str:
+    """A share given as a fraction (0 to 1) shown as a percentage with one decimal. Example: 0.4237 -> "42.4%"; None -> `missing`."""
+    return missing if fraction is None else f"{fraction * 100:.1f}%"
+
+
+def format_ratio_percent(percent: float | None, missing: str) -> str:
+    """A percentage value (already in percent, no sign) with two decimals. Example: 0.5 -> "0.50%"; None -> `missing`."""
+    return missing if percent is None else f"{percent:.2f}%"
+
+
 def format_timestamp(iso: str) -> str:
     """An ISO time as "2026-10-30 08:32 UTC" (an aware time is converted to UTC, a naive one is taken as UTC).
 

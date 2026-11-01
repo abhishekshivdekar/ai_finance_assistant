@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.web_app.format import clean_portfolio_rows, format_amount, format_quantity
+from src.web_app.format import clean_portfolio_rows, format_amount, format_quantity, format_ratio_percent, format_share
 
 
 @pytest.mark.parametrize("value, currency, expected", [
@@ -82,3 +82,13 @@ def test_a_cell_whose_item_cannot_be_read_is_treated_as_missing():
             raise ValueError("no scalar")
 
     assert clean_portfolio_rows([{"ticker": "A", "quantity": 1, "avg_cost": Broken()}]) == [{"ticker": "A", "quantity": 1}]
+
+
+@pytest.mark.parametrize("fraction, expected", [(0.4237, "42.4%"), (1.0, "100.0%"), (0, "0.0%"), (0.00049, "0.0%"), (None, "n/a")])
+def test_a_share_is_shown_as_a_percentage(fraction, expected):
+    assert format_share(fraction, "n/a") == expected
+
+
+@pytest.mark.parametrize("percent, expected", [(0.5, "0.50%"), (0, "0.00%"), (1.234, "1.23%"), (None, "n/a")])
+def test_an_expense_ratio_has_two_decimals_and_no_sign(percent, expected):
+    assert format_ratio_percent(percent, "n/a") == expected

@@ -16,7 +16,7 @@ def test_first_load_shows_the_shell_the_usage_and_an_enabled_input_and_asks_noth
     at = start()
     texts = shown(at)
     assert ui("app_title") in texts and ui("app_tagline") in texts and ui("chat.empty_state") in texts
-    assert [t.label for t in at.tabs] == [ui("tabs.chat"), ui("tabs.market"), ui("tabs.news")]
+    assert [t.label for t in at.tabs] == [ui("tabs.chat"), ui("tabs.portfolio"), ui("tabs.market"), ui("tabs.news")]
     metric = at.sidebar.metric[0]
     assert metric.label == ui("sidebar.usage_tokens") == "Tokens used (all visitors)" and metric.value == "1,234"
     assert "since the app started" in metric.help and "does not reset" in metric.help
@@ -153,8 +153,8 @@ def test_no_sources_means_no_expander(fake):
 def test_a_reached_budget_shows_the_message_and_disables_the_input(fake):
     fake.usage_value = backend.UsageSummary(tokens=2_000_001, cost=1.0, limit=2_000_000, exceeded=True)
     at = start()
-    assert [w.value for w in at.main.warning] == [ui("messages.budget_stopped")] * 3          # once in each tab
-    assert [b.disabled for b in at.main.button] == [True, True] and at.chat_input[0].disabled is True and at.chat_input[0].placeholder == ui("chat.placeholder_stopped")
+    assert [w.value for w in at.main.warning] == [ui("messages.budget_stopped")] * 4          # once in each tab
+    assert [b.disabled for b in at.main.button] == [True, True, True] and at.chat_input[0].disabled is True and at.chat_input[0].placeholder == ui("chat.placeholder_stopped")
     assert fake.asks == []
 
 

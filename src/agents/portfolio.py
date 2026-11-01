@@ -27,7 +27,7 @@ from src.core.market_metrics import worst_source
 from src.core.models import AgentResult, PortfolioPayload
 from src.core.number_guard import collect_numbers, numbers_in
 from src.core.portfolio_metrics import build_metrics, summary_input
-from src.core.portfolio_models import PortfolioMetrics
+from src.core.portfolio_models import Holding, PortfolioMetrics, Position
 from src.core.portfolio_valuation import parse_holdings, value_holdings
 from src.data.market import get_market_provider
 from src.data.market.provider import InvalidSymbolError, MarketDataProvider, validate_symbol
@@ -85,6 +85,58 @@ class PortfolioAgent(BaseAgent):
             return text
         return ""
 
+    def _lookup(self, texts: list[str], cfg: dict[str, Any]) -> list[Any]:
+        """Resolve the texts concurrently (at most `max_workers` threads); the results keep the order of the texts."""
+        if not texts:
+            return []
+        with ThreadPoolExecutor(max_workers=max(1, min(int(cfg["max_workers"]), len(texts)))) as pool:
+            return list(pool.map(self.resolver.resolve, texts))
+
+    @staticmethod
+    def _typed_symbols(rows: list[Any]) -> dict[str, str]:
+        """symbol -> the text typed, for rows whose ticker is symbol-shaped ("apple" reads as the symbol APPLE)."""
+        typed: dict[str, str] = {}
+        for row in rows:
+            text = row.get("ticker") if isinstance(row, dict) else None
+            try:
+                symbol = validate_symbol(text)
+            except InvalidSymbolError:
+                continue
+            typed.setdefault(symbol, text.strip())
+        return typed
+
+    def _retry_unpriced(
+        self, holdings: list[Holding], positions: list[Position], warnings: list[str], typed: dict[str, str], cfg: dict[str, Any],
+    ) -> tuple[list[Position], list[str], list[str]]:
+        """A symbol-shaped word with no price is looked up once as a name (the Market agent does the same).
+
+        Returns (positions in holding order, notes for the words that became another symbol, messages for the words that
+        need the user). Example: "apple" (symbol APPLE, no price) -> AAPL, priced, with the note `Row "apple": using AAPL.`;
+        the "was left out" warning of APPLE is removed from `warnings`. A word that is not found keeps its warning.
+        """
+        unpriced = [i for i, h in enumerate(holdings) if h.ticker in typed and h.ticker not in {p.ticker for p in positions}]
+        found = self._lookup([typed[holdings[i].ticker] for i in unpriced], cfg)
+        taken = {h.ticker for h in holdings}
+        swapped: dict[int, Holding] = {}
+        notes: list[str] = []
+        messages: list[str] = []
+        for index, resolution in zip(unpriced, found):
+            old, text = holdings[index], typed[holdings[index].ticker]
+            if resolution.status == "resolved" and resolution.symbols[0] not in taken:
+                swapped[index] = old.model_copy(update={"ticker": resolution.symbols[0]})
+                taken.add(resolution.symbols[0])
+                notes.append(resolution.note or cfg["resolved_note"].format(typed=text, symbol=resolution.symbols[0]))
+                warnings.remove(f"{old.ticker} was left out: no price is available right now.")
+            elif resolution.status in ("ambiguous", "unavailable"):
+                messages.append(cfg["row_problem_message"].format(typed=text, message=resolution.message))
+        if swapped:
+            more, more_warnings = value_holdings(list(swapped.values()), self.provider)
+            warnings += more_warnings
+            priced = {p.ticker: p for p in positions + more}
+            order = [swapped.get(i, h).ticker for i, h in enumerate(holdings)]
+            positions = [priced[ticker] for ticker in order if ticker in priced]
+        return positions, notes, messages
+
     def _resolve_rows(self, rows: list[Any], cfg: dict[str, Any]) -> tuple[list[Any], list[str], list[str], list[str]]:
         """(rows with names replaced by symbols, notes, problems, warnings).
 
@@ -95,10 +147,7 @@ class PortfolioAgent(BaseAgent):
         named = [(index, self._typed_name(row)) for index, row in enumerate(rows)]
         named = [(index, typed) for index, typed in named if typed]
         looked, extra = named[: cfg["max_holdings"]], named[cfg["max_holdings"]:]
-        results: list[Any] = []
-        if looked:
-            with ThreadPoolExecutor(max_workers=max(1, min(int(cfg["max_workers"]), len(looked)))) as pool:
-                results = list(pool.map(lambda item: self.resolver.resolve(item[1]), looked))
+        results = self._lookup([typed for _, typed in looked], cfg)
         out, notes, problems = list(rows), [], []
         warnings = [cfg["lookup_limit_message"].format(limit=cfg["max_holdings"], typed=typed) for _, typed in extra]
         dropped = {index for index, _ in extra}
@@ -114,7 +163,8 @@ class PortfolioAgent(BaseAgent):
         """Resolve names, validate, value, compute metrics, then summarise."""
         cfg = get_config()["portfolio"]
         needs_input = cfg["needs_input_message"].strip()
-        rows, notes, problems, warnings = self._resolve_rows(state.get("portfolio") or [], cfg)
+        original = state.get("portfolio") or []
+        rows, notes, problems, warnings = self._resolve_rows(original, cfg)
         if problems:
             return self._result("needs_input", "\n\n".join(problems), {"warnings": warnings})
         holdings, parse_warnings = parse_holdings(rows, cfg["max_holdings"])
@@ -123,7 +173,9 @@ class PortfolioAgent(BaseAgent):
             return self._result("needs_input", needs_input, {"warnings": warnings})
 
         positions, price_warnings = value_holdings(holdings, self.provider)
-        warnings += price_warnings
+        positions, retry_notes, retry_messages = self._retry_unpriced(holdings, positions, price_warnings, self._typed_symbols(original), cfg)
+        notes = list(dict.fromkeys(notes + retry_notes))
+        warnings += price_warnings + retry_messages
         if not positions:
             return self._result("no_answer", cfg["unpriced_message"].strip(), {"warnings": warnings})
 

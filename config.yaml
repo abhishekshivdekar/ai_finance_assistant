@@ -903,6 +903,10 @@ ui:                           # Streamlit UI texts (architecture section 13). Ev
     positions_heading: "Holdings"
     currency_heading: "{currency} holdings"
     not_available: "not available"
+    largest_value: "{ticker} ({share})"
+    diversification_value: "{score} out of 100 ({label})"
+    expense_value: "{percent} ({coverage})"
+    allocation_title: "{currency}: allocation by asset class"
     metrics:
       total_value: "Total value"
       position_count: "Number of holdings"

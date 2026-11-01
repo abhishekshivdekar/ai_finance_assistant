@@ -378,3 +378,52 @@ def test_the_payload_carries_the_freshness_of_the_prices():
     assert "lookup_notes" not in live["data"]
     _, mixed = run(TWO, {"A.NS": quote(100), "B.NS": quote(100, source="stale cache", stale=True)})
     assert mixed["data"]["source"] == "stale cache" and mixed["data"]["is_stale"] is True
+
+
+# ---- a symbol-shaped word with no price is looked up once as a name (UI step 3b) ----
+
+def apple_world():
+    quotes = {**QUOTES, "AAPL": quote(10, "USD")}
+    return quotes, {**HISTORIES, "AAPL": prices("USD")}
+
+
+def test_a_symbol_shaped_word_without_a_price_is_looked_up_as_a_name_and_replaced_in_place():
+    quotes, histories = apple_world()
+    rows = [{"ticker": "A.NS", "quantity": 1}, {"ticker": "apple", "quantity": 2}, {"ticker": "INFY.NS", "quantity": 3}]
+    search = Search(TABLE)
+    _, result = run(rows, quotes, histories=histories, search=search)
+    assert result["status"] == "ok" and sorted(p["ticker"] for p in result["data"]["metrics"]["positions"]) == ["A.NS", "AAPL", "INFY.NS"]
+    assert [p["ticker"] for p in result["data"]["metrics"]["positions"] if p["currency"] == "INR"] == ["A.NS", "INFY.NS"]
+    assert 'Row "apple": using AAPL.' in result["data"]["lookup_notes"] and result["answer"].count('Row "apple": using AAPL.') == 1
+    assert not any("APPLE" in w for w in result["data"]["warnings"]) and search.calls == []        # an alias: no search needed
+
+
+def test_a_word_that_resolves_to_a_symbol_already_in_the_portfolio_is_left_out_as_before():
+    quotes, histories = apple_world()
+    _, result = run([{"ticker": "apple", "quantity": 1}, {"ticker": "AAPL", "quantity": 1}], quotes, histories=histories)
+    assert [p["ticker"] for p in result["data"]["metrics"]["positions"]] == ["AAPL"]
+    assert "APPLE was left out: no price is available right now." in result["data"]["warnings"] and "lookup_notes" not in result["data"]
+
+
+def test_a_word_that_needs_the_user_adds_its_message_and_one_that_is_not_found_changes_nothing():
+    rows = [{"ticker": "globe", "quantity": 1}, {"ticker": "qzxvy", "quantity": 1}, {"ticker": "A.NS", "quantity": 1}]
+    table = {**TABLE, "globe": TABLE["globe corp"]}
+    _, result = run(rows, QUOTES, histories=HISTORIES, search=Search(table))
+    warnings = result["data"]["warnings"]
+    assert result["status"] == "ok" and [p["ticker"] for p in result["data"]["metrics"]["positions"]] == ["A.NS"]
+    assert any(w.startswith('Row "globe": I found more than one match for "globe"') for w in warnings)
+    assert "GLOBE was left out: no price is available right now." in warnings and "QZXVY was left out: no price is available right now." in warnings
+    assert not any("qzxvy" in w and "Row" in w for w in warnings)
+    _, down = run(rows, QUOTES, histories=HISTORIES, search=Search(error=ConnectionError("offline")))
+    assert sum("can't look up company names" in w for w in down["data"]["warnings"]) == 2
+
+
+def test_a_replacement_without_a_price_is_reported_and_can_leave_nothing_to_analyse():
+    _, result = run([{"ticker": "apple", "quantity": 1}], QUOTES, histories={**HISTORIES, "AAPL": prices("USD")})       # AAPL passes the price check but has no quote
+    assert result["status"] == "no_answer"
+    warnings = result["data"]["warnings"]
+    assert "AAPL was left out: no price is available right now." in warnings and "APPLE was left out: no price is available right now." not in warnings
+
+
+def test_only_the_first_row_with_a_symbol_remembers_its_typed_text():
+    assert PortfolioAgent._typed_symbols([None, {"ticker": " apple "}, {"ticker": "APPLE"}, {"ticker": "Suzlon Energy"}, {"quantity": 1}, 5]) == {"APPLE": "apple"}

@@ -8,7 +8,7 @@ from streamlit.testing.v1 import AppTest
 from src.utils.config import get_config
 from src.web_app import backend
 from src.web_app.render_common import plain_text
-from web_support import HOSTILE, FakeBackend, answer_result, ask, charts, disclaimer, fake, shown, start, ui  # noqa: F401
+from web_support import HOSTILE, FakeBackend, answer_result, ask, charts, dataframes, disclaimer, fake, shown, start, ui  # noqa: F401
 
 LIVE_AT = "2026-10-30T08:32:00+00:00"
 
@@ -34,7 +34,7 @@ def market_reply(text="AAPL last price USD 120.25 (live). It rose over the perio
 def submit_market(at, tickers="AAPL", period="6mo"):
     at.text_input[0].input(tickers)
     at.selectbox[0].select(period)
-    at.main.button[0].click().run()
+    next(b for b in at.main.button if b.label == ui("market.submit")).click().run()
     assert not at.exception, [e.value for e in at.exception]
     return at
 
@@ -64,7 +64,7 @@ def test_one_ticker_calls_the_facade_once_with_the_hint_and_params_and_shows_ans
     [chart] = charts(at)
     assert chart["data"][0]["y"] == [100.0, 101.5, 120.25] and chart["data"][0]["x"] == ["2026-05-01", "2026-05-04", "2026-10-30"]
     assert chart["layout"]["title"]["text"] == "AAPL (USD)" and chart["layout"]["yaxis"]["title"]["text"] == "Closing price (USD)"
-    assert at.dataframe == [] and warnings(at) == []                         # a single ticker has no comparison table
+    assert dataframes(at) == [] and warnings(at) == []                         # a single ticker has no comparison table
     assert ui("market.chart_heading") in texts
 
 
@@ -79,7 +79,7 @@ def test_two_tickers_in_two_currencies_get_two_charts_and_a_comparison_table_fro
     assert fake.asks[0][0][0] == "Market analysis for TCS.NS, INFY.NS over 1 year."
     assert fake.asks[0][1] == {"market_params": {"tickers": ["TCS.NS", "INFY.NS"], "period": "1y"}}
     assert [c["layout"]["title"]["text"] for c in charts(at)] == ["TCS.NS (INR)", "INFY.NS (INR)"]
-    frame = at.dataframe[0].value
+    frame = dataframes(at)[0].value
     assert list(frame.columns) == [ui(f"market.columns.{k}") for k in ("ticker", "currency", "period_return_pct", "volatility_pct", "max_drawdown_pct", "trend")]
     assert frame.iloc[0].tolist() == ["TCS.NS", "INR", "+12.3%", "+20.0%", "-8.2%", "uptrend"] or frame.iloc[0].tolist() == ["TCS.NS", "INR", "+12.3%", "+20.0%", "-8.3%", "uptrend"]
     assert frame.iloc[1].tolist()[2] == ui("market.not_available") and frame.iloc[1].tolist()[5] == ui("market.not_available")
@@ -160,7 +160,7 @@ def test_a_ticker_with_no_data_shows_the_payload_warning_and_no_chart(fake):
     at = start()
     submit_market(at, "NOPE")
     assert plain_text("No price history was available for NOPE.") in warnings(at)
-    assert ui("messages.no_answer_hint") in captions(at) and charts(at) == [] and at.dataframe == []
+    assert ui("messages.no_answer_hint") in captions(at) and charts(at) == [] and dataframes(at) == []
 
 
 def test_a_result_without_a_payload_shows_only_the_answer(fake):
@@ -263,13 +263,13 @@ def submit_news(at, text="Nifty 50", mode=None):
     if mode:
         at.radio[0].set_value(mode)
     at.text_input[1].input(text)
-    at.main.button[1].click().run()
+    next(b for b in at.main.button if b.label == ui("news.submit")).click().run()
     assert not at.exception, [e.value for e in at.exception]
     return at
 
 
 def answer_markdown(at):
-    return [t for t in shown(at) if "Markets rose" in t or "Banks led" in t or "see" in t][0]
+    return [t for t in shown(at) if "Markets rose" in t or "Banks led" in t or "see [" in t][0]
 
 
 def test_a_topic_search_calls_the_facade_with_the_news_hint_and_a_query_param(fake):

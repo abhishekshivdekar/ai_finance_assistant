@@ -10,12 +10,12 @@ from __future__ import annotations
 import streamlit as st
 
 from src.utils.logger import get_logger
-from src.web_app import backend, session, tab_chat, tab_market, tab_news
+from src.web_app import backend, session, tab_chat, tab_market, tab_news, tab_portfolio
 from src.web_app.format import format_count, format_usd
 from src.web_app.text import ui_text
 
 log = get_logger(__name__)
-TABS = (tab_chat.TAB, tab_market.TAB, tab_news.TAB)
+TABS = (tab_chat.TAB, tab_portfolio.TAB, tab_market.TAB, tab_news.TAB)
 
 
 @st.cache_resource(show_spinner=False)
@@ -60,11 +60,13 @@ def render() -> None:
     st.title(ui_text("app_title"))
     st.caption(ui_text("app_tagline"))
     active = session.active_tab()
-    chat_tab, market_tab, news_tab = st.tabs(
+    chat_tab, portfolio_tab, market_tab, news_tab = st.tabs(
         [ui_text(f"tabs.{key}") for key in TABS], default=ui_text(f"tabs.{active}") if active else None,
     )
     deferred = []
-    for tab, render_tab in ((chat_tab, tab_chat.render), (market_tab, tab_market.render), (news_tab, tab_news.render)):
+    for tab, render_tab in (
+        (chat_tab, tab_chat.render), (portfolio_tab, tab_portfolio.render), (market_tab, tab_market.render), (news_tab, tab_news.render),
+    ):
         with tab:
             deferred.append(render_tab(usage.exceeded))
     for action in deferred:                                   # the one waiting call (if any), after every tab is drawn disabled

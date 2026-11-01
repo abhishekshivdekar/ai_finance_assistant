@@ -92,10 +92,15 @@ def shown(at: AppTest) -> list[str]:
             out += [e.value for e in getattr(block, kind)]
         out += [m.label + " " + m.value for m in block.metric]
     out += [x.label for x in at.expander]
-    for table in list(at.table) + list(at.dataframe):
+    for table in list(at.table) + dataframes(at):
         frame = table.value
         out += [str(c) for c in frame.columns] + [str(v) for v in frame.to_numpy().ravel()]
     return out
+
+
+def dataframes(at: AppTest) -> list:
+    """The tables on the page without the Portfolio tab's editor (it is on every page, empty until the user types)."""
+    return [frame for frame in at.dataframe if getattr(frame, "key", None) != "portfolio_table"]
 
 
 def charts(at: AppTest) -> list[dict]:
