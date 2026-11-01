@@ -13,8 +13,10 @@ thread_id run one after the other (a lock per thread), so a double click cannot 
 """
 from __future__ import annotations
 
+import atexit
 import threading
 import time
+import weakref
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
@@ -29,6 +31,7 @@ from src.utils.config import get_config
 from src.utils.logger import get_logger
 from src.workflow.answers import add_disclaimer
 from src.workflow.graph import build_graph
+from src.workflow.persistence import ConversationStore, PersistenceStatus, open_store
 from src.workflow.router import Router
 from src.workflow.routing import workflow_cfg
 from src.workflow.state import current_results
@@ -82,21 +85,112 @@ class UsageSummary:
     exceeded: bool
 
 
+@dataclass(frozen=True)
+class HistoryItem:
+    """One message of a stored conversation, for redrawing the Chat tab after a reload.
+
+    `role` is "user" or "assistant". `sources` are the citations of an assistant message. `tab` is the tab that made the
+    turn ("market", "portfolio", "goal_planning", ...) or None for a Chat turn; an assistant message carries the tab of the
+    user message it answers.
+    """
+
+    role: str
+    text: str
+    sources: list[Source] = field(default_factory=list)
+    tab: str | None = None
+
+
 _WARM_UP_TEXT = "warm up"
-_thread_locks: dict[str, threading.Lock] = {}
+
+
+class _ThreadLock:
+    """A lock that can be weakly referenced (a plain threading.Lock cannot), so unused locks disappear."""
+
+    __slots__ = ("_lock", "__weakref__")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def __enter__(self) -> None:
+        self._lock.acquire()
+
+    def __exit__(self, *exc_info: object) -> None:
+        self._lock.release()
+
+
+_thread_locks: "weakref.WeakValueDictionary[str, _ThreadLock]" = weakref.WeakValueDictionary()
 _locks_guard = threading.Lock()
 
 
-def _thread_lock(thread_id: str) -> threading.Lock:
-    """The lock of one conversation thread, created on first use under a guard lock (one lock per thread_id)."""
+def _thread_lock(thread_id: str) -> _ThreadLock:
+    """The lock of one conversation thread (one object per thread_id while any turn holds or waits for it).
+
+    The dictionary holds the locks weakly: a `with _thread_lock(id):` block keeps its lock alive, and once no turn uses it
+    the entry vanishes, so the dictionary no longer grows with every conversation the process has ever seen.
+    """
     with _locks_guard:
-        return _thread_locks.setdefault(thread_id, threading.Lock())
+        lock = _thread_locks.get(thread_id)
+        if lock is None:
+            lock = _thread_locks[thread_id] = _ThreadLock()
+        return lock
+
+
+@lru_cache(maxsize=1)
+def get_store() -> ConversationStore:
+    """The conversation store (Singleton): the SQLite file when possible, else memory. Old conversations are cleaned up here."""
+    store = open_store()
+    settings = get_config()["persistence"]
+    try:
+        store.cleanup(settings["max_age_days"], settings["max_threads"])
+    except Exception:
+        log.exception("Retention cleanup failed")
+    atexit.register(store.close)
+    return store
 
 
 @lru_cache(maxsize=1)
 def get_graph() -> Any:
-    """The compiled graph with the real router and agents and an in-memory checkpointer (Singleton)."""
-    return build_graph(Router())
+    """The compiled graph with the real router and agents on the conversation store's checkpointer (Singleton)."""
+    return build_graph(Router(), checkpointer=get_store().saver)
+
+
+def persistence_status() -> PersistenceStatus:
+    """Whether conversations are saved in this run and the sentence to show (never raises)."""
+    try:
+        return get_store().status
+    except Exception:
+        log.exception("Persistence status unavailable")
+        return PersistenceStatus(False, " ".join(get_config()["persistence"]["messages"]["unavailable"].split()))
+
+
+def history(thread_id: str) -> list[HistoryItem]:
+    """The stored messages of a conversation, oldest first. Unknown thread or any failure -> []. Never raises, never logs text."""
+    try:
+        values = get_graph().get_state({"configurable": {"thread_id": thread_id}}).values
+    except Exception:
+        log.exception("Reading a conversation failed")
+        return []
+    items: list[HistoryItem] = []
+    tab: str | None = None
+    for message in values.get("messages") or []:
+        extra = getattr(message, "additional_kwargs", None) or {}
+        if message.type == "human":
+            tab = extra.get("tab")
+            items.append(HistoryItem("user", str(message.content), [], tab))
+        elif message.type == "ai":
+            items.append(HistoryItem("assistant", str(message.content), list(extra.get("sources") or []), tab))
+    return items
+
+
+def delete_thread(thread_id: str) -> bool:
+    """Delete a conversation from the store (waits for a running turn of that thread). True when it succeeded."""
+    try:
+        with _thread_lock(thread_id):
+            get_store().delete(thread_id)
+    except Exception:
+        log.exception("Deleting a conversation failed")
+        return False
+    return True
 
 
 def warm_up() -> WarmUp:
@@ -128,6 +222,14 @@ def usage_summary() -> UsageSummary:
     )
 
 
+def _remember(thread_id: str) -> None:
+    """Note that the thread was used (for retention). A failure is logged and never breaks the turn."""
+    try:
+        get_store().touch(thread_id)
+    except Exception:
+        log.exception("Recording conversation activity failed")
+
+
 def _stopped(answer: str, why: str, nodes: list[str]) -> QueryResult:
     """A QueryResult for a turn that did not finish normally."""
     return QueryResult(answer=answer, nodes=nodes, stopped=why)
@@ -157,9 +259,10 @@ def run_query(query: str, thread_id: str, intent_hint: str | None = None, **para
     try:
         graph = get_graph()
         with _thread_lock(thread_id):
-            for update in graph.stream(turn, config, stream_mode="updates"):
+            for update in graph.stream(turn, config, stream_mode="updates", durability="exit"):     # one checkpoint per turn, not per node
                 nodes += list(update)
             state = graph.get_state(config).values
+            _remember(thread_id)
     except GraphRecursionError:
         log.warning("Graph hit the recursion limit after nodes %s", nodes)
         return _fallback(STOPPED_RECURSION, nodes)

@@ -61,7 +61,7 @@ class SpyGraph:
     def __init__(self, updates=(), error=None, answer="spy"):
         self.updates, self.error, self.answer, self.calls = list(updates), error, answer, []
 
-    def stream(self, turn, config, stream_mode):
+    def stream(self, turn, config, stream_mode, durability=None):
         self.calls.append((turn, config, stream_mode))
         yield from self.updates
         if self.error:

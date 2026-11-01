@@ -44,6 +44,7 @@ class FakeBackend:
         self.usage_value = backend.UsageSummary(tokens=1234, cost=0.0123, limit=2_000_000, exceeded=False)
         self.warm = backend.WarmUp(ok=True, seconds=1.5)
         self.start_up_error = None
+        self.persistence_status = backend.PersistenceStatus(True, " ".join(get_config()["persistence"]["messages"]["saving"].split()))
 
     def ask(self, *args, **kwargs):
         self.asks.append((args, kwargs))
@@ -59,6 +60,9 @@ class FakeBackend:
         self.usage_calls += 1
         return self.usage_value
 
+    def persistence(self):
+        return self.persistence_status
+
 
 @pytest.fixture
 def fake(monkeypatch):
@@ -67,6 +71,7 @@ def fake(monkeypatch):
     monkeypatch.setattr(backend, "ask", fb.ask)
     monkeypatch.setattr(backend, "start_up", fb.start_up)
     monkeypatch.setattr(backend, "usage", fb.usage)
+    monkeypatch.setattr(backend, "persistence", fb.persistence)
     yield fb
     st.cache_resource.clear()
 

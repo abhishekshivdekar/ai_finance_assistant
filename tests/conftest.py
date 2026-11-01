@@ -19,6 +19,14 @@ def _no_outside_network(request, monkeypatch):
         network_guard.block(monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def _conversations_stay_in_memory(monkeypatch):
+    """Tests never create the SQLite file: the facade's store is the in-memory one unless a test opens its own (tmp_path)."""
+    from src.workflow.persistence import memory_store
+
+    monkeypatch.setattr("src.workflow.facade.open_store", lambda *args, **kwargs: memory_store("Saving conversations is switched off in tests."))
+
+
 class OfflineLLM:
     """Stands in for a real chat model in workflow tests that did not inject one: every call fails."""
 

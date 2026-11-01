@@ -323,6 +323,26 @@ def _validate_portfolio(portfolio: dict[str, Any], ui: Any) -> None:
                 raise ConfigError(f"ui.portfolio.{labels} needs a non-empty label for every choice in portfolio.")
 
 
+def _validate_persistence(block: Any) -> None:
+    """persistence: enabled flag, a path, positive limits and the five status sentences."""
+    if not isinstance(block, dict):
+        raise ConfigError("persistence must be a mapping.")
+    if not isinstance(block.get("enabled"), bool):
+        raise ConfigError("persistence.enabled must be true or false.")
+    if not isinstance(block.get("path"), str) or not block["path"].strip():
+        raise ConfigError("persistence.path must be a non-empty path.")
+    timeout = block.get("busy_timeout_seconds")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
+        raise ConfigError("persistence.busy_timeout_seconds must be a number greater than zero.")
+    for key in ("max_age_days", "max_threads"):
+        if isinstance(block.get(key), bool) or not isinstance(block.get(key), int) or block[key] < 1:
+            raise ConfigError(f"persistence.{key} must be a whole number of at least 1.")
+    messages = block.get("messages")
+    for key in ("saving", "off", "unavailable", "recovered", "corrupt_locked"):
+        if not isinstance(messages, dict) or not str(messages.get(key) or "").strip():
+            raise ConfigError(f"persistence.messages.{key} must not be empty.")
+
+
 def _validate_output_guard(guard: dict[str, Any]) -> None:
     """output_guard.format_patterns: a non-empty list of valid regexes; output_guard.format_warning: non-empty text."""
     patterns = guard.get("format_patterns")
@@ -401,6 +421,8 @@ def _validate(cfg: dict[str, Any]) -> None:
         _validate_portfolio(portfolio, cfg.get("ui"))
     if "field_labels" in cfg or "choice_labels" in cfg:
         _validate_labels(cfg)
+    if "persistence" in cfg:
+        _validate_persistence(cfg["persistence"])
     guard = cfg.get("output_guard")
     if guard is not None:
         _validate_output_guard(guard)

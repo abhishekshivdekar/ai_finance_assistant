@@ -133,6 +133,19 @@ ticker_lookup:                # company name -> ticker (architecture "Ticker res
     not_found_suggestions: "I couldn't find a listed company called \"{name}\". Did you mean: {options}? These are only suggestions: please type the ticker symbol you want."
     bare_symbol_note: "Showing {symbol} ({details}); \"{typed}\" was not usable on its own."
 
+persistence:                  # where conversations are kept (architecture section 12.1); tests use memory
+  enabled: true
+  path: data/conversations.sqlite   # relative to the project folder; the data/ folder is git-ignored
+  busy_timeout_seconds: 5     # how long a statement waits for a lock before giving up
+  max_age_days: 30            # a conversation unused for this long is deleted at start-up
+  max_threads: 200            # beyond this many conversations the least recently used are deleted at start-up
+  messages:                   # sentences for the sidebar status
+    saving: Conversations are saved on this computer.
+    off: Saving conversations is switched off, so they are kept only while the app runs.
+    unavailable: The conversation file could not be opened (it may be locked or not writable), so conversations are kept only while the app runs.
+    recovered: A damaged conversation file was set aside and a new one was started. Conversations in the damaged file are not available.
+    corrupt_locked: The conversation file is damaged and could not be set aside (it may be in use), so conversations are kept only while the app runs.
+
 workflow:                     # LangGraph router and nodes (architecture sections 3.2, 4)
   max_history_turns: 10
   router_min_confidence: 0.6  # below this the router's answer goes to clarify (architecture 4.3)

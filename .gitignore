@@ -9,5 +9,6 @@ logs/*.log
 src/rag/vector_store/*
 !src/rag/vector_store/.gitkeep
 *.db
+data/
 *.sqlite
 .claude/settings.local.json

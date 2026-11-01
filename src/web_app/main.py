@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from src.utils.config import get_config
 from src.utils.logger import get_logger
 from src.web_app import backend, session, tab_chat, tab_goals, tab_market, tab_news, tab_portfolio
 from src.web_app.format import format_count, format_usd
@@ -47,6 +48,10 @@ def _render_sidebar(usage: backend.UsageSummary, warm: backend.WarmUp) -> None:
             st.success(ui_text("sidebar.warmup_ok"))
         else:
             st.warning(ui_text("sidebar.warmup_failed", error=warm.message))
+        saved = backend.persistence()
+        (st.caption if saved.saving and saved.message == " ".join(get_config()["persistence"]["messages"]["saving"].split()) else st.warning)(
+            " ".join(saved.message.split())
+        )
 
 
 def render() -> None:

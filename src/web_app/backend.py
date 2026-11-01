@@ -8,9 +8,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.workflow.facade import QueryResult, UsageSummary, WarmUp, run_query, usage_summary, warm_up
+from src.workflow.facade import (
+    HistoryItem, QueryResult, UsageSummary, WarmUp, delete_thread, history, persistence_status, run_query, usage_summary, warm_up,
+)
+from src.workflow.persistence import PersistenceStatus
 
-__all__ = ["QueryResult", "UsageSummary", "WarmUp", "ask", "start_up", "usage"]
+__all__ = [
+    "HistoryItem", "PersistenceStatus", "QueryResult", "UsageSummary", "WarmUp", "ask", "forget", "persistence", "read_history", "start_up", "usage",
+]
 
 
 def ask(query: str, thread_id: str, intent_hint: str | None = None, **params: Any) -> QueryResult:
@@ -26,3 +31,18 @@ def start_up() -> WarmUp:
 def usage() -> UsageSummary:
     """Token usage and budget state of this process (the facade's usage_summary)."""
     return usage_summary()
+
+
+def read_history(thread_id: str) -> list[HistoryItem]:
+    """The stored messages of a conversation (the facade's history; [] when there is none)."""
+    return history(thread_id)
+
+
+def forget(thread_id: str) -> bool:
+    """Delete a conversation from the store (the facade's delete_thread)."""
+    return delete_thread(thread_id)
+
+
+def persistence() -> PersistenceStatus:
+    """Whether conversations are saved in this run, with the sentence for the sidebar."""
+    return persistence_status()

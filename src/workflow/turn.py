@@ -31,7 +31,7 @@ def new_turn_input(
 ) -> GraphState:
     """A complete GraphState input for one turn: every key except the append-reducers is set."""
     return {
-        "messages": [HumanMessage(content=query)],
+        "messages": [HumanMessage(content=query, additional_kwargs={"tab": intent_hint} if intent_hint else {})],     # the tag lets history() tell tab turns from chat turns
         "query": query,
         "turn_id": uuid.uuid4().hex,
         "intent_hint": intent_hint,

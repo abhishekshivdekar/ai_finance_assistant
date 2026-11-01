@@ -47,8 +47,11 @@ class LazyLLM:
 
 
 def reply(answer: str, sources: list[Source] | None = None) -> dict[str, Any]:
-    """The state update of a final node: the answer text, its sources and the assistant message for the history."""
-    return {"final_answer": answer, "sources": sources or [], "messages": [AIMessage(content=answer)]}
+    """The state update of a final node: the answer text, its sources and the assistant message for the history.
+
+    The sources are also kept on the message, so a conversation read back after a restart can show its citations.
+    """
+    return {"final_answer": answer, "sources": sources or [], "messages": [AIMessage(content=answer, additional_kwargs={"sources": list(sources or [])})]}
 
 
 def finish(answer: str, sources: list[Source] | None = None) -> dict[str, Any]:
